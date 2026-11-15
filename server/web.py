@@ -792,7 +792,7 @@ app = Starlette(routes=[
     Route("/robots.txt", robots),
     Route("/sitemap.xml", sitemap),
     Route("/og.png", og_image),
-    Route("/admin", ADM.admin),
+    Route("/admin", ADM.admin, methods=["GET", "POST"]),
     Route("/api/regions", api_regions),
     Route("/api/weeks", api_weeks),
     Route("/api/status", api_status),
