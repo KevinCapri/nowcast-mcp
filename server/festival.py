@@ -26,12 +26,13 @@ BANDS = {"2~3.5배": ((-0.04, 0.05), (-0.12, 0.11)), "3.5배 초과": ((-0.08, 0
 
 
 def _load():
-    rows = []
-    with open(CSV, encoding="utf-8") as f:
-        for r in csv.DictReader(f):
-            r["y"] = int(r["y"])
-            rows.append(r)
-    return rows
+    """형식이 틀린 줄(연도·날짜 오타 등)은 건너뛴다. 한 줄 오타로 서버가 뜨지 못하는 일이 없게."""
+    from manual_data import rows
+    out = []
+    for r in rows(CSV.name):
+        r["y"] = int(float(r["y"]))
+        out.append(r)
+    return out
 
 
 FEST = _load()

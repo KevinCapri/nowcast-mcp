@@ -16,11 +16,8 @@ _ROWS = None
 def _rows():
     global _ROWS
     if _ROWS is None:
-        try:
-            with open(Path(__file__).with_name("events.csv"), encoding="utf-8") as f:
-                _ROWS = [r for r in csv.DictReader(f) if r.get("s") and r.get("e")]
-        except FileNotFoundError:
-            _ROWS = []
+        from manual_data import rows      # 형식이 틀린 줄은 건너뜀
+        _ROWS = rows("events.csv")
     return _ROWS
 
 

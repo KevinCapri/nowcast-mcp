@@ -54,18 +54,15 @@ def _load():
     if _W is not None:
         return _W
     _W = defaultdict(list)
-    try:
-        with open(Path(__file__).with_name("kbo_games.csv"), encoding="utf-8") as f:
-            for r in csv.DictReader(f):
-                if r["구장"] not in STADIUM:
-                    continue
-                d = dt.date.fromisoformat(r["날짜"])
-                mon = d - dt.timedelta(days=d.weekday())
-                _W[(_key(*STADIUM[r["구장"]]), mon)].append(r)
-                a, b = _SEASON.get(d.year, (mon, mon))
-                _SEASON[d.year] = (min(a, mon), max(b, mon))
-    except FileNotFoundError:
-        pass
+    from manual_data import rows          # 형식이 틀린 줄은 건너뜀
+    for r in rows("kbo_games.csv"):
+        if r["구장"] not in STADIUM:
+            continue
+        d = dt.date.fromisoformat(r["날짜"])
+        mon = d - dt.timedelta(days=d.weekday())
+        _W[(_key(*STADIUM[r["구장"]]), mon)].append(r)
+        a, b = _SEASON.get(d.year, (mon, mon))
+        _SEASON[d.year] = (min(a, mon), max(b, mon))
     return _W
 
 

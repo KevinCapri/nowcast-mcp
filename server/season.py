@@ -57,12 +57,9 @@ def _dates():
     global _D
     if _D is None:
         _D = {}
-        try:
-            with open(Path(__file__).with_name("kma_season.csv"), encoding="utf-8") as f:
-                for r in csv.DictReader(f):
-                    _D[(r["구분"], r["지점"], r["단계"], int(r["연도"]))] = dt.date.fromisoformat(r["날짜"])
-        except FileNotFoundError:
-            pass
+        from manual_data import rows      # 형식이 틀린 줄은 건너뜀
+        for r in rows("kma_season.csv"):
+            _D[(r["구분"], r["지점"], r["단계"], int(r["연도"]))] = dt.date.fromisoformat(r["날짜"])
     return _D
 
 

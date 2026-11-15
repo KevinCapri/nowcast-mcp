@@ -126,6 +126,23 @@ def write_source_status(st):
     con.close()
 
 
+def manual_due(st):
+    """손으로 넣는 자료 중 '다음 갱신' 날짜가 지난 것이 있으면 운영자에게 메일(7일에 한 번)."""
+    sys.path.insert(0, str(HERE.parent / "server"))
+    import manual_data
+    today = now().date().isoformat()
+    due_ = [(f, m) for f, m in manual_data.manifest().items() if m.get("다음 갱신") and m["다음 갱신"] <= today]
+    last = st.get("_manual_alert")
+    if not due_ or (last and (now().date() - dt.date.fromisoformat(last)).days < 7):
+        return
+    send("자료 확인할 때 됐음: " + ", ".join(m.get("이름", f) for f, m in due_),
+         "\n\n".join(f"{m.get('이름', f)} ({f})\n- 자료 기준: {m.get('자료 기준')}\n- 받은 날: {m.get('받은 날')}\n"
+                     f"- 출처: {m.get('출처')}\n- 갱신 방법: {m.get('갱신 방법')}" for f, m in due_)
+         + "\n\n받아 넣은 뒤 server/manual_data.json의 '받은 날'·'다음 갱신'을 고칠 것.")
+    st["_manual_alert"] = today
+    save_status(st)
+
+
 def main():
     DATA.mkdir(parents=True, exist_ok=True)
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
@@ -164,6 +181,10 @@ def main():
             write_source_status(st)
         except Exception as e:
             print("source_status 계산 실패:", e, flush=True)
+        try:
+            manual_due(st)
+        except Exception as e:
+            print("수작업 자료 확인 실패:", e, flush=True)
         if failed:
             send(f"자료 갱신 실패: {', '.join(failed)}",
                  "\n\n".join(f"[{n}]\n{st[n].get('last_error', '')}" for n in failed)

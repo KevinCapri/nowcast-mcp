@@ -28,6 +28,7 @@ import guard
 import lifepop
 import perf as PF
 import baseball as BB
+import safe
 import bigevents as BE
 
 STATIC = Path(__file__).with_name("static")
@@ -522,7 +523,7 @@ def view(sido, sigungu, start_wo, end_wo):
                       "dir_adj": 1 if ra > 0 else (-1 if ra < 0 else 0),
                       "long_holiday": lh, "holiday_detail": _holiday_detail(wo) if lh else "",
                       "events": ev[wo],
-                      "games": BB.week(sido, sigungu, mon)[0],
+                      "games": safe.guard("프로야구(사이트)", lambda: BB.week(sido, sigungu, mon)[0], []),
                       "hol_tip": _holiday_tip(wo) if nhol[wo] else "",
                       "ev_other": ev[wo][nhol[wo]:]})
 

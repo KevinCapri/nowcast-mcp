@@ -14,6 +14,7 @@ import lifepop
 import perf
 import baseball
 import season
+import safe
 import bigevents
 import feedback
 import festival
@@ -192,6 +193,14 @@ def get_metadata() -> dict:
             "이 서비스의 비공식 계산(판정·추정·예측)을 섞어 부르지 말 것.",
             "이용자가 값이나 설명이 이상하다고 하거나, 결과에 원자료 오류 가능성 같은 주의가 나오면 "
             "'운영자에게 알릴 수 있다(report_issue)'고 한 번 안내할 것. 실제로 보내는 것은 이용자가 원할 때만.",
+        ],
+        "판정 방식 변경 이력": [
+            "2026-11 처음: 평소 값=직전 8주(연휴 제외) 중앙값, 비교군(비슷한 지역 10곳) 대비, 평소 출렁임(2023년 3월 이후 평범한 주 MAD×1.4826)의 몇 배로 판정.",
+            "2026-11 평일 공휴일이 하루 든 주는 비교군 대비 대신 '평소 대비 − 이 지역 공휴일 하루당 반응'으로 판정(검증: 오판 12% → 4~5%).",
+            "2026-11 행정구역 개편 직후(부천·화성·인천 중구 등)는 개편 뒤 8주가 쌓일 때까지 판정 보류.",
+            "2026-11-15 비교 지역이 반대 방향으로 크게 움직인 주는 '판정이 실제보다 크게 나올 수 있음' 표시(판정 자체는 그대로).",
+            "2026-11-15 프로야구·벚꽃·단풍은 판정에 넣지 않고 참고 항목(몫 추정·지난 기록)으로만 붙임.",
+            "판정 방식을 바꾸면 이 목록에 날짜와 이유를 더한다. 이용자가 예전에 본 값과 다르다고 하면 이 이력을 보여 줄 것.",
         ],
         "함께 보여 주는 일정과 검증(2026-11)": {
             "원칙": "판정은 실제로 들어온 양 그대로다. 아래 일정은 '같은 시기에 있었던 일'로만 붙이며 원인으로 단정하지 않는다.",
@@ -379,55 +388,72 @@ def analyze_region_week(sido: str, sigungu: str, week: str) -> dict:
                                            (mon.isoformat(), (mon + dt.timedelta(days=6)).isoformat()))}
         except sqlite3.OperationalError:
             hd = set()
-        fest = festival.in_week(sido, sigungu, mon, hd)
-        if fest:
-            r["그 주 축제(문체부 계획 일정, 원인 단정 금지)"] = fest
-        bl, bc = baseball.week(sido, sigungu, mon)
-        if bl:
-            r["그 주 프로야구 홈경기(KBO, 원인 단정 금지)"] = {"경기": bl, "관중 합계(명)": bc}
-        if r.get("프로야구 홈경기 몫 추정(%)") is not None:
-            r["프로야구 안내"] = ("판정은 야구로 들어온 이동까지 포함한 실제 변화다. '프로야구 홈경기 몫 추정'은 그 주 관중이 "
-                              "시즌 평균보다 많거나 적어서 생긴 몫의 추정치(2023~2026 검증)이고, '야구 몫 뺀 판정'은 야구 말고 "
-                              "다른 일이 있었는지 볼 때만 참고할 것. '같은 주에 홈경기 N경기가 있었고 그 몫이 약 X%로 추정된다'처럼 "
-                              "말하고, 야구 때문이라고 단정하지 말 것.")
-        else:
-            r.pop("프로야구 홈경기 몫 추정(%)", None)
-            r.pop("야구 몫 뺀 판정(참고)", None)
-        sw = season.in_week(sido, sigungu, mon)
-        if sw:
-            r["그 주 벚꽃 만발·단풍 절정(기상청 관측, 원인 단정 금지)"] = sw
-        if season.spots(sido, sigungu):
-            try:
+        # 곁가지 정보: 하나가 고장 나도 판정과 다른 곁가지는 그대로 나가게 safe.extra 안에서만 붙인다
+        def _fest(r):
+            fest = festival.in_week(sido, sigungu, mon, hd)
+            if fest:
+                r["그 주 축제(문체부 계획 일정, 원인 단정 금지)"] = fest
+
+        def _baseball(r):
+            bl, bc = baseball.week(sido, sigungu, mon)
+            if bl:
+                r["그 주 프로야구 홈경기(KBO, 원인 단정 금지)"] = {"경기": bl, "관중 합계(명)": bc}
+            if r.get("프로야구 홈경기 몫 추정(%)") is not None:
+                r["프로야구 안내"] = ("판정은 야구로 들어온 이동까지 포함한 실제 변화다. '프로야구 홈경기 몫 추정'은 그 주 관중이 "
+                                  "시즌 평균보다 많거나 적어서 생긴 몫의 추정치(2023~2026 검증)이고, '야구 몫 뺀 판정'은 야구 말고 "
+                                  "다른 일이 있었는지 볼 때만 참고할 것. '같은 주에 홈경기 N경기가 있었고 그 몫이 약 X%로 추정된다'처럼 "
+                                  "말하고, 야구 때문이라고 단정하지 말 것.")
+            else:
+                r.pop("프로야구 홈경기 몫 추정(%)", None)
+                r.pop("야구 몫 뺀 판정(참고)", None)
+
+        def _season(r):
+            sw = season.in_week(sido, sigungu, mon)
+            if sw:
+                r["그 주 벚꽃 만발·단풍 절정(기상청 관측, 원인 단정 금지)"] = sw
+            if season.spots(sido, sigungu):
                 hist = season.history(analysis.prepare(db, sido, sigungu), sido, sigungu, skip_year=wo // 1000)
-            except Exception:
-                hist = []
-            if hist:
-                r["이 지역 지난 기록(벚꽃·단풍)"] = hist
-                r["벚꽃·단풍 안내"] = ("지난 기록은 이 서비스가 같은 판정 계산으로 낸 과거 평균이다(묻는 해는 빼고 계산). "
-                                   "'이 지역은 그동안 단풍 절정 주에 평균 +X%였다'처럼 비교 근거로만 말하고, "
-                                   "이번 주 변화를 단풍·벚꽃 때문이라고 단정하지 말 것. 같은 주 축제와 겹치는 경우가 많다.")
-        be = bigevents.in_range(sido, sigungu, mon, mon + dt.timedelta(days=6))
-        if be:
-            r["그 주 대형 행사(정부·주최 측 발표 일정, 원인 단정 금지)"] = be
-        pf = perf.in_range(db, sido, sigungu, mon, mon + dt.timedelta(days=6))
-        if pf:
-            r["그 주 큰 공연장 공연(KOPIS, 원인 단정 금지)"] = pf
-            r["공연 자료 안내"] = perf.NOTE
+                if hist:
+                    r["이 지역 지난 기록(벚꽃·단풍)"] = hist
+                    r["벚꽃·단풍 안내"] = ("지난 기록은 이 서비스가 같은 판정 계산으로 낸 과거 평균이다(묻는 해는 빼고 계산). "
+                                       "'이 지역은 그동안 단풍 절정 주에 평균 +X%였다'처럼 비교 근거로만 말하고, "
+                                       "이번 주 변화를 단풍·벚꽃 때문이라고 단정하지 말 것. 같은 주 축제와 겹치는 경우가 많다.")
+
+        def _big(r):
+            be = bigevents.in_range(sido, sigungu, mon, mon + dt.timedelta(days=6))
+            if be:
+                r["그 주 대형 행사(정부·주최 측 발표 일정, 원인 단정 금지)"] = be
+
+        def _perf(r):
+            pf = perf.in_range(db, sido, sigungu, mon, mon + dt.timedelta(days=6))
+            if pf:
+                r["그 주 큰 공연장 공연(KOPIS, 원인 단정 금지)"] = pf
+                r["공연 자료 안내"] = perf.NOTE
+
+        for label, fn in (("축제", _fest), ("프로야구", _baseball), ("벚꽃·단풍", _season),
+                          ("대형 행사", _big), ("공연", _perf)):
+            safe.extra(r, label, fn)
         r["함께 볼 것"] = ["get_weather(같은 주 날씨)", "get_datalab_daily(그 주 일별 외지인 방문자, 약 한 달 늦게 나옴)"]
         sus = analysis.suspect(sido, sigungu, wo)
         if sus:
             r["주의"] = sus + r["주의"]
-        prof = _profile(sido, sigungu)
-        if prof:
-            r["지역 성격"] = prof
-        hol = analysis.holidays(db)
-        if analysis.is_long_holiday(hol.get(wo)):
-            P = analysis.prepare(db, sido, sigungu)
-            past = [(w, hol[w][2], P["raw"].get(w)) for w in sorted(hol) if w != wo and w >= analysis.START
-                    and hol[w][1] > 0 and P["raw"].get(w) is not None][-6:]
-            if past:
-                r["이 지역 지난 설·추석 주 평소 대비(%)"] = [
-                    {"주차": P["me"][w][0], "공휴일": n, "평소 대비(%)": analysis._pct(v)} for w, n, v in past]
+        def _prof(r):
+            prof = _profile(sido, sigungu)
+            if prof:
+                r["지역 성격"] = prof
+
+        def _hol_past(r):
+            hol = analysis.holidays(db)
+            if analysis.is_long_holiday(hol.get(wo)):
+                P = analysis.prepare(db, sido, sigungu)
+                past = [(w, hol[w][2], P["raw"].get(w)) for w in sorted(hol) if w != wo and w >= analysis.START
+                        and hol[w][1] > 0 and P["raw"].get(w) is not None][-6:]
+                if past:
+                    r["이 지역 지난 설·추석 주 평소 대비(%)"] = [
+                        {"주차": P["me"][w][0], "공휴일": n, "평소 대비(%)": analysis._pct(v)} for w, n, v in past]
+
+        safe.extra(r, "지역 성격", _prof)
+        safe.extra(r, "지난 설·추석", _hol_past)
         ym = f"{wo // 1000}{(wo // 10) % 100:02d}"
         try:
             mig = lifepop._by_period(db, "kosis_migration", lifepop._codes(db, sido, sigungu, "reg_pop"), "AND ITM_ID='T10'")
@@ -638,10 +664,16 @@ def get_data_status() -> dict:
         rows = db.execute("SELECT name, unit, latest, fetched_ok, last_failed FROM source_status").fetchall()
     except sqlite3.OperationalError:
         return {"error": "자료 상태 표가 아직 없음(첫 자동 갱신 전)."}
+    import manual_data
+    manual = [{"자료": m.get("이름"), "출처": m.get("출처"), "자료 기준": m.get("자료 기준"), "받은 날": m.get("받은 날"),
+               "다음 갱신 예상": m.get("다음 갱신")} for m in manual_data.manifest().values()]
     return {
         "안내": NOTICE,
         "data": [{"자료": n, "단위": u, "latest": l, "fetched_ok": f, "last_failed": bool(x)}
                  for n, u, l, f, x in rows],
+        "손으로 받아 넣는 자료": manual,
+        "손으로 받아 넣는 자료 안내": "자동 수집이 아니라 시즌·관측이 끝난 뒤 받아 넣는다. '자료 기준' 뒤의 일은 아직 없을 수 있으니, "
+                                   "그보다 최근 것을 물으면 원 출처(KBO·기상청 날씨누리 등)를 안내할 것.",
     }
 
 
