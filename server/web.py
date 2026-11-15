@@ -441,7 +441,7 @@ def _sentences(weeks, fest_weeks, inside_flat, area_word, key="level"):
             s += f" 같은 기간 문체부 축제 개최 계획에 {txt}{_iga(txt)} 있었습니다."
         hol = [x for x in run if x["long_holiday"]]
         if hol:
-            s += " 연휴가 낀 주가 있어 연휴 영향을 먼저 보아야 합니다."
+            s += " 연휴가 낀 주는 연휴 때문에 늘거나 줄었을 수 있습니다."
         out.append(s)
         i = j + 1
     if not out:

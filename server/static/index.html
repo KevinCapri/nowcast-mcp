@@ -82,7 +82,7 @@ textarea{padding:10px 12px;min-height:96px;resize:vertical}
 .col.nd .axis{background:repeating-linear-gradient(90deg,#C9CED6 0 4px,transparent 4px 8px)}
 .col.nd .wk{color:#9AA0A8}
 @media (max-width:639px){.ev{display:none}.mon{font-size:12px;padding-left:3px}.ftag{font-size:0;padding:0;border:0;height:4px;width:100%;background:#E9B65C;border-radius:2px;margin-top:6px}}
-.hold{font-size:11px;color:var(--muted);white-space:nowrap}
+.hold{font-size:10px;line-height:1.25;color:var(--muted);text-align:center;word-break:keep-all}
 #tip{position:fixed;z-index:10;background:var(--ink);color:#fff;font-size:13px;line-height:1.45;padding:8px 12px;border-radius:8px;pointer-events:none;white-space:nowrap;transform:translate(-50%,-100%)}
 #tip b{font-weight:500}
 ul.lines{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px;font-size:15px}
@@ -197,7 +197,7 @@ footer p{margin:0 0 6px}
 
   <section class="card">
     <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:baseline">
-      <h2>외부 유입 흐름<span class="tag">참고</span></h2>
+      <h2>외부 유입 흐름<span class="tag">공식 통계 아님</span></h2>
       <div class="legend">
         <span><i class="sw" style="background:var(--down3)"></i>아주 적음</span>
         <span><i class="sw" style="background:var(--down2)"></i>적음</span>
@@ -624,7 +624,7 @@ footer p{margin:0 0 6px}
   var COLOR = { up3: "var(--up3)", up2: "var(--up2)", up1: "var(--up1)", down3: "var(--down3)", down2: "var(--down2)", down1: "var(--down1)" };
   var WORD = { up3: "평소보다 아주 많음", up2: "평소보다 많음", up1: "평소보다 조금 많음", normal: "평소 수준",
     down1: "평소보다 조금 적음", down2: "평소보다 적음", down3: "평소보다 아주 적음",
-    hold: "판정 보류", na: "판정 못함", nodata: "자료 아직 없음" };
+    hold: "아직 비교하기 이름", na: "비교할 수 없음", nodata: "자료 아직 없음" };
   var STEP = { up1: 1, up2: 2, up3: 3, down1: 1, down2: 2, down3: 3 };
   function fmt(n) { return Number(n).toLocaleString("ko-KR"); }
 
@@ -686,7 +686,7 @@ footer p{margin:0 0 6px}
       var up = el("div", { cls: "up-area", style: "height:" + upH + "px" }), dn = el("div", { cls: "dn-area", style: "height:" + dnH + "px" });
       var color = COLOR[w.level], n = STEP[w.level] || 0;
       if (w.level === "hold" || w.level === "na") {
-        up.appendChild(el("span", { cls: "hold" }, w.level === "hold" ? "보류" : "판정 못함"));
+        up.appendChild(el("span", { cls: "hold" }, w.level === "hold" ? "아직 비교하기 이름" : "비교할 수 없음"));
       } else if (n && w.dir > 0) {
         up.appendChild(el("div", { cls: "bar", style: "height:" + (n * UNIT) + "px;background:" + color + ";border-radius:4px 4px 0 0" }));
       } else if (n && w.dir < 0) {
@@ -909,7 +909,7 @@ footer p{margin:0 0 6px}
       $("fhead").textContent = "[" + $("fsigungu").value + "] " + f["이름"];
       $("fhead").appendChild(el("span", { cls: "sub" }, $("fyear").value + "년"));
       $("ftitle").textContent = f["이름"] + " 기간 전후 유입";
-      $("ftitle").appendChild(el("span", { cls: "tag" }, "참고"));
+      $("ftitle").appendChild(el("span", { cls: "tag" }, "공식 통계 아님"));
       $("fscope").textContent = "축제 현장 방문객이 아니라 " + $("fsigungu").value + " 전체로 들어온 외부 유입을 보여 줍니다. 그래서 축제 효과가 그래프에 그대로 나타나지 않을 수 있습니다.";
       $("fperiod").textContent = "축제 기간: " + f["기간"] + (f["고침"] ? " (고친 날짜)" : "");
       $("fs").value = f["시작"]; $("fe").value = f["끝"];
@@ -943,7 +943,7 @@ footer p{margin:0 0 6px}
     drawChart($("fbars"), $("fchart"), FW, true);
     var ul = $("flines"); ul.textContent = "";
     var strong = all.some(function (w) { return w.fest && /^(up|down)[23]$/.test(w.level); });
-    if (!strong) ul.appendChild(el("li", null, "축제 기간에 뚜렷한 변화가 잡히지 않았습니다(효과가 없었다는 뜻은 아닙니다)."));
+    if (!strong) ul.appendChild(el("li", null, "축제 기간에도 평소와 큰 차이가 없었습니다. 시군구 전체로 보면 축제 효과가 드러나지 않을 수 있습니다."));
     (j[on ? "문장_비교" : "문장"] || []).forEach(function (t) { if (!(strong === false && /많이 늘어나거나 줄어든 주는 없었습니다/.test(t))) ul.appendChild(el("li", null, t)); });
     var notes = (j["주의"] || []).concat(on ? (j["주의_비교"] || []) : []);
     var n = $("fnotes"); n.textContent = "";
