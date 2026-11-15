@@ -64,11 +64,11 @@ db = _ThreadDB(DB)
 SERVICE = "빅데이터 Insight: 지역별 유입인구"
 # 도구 목록이 바뀌면(추가·삭제·입력값·설명) 세 값을 같이 고친다. 회귀 시험이 TOOLS와 실제 도구가 다르면 잡는다.
 # 결과마다 붙여서, 예전에 연결한 이용자에게도 AI가 '새 도구가 생겼으니 다시 연결'을 알려 주게 한다(claude/변경_관리_원칙.md).
-VERSION = "0.3.1"
+VERSION = "0.4.0"
 TOOLS_CHANGED = "2026-11-16"
 TOOLS = ["get_metadata", "list_regions", "get_movement", "get_breakdown", "get_weather", "analyze_region_week",
          "find_unusual_regions", "estimate_life_pop", "forecast_festival", "get_datalab_daily", "report_issue",
-         "get_region_calendar", "get_bloom_foliage", "get_data_status"]
+         "get_region_calendar", "get_bloom_foliage", "get_data_status", "compare_same_week"]
 TOOL_NOTICE = {"버전": VERSION, f"도구 목록({len(TOOLS)}개)": TOOLS, "도구가 바뀐 날": TOOLS_CHANGED,
                "안내": "지금 쓸 수 있는 도구에 이 목록 중 없는 것이 있으면, 이용자에게 대화에서 한 번만 "
                      "'이 서비스에 새 도구(이름)가 생겼다. 커넥터(앱)를 끊었다 다시 연결하면 쓸 수 있다'고 알릴 것."}
@@ -99,6 +99,7 @@ INSTRUCTIONS = (
     "그러겠다고 할 때만 report_issue(kind='자료 추가 요청')로 보낼 것. "
     "'그 달 그 지역에 무슨 행사·경기가 있었나', '언제였나'는 get_region_calendar로, '올해(그해) 벚꽃·단풍 언제였나'는 "
     "get_bloom_foliage로 답하고, 결과에 함께 나오는 그 주 유입으로 '그래서 사람이 많이 왔나'까지 이어서 답할 것. "
+    "'작년보다 많이 왔나', '올해 추석이 작년 추석보다' 같은 해 비교는 compare_same_week로 답할 것(원값끼리 견주지 말 것). "
     "판정·비교·추정·예측은 '빅데이터 Insight'의 계산이라고 부를 것. 커넥터 이름이 nowcast-mcp여도 '나우캐스트 분석', "
     "'나우캐스트 MCP 결과'라고 하지 말 것(나우캐스트는 국가데이터처가 공표한 이동 건수 원자료의 이름이다). "
     "'나우캐스트 MCP'처럼 이 서비스를 나우캐스트 이름으로 부르지 말 것. "
@@ -539,6 +540,99 @@ def analyze_region_week(sido: Sido, sigungu: Sigungu, week: Week) -> dict:
             pass
         r["자료 기준"] = _as_of()
     return _answer(r, "judge", SOURCE, calc=True)
+
+
+def _wo_of_monday(mon):
+    """월요일 날짜 → 주차 번호(week_dates의 반대). 목요일(2022년은 수요일)이 속한 달로 센다."""
+    for k in (3, 2):
+        d = mon + dt.timedelta(days=k)
+        wo = d.year * 1000 + d.month * 10 + (d.day - 1) // 7 + 1
+        if analysis.week_dates(wo)[:10] == mon.isoformat():
+            return wo
+    return None
+
+
+def _label(wo):
+    return f"{wo // 1000}.{(wo // 10) % 100:02d}.{wo % 10}주차"
+
+
+def _same_weeks(wo, years_back):
+    """해마다 견줄 주: 기본은 52주 전(월~일 같음), 설·추석 주는 그 해 설·추석 주끼리."""
+    mon = dt.date.fromisoformat(analysis.week_dates(wo)[:10])
+    hol = analysis.holidays(db)
+    h = hol.get(wo)
+    tag = None
+    if h and h[1] > 0 and h[2]:
+        tag = "추석" if "추석" in h[2] else ("설" if "설" in h[2] else None)
+    out = []
+    for k in range(1, years_back + 1):
+        base = mon - dt.timedelta(days=364 * k)
+        w, how = _wo_of_monday(base), "52주 전(월~일 같음)"
+        if tag:
+            best = None
+            for c, (_, lunar, names) in hol.items():
+                if lunar > 0 and names and tag in names:
+                    cm = dt.date.fromisoformat(analysis.week_dates(c)[:10])
+                    gap = abs((cm - base).days)
+                    if gap <= 70 and (best is None or (-lunar, gap) < (-best[1], best[2])):
+                        best = (c, lunar, gap)
+            if best:
+                w, how = best[0], f"그 해 {tag} 주"
+        out.append((k, w, how))
+    return tag, out
+
+
+@mcp.tool(annotations=READ_ONLY)
+def compare_same_week(sido: Sido, sigungu: Sigungu, week: Week,
+                      years_back: Annotated[int, Field(description="몇 해 전까지 견줄지(1~3)", ge=1, le=3)] = 2) -> dict:
+    """한 시군구의 한 주를 지난 해 같은 주와 '평소 대비 변화'끼리 견준다(원값끼리 견주지 않음).
+    - '작년보다 사람 많이 왔어?', '올해 추석이 작년 추석보다?' 같은 해 비교 질문에 쓴다.
+    - 같은 주는 52주 전(월~일이 같음). 설·추석 주는 그 해 설·추석 주끼리 맞춘다.
+    - 한 주 판정은 analyze_region_week, 축제 회차 비교는 forecast_festival, 여러 주 흐름은 get_movement로.
+    - 해마다 이동 건수 원값을 직접 견주지 말 것(통신사 가입자 등 바탕이 해마다 다름). 결과의 '평소 대비'와 판정끼리 말할 것.
+    - 차이의 원인을 단정하지 말고, 해마다 '그 주에 있었던 일'은 판단 재료로만 말할 것."""
+    try:
+        wo = _order(week)
+        analysis.week_dates(wo)
+    except Exception:
+        return {"error": "week 형식은 'YYYY.MM.N주차'(예: '2026.01.3주차')."}
+    years_back = max(1, min(3, int(years_back)))
+    keep = ("기간(월~일)", "판정", "평소 대비 변화(%)", "비교군 대비 변화(%)", "공휴일 보정(%)", "최종 변화(%)",
+            "평소 출렁임의 몇 배", "관외 유입(일평균 건수)", "프로야구 홈경기 몫 추정(%)")
+
+    def one(w, how):
+        r = analyze_region_week(sido, sigungu, _label(w))
+        row = {"주차": _label(w), "견준 방식": how}
+        if "error" in r:
+            row["없음"] = r["error"]
+            return row
+        row.update({k: r[k] for k in keep if k in r})
+        ev = {k: v for k, v in r.items() if k.startswith("그 주 ") and v}
+        if ev:
+            row["그 주에 있었던 일"] = ev
+        return row
+
+    me = one(wo, "물은 주")
+    if "없음" in me:
+        return {"error": me["없음"]}
+    tag, weeks = _same_weeks(wo, years_back)
+    rows = [me] + [one(w, how) if w else {"주차": f"{k}년 전", "없음": "같은 주를 찾지 못함"} for k, w, how in weeks]
+    def short(x):
+        return (f"{x['주차']} {x['최종 변화(%)']:+.1f}%({x['판정']})" if "판정" in x and x.get("최종 변화(%)") is not None
+                else f"{x['주차']} 자료 없음")
+    out = {
+        "지역": f"{sido} {sigungu}",
+        "견준 주": rows,
+        "요약": " / ".join(short(x) for x in rows),
+        "견주는 법": "해마다 그 해의 평소(직전 8주) 대비 변화와 판정끼리 견준다. '관외 유입(일평균 건수)' 원값은 해마다 "
+                 "통신사 가입자 등 바탕이 달라 직접 견주지 말 것.",
+        "주의": ["판정은 해마다 그 해 평소 출렁임으로 따로 낸 것이다. 올해가 작년보다 '몇 % 더 왔다'로 바꿔 말하지 말 것.",
+               "'건'은 사람 수가 아니다. '명'으로 바꿔 말하지 말 것."],
+        "출처": SOURCE,
+    }
+    if tag:
+        out["주의"].insert(0, f"{tag} 주라서 지난 해도 그 해 {tag} 주와 견줬다(날짜가 달라도).")
+    return _answer(out, "judge", SOURCE, calc=True)
 
 
 @mcp.tool(annotations=READ_ONLY)
