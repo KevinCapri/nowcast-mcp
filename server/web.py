@@ -625,7 +625,7 @@ def fest_all():
     for sd, sgs in _list("regions").items():
         for sg in sgs:
             for k, v in idx.get(A.canon(sd, sg), {}).items():
-                out.append({"sido": sd, "sigungu": sg, "id": k, "name": v["name"]})
+                out.append({"sido": sd, "sigungu": sg, "id": k, "name": v["name"], "years": sorted(v["years"])})
     _cache["fest_all"] = (key, out)
     return out
 
