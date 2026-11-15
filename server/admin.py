@@ -122,17 +122,18 @@ def _page(days):
 
     try:
         fc = feedback._con()
-        fb = fc.execute("SELECT id, created, kind, region, period, tool, message, status FROM feedback "
+        fb = fc.execute("SELECT id, created, kind, region, period, tool, message, status, COALESCE(link,'') FROM feedback "
                         "ORDER BY created DESC LIMIT 50").fetchall()
         fb_total = fc.execute("SELECT COUNT(*) FROM feedback").fetchone()[0]
         fc.close()
     except Exception:
         fb, fb_total = [], 0
     fb_html = ['<table class="list"><tr><th>접수</th><th>시각</th><th>종류</th><th>지역·기간</th><th>내용</th><th>상태</th></tr>']
-    for fid, created, kind, region, period, tool, msg, status in fb:
+    for fid, created, kind, region, period, tool, msg, status, link in fb:
         fb_html.append(f"<tr><td>{_e(fid)}</td><td>{_e((created or '')[5:16].replace('T', ' '))}</td><td>{_e(kind)}</td>"
-                       f"<td>{_e(' '.join(x for x in (region, period) if x))}</td><td class='a'>{_e(msg)}</td>"
-                       f"<td>{_e(status)}</td></tr>")
+                       f"<td>{_e(' '.join(x for x in (region, period) if x))}</td><td class='a'>{_e(msg)}"
+                       + (f"<br><a href='{_e(link)}' rel='noopener noreferrer nofollow' target='_blank'>{_e(link)}</a>" if link else "")
+                       + f"</td><td>{_e(status)}</td></tr>")
     fb_html.append("</table>" if fb else '</table><p class="none">들어온 의견 없음</p>')
 
     ok_rate = (sum(r[3] for r in mcp) / len(mcp) * 100) if mcp else 0

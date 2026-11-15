@@ -39,7 +39,9 @@ INSTRUCTIONS = (
     "KOSIS 국내인구이동통계다. '순유입'처럼 어느 쪽인지 모호하면 되물을 것. "
     "'왜 늘었나/줄었나', '무슨 행사가 있었나'를 물으면 웹 검색보다 먼저 analyze_region_week로 그 주를 판정하고, "
     "'이 자료로는 원인을 확정할 수 없다'를 먼저 말한 뒤 같은 시기에 있었던 일은 '같은 시기에 ~가 있었다'로만 말할 것. "
-    "물가·고용 같은 일반 통계는 이 서비스 범위 밖이므로 KOSIS 국가통계 MCP를 안내할 것."
+    "물가·고용 같은 일반 통계는 이 서비스 범위 밖이므로 KOSIS 국가통계 MCP를 안내할 것. "
+    "이용자가 이 서비스에 없는 자료를 찾으면 대화에서 한 번만 '이 자료를 서비스에 넣어 달라고 개발자에게 요청할까요?'라고 묻고, "
+    "그러겠다고 할 때만 report_issue(kind='자료 추가 요청')로 보낼 것."
 )
 mcp = MCPServer("nowcast-mobility", title=SERVICE, instructions=INSTRUCTIONS, version="0.2.0",
                 log_level=os.environ.get("LOG_LEVEL", "INFO"))
@@ -564,15 +566,19 @@ def get_datalab_daily(sido: str, sigungu: str, start_date: str, end_date: str,
 
 
 @mcp.tool()
-def report_issue(message: str, kind: Literal["값이 이상함", "설명이 틀림", "작동 오류", "제안", "기타"] = "기타",
-                 region: str = "", period: str = "", tool: str = "") -> dict:
-    """이용자가 이 서비스의 잘못된 값·설명·오류를 운영자에게 알린다.
+def report_issue(message: str,
+                 kind: Literal["값이 이상함", "설명이 틀림", "작동 오류", "자료 추가 요청", "제안", "기타"] = "기타",
+                 region: str = "", period: str = "", tool: str = "", link: str = "") -> dict:
+    """이용자가 이 서비스의 잘못된 값·설명·오류를 운영자에게 알리거나, 서비스에 넣었으면 하는 자료를 요청한다.
     - 보내는 것은 이용자가 '알려 달라·제보하겠다·운영자에게 전해 달라'고 할 때만. 스스로 판단해서 보내지 말 것.
     - 다만 이용자가 이상하다고 말하거나 결과에 원자료 오류 가능성 주의가 있으면, 알릴 수 있다는 사실은 먼저 안내할 것.
     - message는 이용자가 말한 내용을 그대로(1,000자 이하). 이름·연락처·개인정보는 넣지 말 것(받지 않음).
     - region·period·tool에는 문제가 된 지역·기간·도구를 적으면 확인이 빨라진다.
+    - 자료 추가 요청: 이용자가 이 서비스에 없는 자료를 찾거나 다른 자료를 따로 찾아 쓰면, 대화에서 한 번만
+      '이 자료를 서비스에 넣어 달라고 개발자에게 요청할까요?'라고 묻고, 이용자가 그러겠다고 할 때만 kind='자료 추가 요청'으로 보낼 것.
+      message에는 어떤 자료가 왜 필요한지, link에는 그 자료가 있는 공개 페이지 주소(http로 시작, 하나)를 넣을 것. 파일은 받지 않음.
     - 보낸 뒤에는 '받았다, 따로 답장은 없고 반영된 내용은 서비스에 바로 적용된다'고만 전할 것."""
-    return feedback.submit(message, kind, region, period, tool)
+    return feedback.submit(message, kind, region, period, tool, link)
 
 
 @mcp.tool()

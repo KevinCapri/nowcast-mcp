@@ -437,10 +437,10 @@ footer p{margin:0 0 6px}
 <!-- ================= 의견 보내기(두 탭 공통) ================= -->
 <section class="card" id="fb">
   <h2>의견 보내기</h2>
-  <p class="note">값이 이상하거나 설명이 틀렸으면 알려 주세요. 이름·연락처는 받지 않습니다.</p>
+  <p class="note">값이 이상하거나 설명이 틀렸으면 알려 주세요. 서비스에 넣었으면 하는 자료가 있으면 '자료 추가 요청'으로 알려 주세요. 이름·연락처는 받지 않습니다.</p>
   <div class="fbrow">
     <label class="f">종류
-      <select id="fbkind"><option>값이 이상함</option><option>설명이 틀림</option><option>작동 오류(조회 안 됨·화면 깨짐)</option><option>제안</option><option selected>기타</option></select>
+      <select id="fbkind"><option>값이 이상함</option><option>설명이 틀림</option><option>작동 오류(조회 안 됨·화면 깨짐)</option><option>자료 추가 요청</option><option>제안</option><option selected>기타</option></select>
     </label>
     <label class="f">문제가 된 지역(선택)
       <input id="fbregion" maxlength="60" autocomplete="off" placeholder="○○도 ○○군">
@@ -449,6 +449,10 @@ footer p{margin:0 0 6px}
       <input id="fbperiod" maxlength="40" autocomplete="off" placeholder="2026년 ○월 ○주">
     </label>
   </div>
+  <label class="f" style="flex:none" id="fblinkbox" hidden>자료가 있는 곳(링크)
+    <input id="fblink" maxlength="300" autocomplete="off" placeholder="https://">
+    <span class="note">공개된 페이지나 공유 주소만 적어 주세요. 개인정보가 담긴 자료는 보내지 마세요.</span>
+  </label>
   <label class="f" style="flex:none">내용(1,000자 이하)
     <textarea id="fbmsg" maxlength="1000"></textarea>
   </label>
@@ -953,18 +957,20 @@ footer p{margin:0 0 6px}
   $("fshareurl").onclick = function () { copyText($("fshareurl"), location.origin + location.pathname + (URLS.fest || ""), "링크 복사"); };
 
   // ---------- 의견 ----------
+  $("fbkind").onchange = function () { $("fblinkbox").hidden = $("fbkind").value !== "자료 추가 요청"; };
   $("fbsend").onclick = function () {
     var out = $("fbout"); out.className = "msg";
     if (!$("fbmsg").value.trim()) { out.className = "msg err"; out.textContent = "내용을 적어 주세요."; return; }
     $("fbsend").disabled = true;
     fetch("/api/feedback", { method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ kind: $("fbkind").value, region: $("fbregion").value, period: $("fbperiod").value, message: $("fbmsg").value }) })
+      body: JSON.stringify({ kind: $("fbkind").value, region: $("fbregion").value, period: $("fbperiod").value, message: $("fbmsg").value,
+                             link: $("fbkind").value === "자료 추가 요청" ? $("fblink").value : "" }) })
       .then(function (r) { return r.json(); })
       .then(function (j) {
         if (j.error) { out.className = "msg err"; out.textContent = j.error; return; }
         out.className = "msg ok";
         out.textContent = "잘 받았습니다. 따로 답장은 드리지 않으며, 반영된 내용은 사이트에 바로 적용됩니다.";
-        $("fbmsg").value = "";
+        $("fbmsg").value = ""; $("fblink").value = "";
       })
       .catch(function () { out.className = "msg err"; out.textContent = "보내지 못했습니다. 잠시 뒤 다시 시도해 주세요."; })
       .then(function () { $("fbsend").disabled = false; });
