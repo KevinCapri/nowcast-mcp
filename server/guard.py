@@ -8,7 +8,9 @@
 - 넘으면 HTTP 429와 '잠시 뒤 다시' 안내. 전체 상한에 처음 걸리면 운영자에게 메일 1번(시간마다)
 
 이용 기록(usage.db, DB와 같은 폴더)
-- 도구 호출마다: 시각, 도구 이름, 입력값(지역·기간 등), 결과 상태, 걸린 시간. IP·접속 정보는 남기지 않는다
+- 도구 호출마다: 시각, 도구 이름, 입력값(지역·기간 등), 결과 상태, 걸린 시간, 연결한 곳(Claude·ChatGPT·PlayMCP·사이트 등
+  짧은 이름만). IP·접속 정보 원본은 남기지 않는다
+- 운영자 화면: /admin (앱 설정 ADMIN_PW가 있을 때만 열림, 브라우저 로그인 창에 아무 이름 + 그 비밀번호)
 - 1년 지난 기록은 지움
 - 보기: python server/guard.py [일수]   → 도구별·지역별 호출 수
 """
@@ -87,7 +89,20 @@ _wlock = threading.Lock()
 def _con():
     con = sqlite3.connect(_db_path(), timeout=30)
     con.execute("CREATE TABLE IF NOT EXISTS usage(at TEXT, tool TEXT, args TEXT, ok INT, ms INT)")
+    if "client" not in [r[1] for r in con.execute("PRAGMA table_info(usage)")]:
+        con.execute("ALTER TABLE usage ADD COLUMN client TEXT DEFAULT ''")
     return con
+
+
+def client_name(user_agent: str) -> str:
+    """요청을 보낸 AI 서비스를 짧은 이름으로(원래 문자열은 남기지 않음)."""
+    u = (user_agent or "").lower()
+    for key, name in (("claude", "Claude"), ("anthropic", "Claude"), ("openai", "ChatGPT"), ("chatgpt", "ChatGPT"),
+                      ("playmcp", "PlayMCP"), ("kakao", "PlayMCP"), ("cursor", "Cursor"), ("gemini", "Gemini"),
+                      ("google", "Gemini"), ("copilot", "Copilot"), ("vscode", "VS Code")):
+        if key in u:
+            return name
+    return "기타" if u else "알 수 없음"
 
 
 def tool_calls(body: bytes):
@@ -107,7 +122,7 @@ def tool_calls(body: bytes):
     return out
 
 
-def record(calls, ok, ms):
+def record(calls, ok, ms, client=""):
     if not calls:
         return
 
@@ -116,8 +131,9 @@ def record(calls, ok, ms):
             with _wlock:
                 con = _con()
                 now = dt.datetime.now(KST)
-                con.executemany("INSERT INTO usage VALUES (?,?,?,?,?)",
-                                [(now.isoformat(timespec="seconds"), t, a, int(ok), int(ms)) for t, a in calls])
+                con.executemany("INSERT INTO usage(at, tool, args, ok, ms, client) VALUES (?,?,?,?,?,?)",
+                                [(now.isoformat(timespec="seconds"), t, a, int(ok), int(ms),
+                                  client or ("사이트" if t.startswith("web:") else "")) for t, a in calls])
                 if now.minute == 0:     # 가끔 오래된 기록 정리
                     con.execute("DELETE FROM usage WHERE at < ?",
                                 ((now - dt.timedelta(days=KEEP_DAYS)).isoformat(),))

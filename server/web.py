@@ -20,6 +20,7 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, PlainTextResponse
 from starlette.routing import Route
 
+import admin as ADM
 import analysis as A
 import feedback
 import festival as F
@@ -791,6 +792,7 @@ app = Starlette(routes=[
     Route("/robots.txt", robots),
     Route("/sitemap.xml", sitemap),
     Route("/og.png", og_image),
+    Route("/admin", ADM.admin),
     Route("/api/regions", api_regions),
     Route("/api/weeks", api_weeks),
     Route("/api/status", api_status),
@@ -804,4 +806,4 @@ app = Starlette(routes=[
 
 
 def handles(path: str) -> bool:
-    return path in ("/", "/robots.txt", "/sitemap.xml", "/og.png") or path.startswith("/api/")
+    return path in ("/", "/robots.txt", "/sitemap.xml", "/og.png", "/admin") or path.startswith("/api/")

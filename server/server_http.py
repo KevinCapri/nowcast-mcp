@@ -143,7 +143,7 @@ class RequestLog:
             await self.app(scope, replay, capture)
         finally:
             ok = status[0] == 200 and b'"isError":true' not in resp[0] and b'"error"' not in resp[0][:200]
-            guard.record(calls, ok, (time.time() - t0) * 1000)
+            guard.record(calls, ok, (time.time() - t0) * 1000, guard.client_name(hd.get("user-agent", "")))
             if REQUEST_LOG:
                 print(f"[req] {scope['method']} {scope['path']} ua={hd.get('user-agent', '')[:60]!r} {_summary(body)} "
                       f"-> {status[0]} {resp[0][:300]!r}", flush=True)
