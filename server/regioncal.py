@@ -31,6 +31,12 @@ def _month_end(d):
     return n - dt.timedelta(days=1)
 
 
+def _label(mon):
+    """이동 자료에 없는 주의 주차 이름(목요일이 속한 달로 셈. 2022년 수요일 기준은 지난 일이라 여기선 안 씀)."""
+    thu = mon + dt.timedelta(days=3)
+    return f"{thu.year}.{thu.month:02d}.{(thu.day - 1) // 7 + 1}주차"
+
+
 def _inflow(P, wo):
     j = A.judge_week(P, wo) if (P and wo in P["me"]) else None
     if not j:
@@ -105,21 +111,25 @@ def region_calendar(db, sido, sigungu, start, end=""):
         if bl:
             ev.append({"종류": "프로야구 홈경기", "경기": bl, "관중 합계(명)": bc, "출처": "한국야구위원회(KBO) 경기 기록"})
         for s in safe.call("벚꽃·단풍(일정)", season.in_week, sido, sigungu, mon, default=[]) or []:
-            ev.append({"종류": s["종류"], "이름": s["명소"], "날짜": s["날짜"], "출처": s["기준"]})
+            ev.append({"종류": s["종류"], "이름": s["명소"], "날짜": s["날짜"], "날짜 성격": "기상청 관측일(예보 아님)",
+                       "출처": s["기준"]})
         for p in safe.call("공연(일정)", perf.in_range, db, sido, sigungu, mon, sun, default=[]) or []:
             ev.append({"종류": "큰 공연장 공연", **p, "출처": "KOPIS 공연예술통합전산망(발권 기준, 원인 단정 금지)"})
         for w in weather.get(wo, []):
             ev.append({"종류": "날씨", "이름": w, "출처": f"기상청 {stn} 관측소"})
         n_ev += bool(ev)
-        weeks.append({"주차": P["me"][wo][0] if wo else None, "기간(월~일)": f"{mon}~{sun}", "일정": ev,
+        weeks.append({"주차": P["me"][wo][0] if wo else _label(mon), "기간(월~일)": f"{mon}~{sun}", "일정": ev,
                       "그 주 유입": safe.call("그 주 유입", _inflow, P, wo) if wo else "이동 자료에 없는 주"})
-    hist = safe.call("벚꽃·단풍 지난 기록(일정)", season.history, P, sido, sigungu, default=[]) \
-        if season.spots(sido, sigungu) else []
+    hist = safe.call("벚꽃·단풍 지난 기록(일정)", season.history, P, sido, sigungu,
+                     skip_year=range(a.year, z.year + 1), default=[]) if season.spots(sido, sigungu) else []
     out = {"지역": f"{sido} {sigungu}", "기간": f"{a}~{z}", "일정 있는 주": n_ev, "주별": weeks,
            "자료 기준": {"이동 자료": (P["me"][max(P["me"])][0] if P["me"] else None),
                      "손으로 넣는 자료": [{k: s[k] for k in ("자료", "자료 기준(가장 늦은 날짜)", "받아서 넣은 날")}
                                     for s in safe.call("손 자료 상태(일정)", manual.status, default=[])]},
            "안내": ["일정은 '같은 시기에 있었던 일'이다. 유입 변화의 원인으로 단정하지 말 것.",
+                  "'이동 자료에 없는 주'는 유입을 추정하거나 앞뒤 주로 미루어 '많이 왔을 것'이라고 결론 내지 말 것. 자료가 없다고만 말할 것.",
+                  "벚꽃·단풍 날짜는 기상청 관측일이다. 웹 기사의 예보·예상 날짜보다 이 날짜를 먼저 말하고, 웹 내용은 출처를 나눠 덧붙일 것.",
+                  "지난 기록은 조회한 해를 빼고 계산한다(get_bloom_foliage와 같은 숫자).",
                   "'그 주 유입'은 analyze_region_week와 같은 계산이다. 더 자세한 판정(비교군·평소 값)은 그 도구로 볼 것.",
                   "축제는 문체부 연초 계획 일정이라 실제와 다를 수 있다. 공연은 큰 공연장(3천 석 이상)만, 날씨는 큰 눈·비만 있다.",
                   "자료 기준 뒤의 일정·유입은 없다. 그 뒤를 물으면 '이 서비스에는 ○○까지 있다'고 말하고 원출처를 안내할 것."]}
@@ -179,6 +189,8 @@ def bloom_foliage(db, year, kind):
     return {"해": year, "종류": kind, "관측": groups,
             "자료 기준": st[0] if st else None,
             "안내": ["기상청 계절관측 관측일이다(예보 아님). 관측이 끝난 뒤 넣는 자료라 '자료 기준' 뒤의 일은 없다.",
+                   "이 관측일이 있는 해·지점은 웹 기사의 예보·예상 날짜보다 이 날짜를 먼저 말할 것. 웹 내용은 출처를 나눠 덧붙일 것.",
+                   "'이동 자료에 없는 주'는 유입을 추정하거나 앞뒤 주로 미루어 결론 내지 말 것. 자료가 없다고만 말할 것.",
                    "'연결된 명소'는 이 서비스가 유입 효과를 확인한 명소만 붙였다. 명소 날짜는 가까운 기상청 지점 날짜로 대신한 것이다.",
                    "'그 주 유입'은 analyze_region_week와 같은 계산이다. 유입 변화를 벚꽃·단풍 때문이라고 단정하지 말 것(같은 주 축제가 겹치는 경우가 많다).",
                    "유명산 단풍의 산 이름은 관측 지점 이름을 바탕으로 이 서비스가 붙였다."]}
