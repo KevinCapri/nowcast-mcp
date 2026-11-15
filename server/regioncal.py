@@ -15,6 +15,8 @@ import manual
 import perf
 import safe
 import season
+import facility
+import tourism
 
 MAX_DAYS = 371
 
@@ -113,6 +115,9 @@ def region_calendar(db, sido, sigungu, start, end=""):
         for s in safe.call("벚꽃·단풍(일정)", season.in_week, sido, sigungu, mon, default=[]) or []:
             ev.append({"종류": s["종류"], "이름": s["명소"], "날짜": s["날짜"], "날짜 성격": "기상청 관측일(예보 아님)",
                        "출처": s["기준"]})
+        for f in safe.call("대형 시설(일정)", facility.in_range, sido, sigungu, mon, sun, default=[]) or []:
+            ev.append({"종류": "대형 시설 " + ("개점" if "개점" in f else "폐점"), "이름": f["시설"], "날짜": f.get("개점") or f.get("폐점"),
+                       "유입 시험": f["유입 시험"], "출처": "회사 발표·보도(이 서비스가 확인), 원인 단정 금지"})
         for p in safe.call("공연(일정)", perf.in_range, db, sido, sigungu, mon, sun, default=[]) or []:
             ev.append({"종류": "큰 공연장 공연", **p, "출처": "KOPIS 공연예술통합전산망(발권 기준, 원인 단정 금지)"})
         for w in weather.get(wo, []):
@@ -135,6 +140,12 @@ def region_calendar(db, sido, sigungu, start, end=""):
                   "자료 기준 뒤의 일정·유입은 없다. 그 뒤를 물으면 '이 서비스에는 ○○까지 있다'고 말하고 원출처를 안내할 것."]}
     if hist:
         out["이 지역 지난 기록(벚꽃·단풍)"] = hist
+    tm = safe.call("관광지 방문객(일정)", tourism.months, db, sido, sigungu, a, z)
+    if tm:
+        out["그 달 주요 유료관광지 방문객"] = tm
+    if any(e["종류"].startswith("대형 시설") for w in weeks for e in w["일정"]):
+        out["안내"].append("대형 시설 개점·폐점은 '유입 시험' 결과와 함께 말할 것. 시험에서 시군구 유입에 드러나지 않은 시설은 "
+                         "그 주 유입 변화와 연결하지 말 것.")
     return out
 
 

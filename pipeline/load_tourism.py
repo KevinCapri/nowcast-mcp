@@ -53,6 +53,7 @@ def main():
     con = connect()
     con.execute("""CREATE TABLE IF NOT EXISTS tourism_monthly(
         ym TEXT, sido TEXT, gungu TEXT, addr_cd TEXT, name TEXT, cnt INTEGER, PRIMARY KEY(ym, addr_cd, name))""")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_tourism_sido ON tourism_monthly(sido, gungu)")
     t = dt.date.today()
     last = f"{t.year}{t.month:02d}"
     have = {ym for (ym,) in con.execute("SELECT DISTINCT ym FROM tourism_monthly")}
