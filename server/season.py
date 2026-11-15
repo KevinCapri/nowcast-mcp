@@ -97,7 +97,9 @@ def in_week(sido, sigungu, mon):
 
 def history(P, sido, sigungu, skip_year=None):
     """이 지역의 지난 기록: 만발·절정이 든 주의 평소 대비 변화 평균 − 같은 계절 3주 이상 떨어진 주 평균.
-    P는 analysis.prepare 결과. 판정과 같은 계산을 쓰고, 묻는 해는 뺀다."""
+    P는 analysis.prepare 결과. 판정과 같은 계산을 쓰고, 묻는 해는 뺀다(skip_year: 해 하나 또는 해 목록).
+    도구마다 같은 해를 빼야 같은 질문에 같은 숫자가 나온다(2026-11-15: 일정 도구만 안 빼서 +29.5% vs +31%)."""
+    skip = set(skip_year) if isinstance(skip_year, (set, list, tuple, range)) else {skip_year}
     from analysis import judge_week, week_dates, START
     D, res = _dates(), []
     for kind, name, grp, stn, step in spots(sido, sigungu):
@@ -108,7 +110,7 @@ def history(P, sido, sigungu, skip_year=None):
                 continue
             mon = dt.date.fromisoformat(week_dates(wo)[:10])
             d = D.get((grp, stn, step, mon.year))
-            if mon.month not in months or not d or mon.year == skip_year:
+            if mon.month not in months or not d or mon.year in skip:
                 continue
             j = judge_week(P, wo)
             if not j or j["dev"] is None or j["h"][1] > 0:
