@@ -4,7 +4,7 @@
 - 인증키: 공공데이터포털 키(환경변수 DATALAB_KEY, 데이터랩과 같은 키). 이용허락 제한 없음.
 - 응답: 연월(ym), 시도, 시군구(시 단위, 예: '수원특례시'), 시군구 코드 4자리(addrCd), 관광지명, 방문객 수(내외국인 합계).
 - 약 5개월 늦게 채워지고 늦게 들어오는 관광지가 많아, 매번 최근 8개월은 다시 받는다.
-- 처음에는 2019-01부터 한 번에 최대 24개월씩 거꾸로 채운다(한 달 받는 데 1분 남짓 걸림).
+- 처음에는 2019-01부터 한 번에 최대 60개월씩 거꾸로 채운다(한 달 받는 데 1분 남짓 걸림).
 - 표: tourism_monthly(ym, sido, gungu, addr_cd, name, cnt) — 판정에는 쓰지 않고 지역 성격·일정 안내용.
 """
 import datetime as dt
@@ -17,7 +17,7 @@ from common import connect, get, key
 URL = "https://apis.data.go.kr/B551940/TourismResourceStatsService/getPchrgTrrsrtVisitorList"
 FIRST = "201901"
 RECENT = 8          # 늦게 채워지므로 최근 몇 달은 매번 다시 받음
-PER_RUN = 24        # 한 번에 채우는 옛 달 수
+PER_RUN = 60        # 한 번에 채우는 옛 달 수(한 달 1분 남짓 → 갱신 단계 2시간 안)
 
 
 def months(a, b):
