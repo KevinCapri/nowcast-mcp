@@ -91,6 +91,27 @@ def ranges(name, s, e, extra=None):
     return out
 
 
+def facilities():
+    out = []
+    for i, r in enumerate(rows("facilities.csv"), 2):
+        try:
+            if not (r["open"] or r["close"]):
+                raise ValueError("개점일·폐점일 둘 다 없음")
+            for k in ("open", "close"):
+                if r[k]:
+                    d(r[k])
+            if r["open"] and r["close"] and d(r["open"]) > d(r["close"]):
+                raise ValueError("개점이 폐점보다 늦음")
+            if r["area_m2"]:
+                int(r["area_m2"])
+            if not (r["name"] and r["sido"] and r["sigungu"] and r["source"]):
+                raise ValueError("이름·지역·출처 중 빈 칸")
+            out.append(r)
+        except Exception as ex:
+            err("facilities.csv", i, ex)
+    return out
+
+
 def regions(name, rs):
     p = os.environ.get("NOWCAST_DB")
     if not p or not Path(p).exists():
@@ -110,6 +131,7 @@ def main():
     fe = ranges("festivals.csv", "s", "e", extra=lambda r: int(r["y"]))
     regions("events.csv", ev)
     regions("festivals.csv", fe)
+    regions("facilities.csv", facilities())
     if errs:
         print(f"잘못된 곳 {len(errs)}개:")
         for x in errs[:50]:
