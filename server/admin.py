@@ -26,7 +26,7 @@ KST = dt.timezone(dt.timedelta(hours=9))
 TOOL_KO = {
     "analyze_region_week": "한 주 판정", "find_unusual_regions": "튄 지역 찾기", "get_movement": "이동량 조회",
     "get_breakdown": "구성 나눠 보기", "get_weather": "날씨", "get_datalab_daily": "날짜별 방문자",
-    "estimate_life_pop": "생활인구 추정", "forecast_festival": "축제 예측", "get_region_calendar": "지역 일정", "get_bloom_foliage": "벚꽃·단풍", "get_metadata": "자료 설명",
+    "estimate_life_pop": "생활인구 추정", "forecast_festival": "축제 예측", "get_region_calendar": "지역 일정", "get_bloom_foliage": "벚꽃·단풍", "compare_same_week": "작년 같은 주", "get_metadata": "자료 설명",
     "list_regions": "지역 이름 찾기", "get_data_status": "자료 상태", "report_issue": "의견 신고",
     "web:view": "사이트 지역 조회", "web:fest": "사이트 축제 조회", "web:feedback": "사이트 의견 보내기",
 }
