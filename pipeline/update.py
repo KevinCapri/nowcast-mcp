@@ -103,7 +103,24 @@ SOURCES = [
     ("등록외국인(KOSIS)", "kosis", "연", "SELECT MAX(PRD_DE) FROM kosis_foreigners"),
     ("타지역 통근(KOSIS 지역별고용조사)", "kosis", "반기", "SELECT MAX(PRD_DE) FROM kosis_commute"),
     ("전입전출(KOSIS)", "kosis", "월", "SELECT MAX(PRD_DE) FROM kosis_migration"),
+    ("주요 유료관광지 방문객(한국문화관광연구원)", "tourism",
+     "월, 약 5개월 늦게 나옴. latest는 관광지가 대부분 들어온 마지막 달이고, 그 뒤 달은 일부만 있을 수 있음",
+     lambda con: tourism_latest(con)),
+    ("큰 공연장 공연(KOPIS)", "kopis",
+     "날짜, 발권 기준. latest는 받아 온 날까지 시작한 공연 가운데 가장 늦은 시작일(예정 공연은 따로 있음)",
+     "SELECT MAX(s) FROM kopis_perf WHERE s <= date('now', 'localtime')"),
 ]
+
+
+def tourism_latest(con):
+    """관광지가 대부분 들어온 마지막 달: 관광지 수가 최근 12개월 중앙값의 절반 이상인 달 중 가장 최근.
+    늦게 들어오는 관광지가 많아 그냥 MAX(ym)이면 몇 곳만 들어온 달이 최신으로 잡힌다."""
+    rows = con.execute("SELECT ym, COUNT(*) FROM tourism_monthly GROUP BY ym ORDER BY ym").fetchall()
+    if not rows:
+        return None
+    recent = sorted(n for _, n in rows[-12:])
+    half = recent[len(recent) // 2] / 2
+    return next((ym for ym, n in reversed(rows) if n >= half), None)
 
 
 def write_source_status(st):
@@ -113,7 +130,7 @@ def write_source_status(st):
     rows = []
     for name, step, unit, sql in SOURCES:
         try:
-            latest = con.execute(sql).fetchone()[0]
+            latest = sql(con) if callable(sql) else con.execute(sql).fetchone()[0]
         except Exception:
             latest = None
         s = st.get(step) or {}
