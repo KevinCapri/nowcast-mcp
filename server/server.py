@@ -373,9 +373,14 @@ def analyze_region_week(sido: str, sigungu: str, week: str) -> dict:
         bl, bc = baseball.week(sido, sigungu, mon)
         if bl:
             r["그 주 프로야구 홈경기(KBO, 원인 단정 금지)"] = {"경기": bl, "관중 합계(명)": bc}
-        if r.get("프로야구 홈경기 보정(%)") is not None:
-            r["프로야구 보정 안내"] = ("이 지역은 야구장이 있어 홈경기 관중이 평소보다 많거나 적은 만큼을 판정에서 뺐다"
-                                  "(2023~2026 검증). '평소 대비 변화'는 뺀 것이 아닌 실제 변화다.")
+        if r.get("프로야구 홈경기 몫 추정(%)") is not None:
+            r["프로야구 안내"] = ("판정은 야구로 들어온 이동까지 포함한 실제 변화다. '프로야구 홈경기 몫 추정'은 그 주 관중이 "
+                              "시즌 평균보다 많거나 적어서 생긴 몫의 추정치(2023~2026 검증)이고, '야구 몫 뺀 판정'은 야구 말고 "
+                              "다른 일이 있었는지 볼 때만 참고할 것. '같은 주에 홈경기 N경기가 있었고 그 몫이 약 X%로 추정된다'처럼 "
+                              "말하고, 야구 때문이라고 단정하지 말 것.")
+        else:
+            r.pop("프로야구 홈경기 몫 추정(%)", None)
+            r.pop("야구 몫 뺀 판정(참고)", None)
         pf = perf.in_range(db, sido, sigungu, mon, mon + dt.timedelta(days=6))
         if pf:
             r["그 주 큰 공연장 공연(KOPIS, 원인 단정 금지)"] = pf
