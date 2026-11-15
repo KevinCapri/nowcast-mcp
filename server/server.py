@@ -12,6 +12,7 @@ from typing import Literal
 import analysis
 import lifepop
 import perf
+import baseball
 import feedback
 import festival
 
@@ -369,6 +370,12 @@ def analyze_region_week(sido: str, sigungu: str, week: str) -> dict:
         fest = festival.in_week(sido, sigungu, mon, hd)
         if fest:
             r["그 주 축제(문체부 계획 일정, 원인 단정 금지)"] = fest
+        bl, bc = baseball.week(sido, sigungu, mon)
+        if bl:
+            r["그 주 프로야구 홈경기(KBO, 원인 단정 금지)"] = {"경기": bl, "관중 합계(명)": bc}
+        if r.get("프로야구 홈경기 보정(%)") is not None:
+            r["프로야구 보정 안내"] = ("이 지역은 야구장이 있어 홈경기 관중이 평소보다 많거나 적은 만큼을 판정에서 뺐다"
+                                  "(2023~2026 검증). '평소 대비 변화'는 뺀 것이 아닌 실제 변화다.")
         pf = perf.in_range(db, sido, sigungu, mon, mon + dt.timedelta(days=6))
         if pf:
             r["그 주 큰 공연장 공연(KOPIS, 원인 단정 금지)"] = pf
