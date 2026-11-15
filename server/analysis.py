@@ -321,7 +321,9 @@ def judge_week(P, week_order):
     if final is not None and s:
         import datetime as _dt
         import baseball
-        bb = baseball.adjust(P["sido"], P["sigungu"], _dt.date.fromisoformat(week_dates(week_order)[:10]))
+        import safe
+        bb = safe.call("야구 몫", baseball.adjust, P["sido"], P["sigungu"],
+                       _dt.date.fromisoformat(week_dates(week_order)[:10]))
         if bb is not None:
             ratio_nobb = round((final - bb) / s, 1)
             verdict_nobb = judge(ratio_nobb)

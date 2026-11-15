@@ -5,8 +5,10 @@
 - 원인으로 단정하지 않는다. '같은 시기에 있었던 일'로만.
 """
 import csv
+import datetime as dt
 from pathlib import Path
 
+import safe
 from perf import _sidos
 
 SOURCE = "대형 행사(전국체전·국제행사 등, 정부·주최 측 발표로 확인한 일정)"
@@ -18,7 +20,14 @@ def _rows():
     if _ROWS is None:
         try:
             with open(Path(__file__).with_name("events.csv"), encoding="utf-8") as f:
-                _ROWS = [r for r in csv.DictReader(f) if r.get("s") and r.get("e")]
+                _ROWS = []
+                for r in csv.DictReader(f):
+                    try:
+                        if dt.date.fromisoformat(r["s"]) > dt.date.fromisoformat(r["e"]):
+                            raise ValueError("시작이 끝보다 늦음")
+                        _ROWS.append(r)
+                    except Exception as e:
+                        safe.bad_row("events.csv", r, e)
         except FileNotFoundError:
             _ROWS = []
     return _ROWS
