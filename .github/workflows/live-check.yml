@@ -28,7 +28,11 @@ jobs:
         run: python tests/live_check.py
       - name: 기준값 만들기
         if: ${{ github.event.inputs.save == 'true' }}
-        run: python tests/live_check.py --save live_baseline.json
+        run: |
+          python tests/live_check.py --save live_baseline.json
+          echo "----- live_baseline.json 시작 -----"
+          cat live_baseline.json
+          echo "----- live_baseline.json 끝 -----"
       - uses: actions/upload-artifact@v4
         if: ${{ github.event.inputs.save == 'true' }}
         with:
