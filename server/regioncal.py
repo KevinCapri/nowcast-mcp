@@ -176,7 +176,11 @@ def bloom_foliage(db, year, kind):
                 mon = d - dt.timedelta(days=d.weekday())
                 P = safe.call("명소 유입", A.prepare, db, sd, sg)
                 wo = next((w for w in (P or {}).get("me", {}) if A.week_dates(w)[:10] == mon.isoformat()), None)
+                fest = [f"{x['축제']}({x['계획 기간']})" for x in
+                        (safe.call("명소 같은 주 축제", festival.in_week, sd, sg, mon, default=[]) or [])]
                 spots.append({"명소": name, "지역": f"{sd} {sg}", "기준 날짜": f"{step} {d}",
+                              **({"같은 주 축제(문체부 계획)": fest,
+                                  "축제 안내": "같은 주에 축제가 있어 벚꽃·단풍 몫과 축제 몫을 이 자료로 가를 수 없다."} if fest else {}),
                               "그 주 유입": (safe.call("명소 그 주 유입", _inflow, P, wo) if wo else "이동 자료에 없는 주"),
                               "이 지역 지난 기록": [h["지난 기록"] for h in (safe.call("명소 지난 기록", season.history, P, sd, sg,
                                                                              skip_year=year, default=[]) or [])
