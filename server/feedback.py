@@ -12,6 +12,7 @@ import contextvars
 import datetime as dt
 import hashlib
 import os
+import re
 import secrets
 import sqlite3
 import sys
@@ -47,7 +48,15 @@ def _con():
     con.execute("CREATE TABLE IF NOT EXISTS feedback(id TEXT PRIMARY KEY, key_hash TEXT, created TEXT, kind TEXT, "
                 "region TEXT, period TEXT, tool TEXT, message TEXT, status TEXT, note TEXT, updated TEXT)")
     con.execute("CREATE TABLE IF NOT EXISTS sender(tag TEXT, at TEXT)")
+    if "link" not in [r[1] for r in con.execute("PRAGMA table_info(feedback)")]:
+        con.execute("ALTER TABLE feedback ADD COLUMN link TEXT DEFAULT ''")
     return con
+
+
+def clean_link(link):
+    """자료 추가 요청에 붙는 링크: http(s) 주소 하나만, 300자 이하. 아니면 빈 값."""
+    u = (link or "").strip().split()[0] if (link or "").strip() else ""
+    return u[:300] if re.match(r"^https?://[^\s<>\"']+$", u) else ""
 
 
 def _now():
@@ -65,7 +74,7 @@ def _notify(subject, body):
     threading.Thread(target=run, daemon=True).start()
 
 
-def submit(message, kind="", region="", period="", tool=""):
+def submit(message, kind="", region="", period="", tool="", link=""):
     text = (message or "").strip()
     if not text:
         return {"error": "내용이 비어 있다."}
@@ -94,13 +103,15 @@ def submit(message, kind="", region="", period="", tool=""):
             return {"error": "오늘은 의견을 더 받을 수 없다. 내일 다시 보내 달라."}
         rid = "R" + now.strftime("%y%m%d") + "-" + secrets.token_hex(3)
         key = secrets.token_urlsafe(9)
-        con.execute("INSERT INTO feedback VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        link = clean_link(link)
+        con.execute("INSERT INTO feedback(id, key_hash, created, kind, region, period, tool, message, status, note, "
+                    "updated, link) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                     (rid, hashlib.sha256(key.encode()).hexdigest(), now.isoformat(timespec="seconds"),
-                     kind[:30], region[:60], period[:40], tool[:40], text, "접수", "", None))
+                     kind[:30], region[:60], period[:40], tool[:40], text, "접수", "", None, link))
         if tag:
             con.execute("INSERT INTO sender VALUES (?,?)", (tag, now.isoformat()))
         con.commit()
-    _notify(f"의견 접수 {rid}", f"종류: {kind}\n지역: {region}\n기간: {period}\n도구: {tool}\n\n{text}")
+    _notify(f"의견 접수 {rid}", f"종류: {kind}\n지역: {region}\n기간: {period}\n도구: {tool}\n링크: {link}\n\n{text}")
     # 2026-11-15: 한 방향 전송만. 접수 번호·확인 키는 운영자 기록용으로만 남기고 이용자에게 돌려주지 않는다.
     return {"받음": True,
             "안내": "의견을 받았다. 따로 답장은 하지 않으며(연락처를 받지 않음), 반영된 내용은 서비스에 바로 적용된다. "

@@ -753,10 +753,10 @@ async def api_feedback(request: Request):
     kind = str(j.get("kind", "기타"))[:20]
     if kind == "작동 오류(조회 안 됨·화면 깨짐)":
         kind = "작동 오류"
-    if kind not in ("값이 이상함", "설명이 틀림", "작동 오류", "제안", "기타"):
+    if kind not in ("값이 이상함", "설명이 틀림", "작동 오류", "자료 추가 요청", "제안", "기타"):
         kind = "기타"
     r = _polite(feedback.submit(str(j.get("message", "")), kind, str(j.get("region", ""))[:60],
-                                str(j.get("period", ""))[:40], "web"))
+                                str(j.get("period", ""))[:40], "web", str(j.get("link", ""))[:300]))
     r.pop("안내", None)
     if "error" not in r:
         r = {"받음": True}
