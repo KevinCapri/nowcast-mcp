@@ -130,6 +130,8 @@ footer p{margin:0 0 6px}
 .msg.ok{color:#1E6B3A}.msg.err{color:#A23B0B}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 [hidden]{display:none!important}
+/* 결과 맨 위 조회 대상 */
+.rhead{font-size:20px;font-weight:700;margin:4px 0 2px}.rhead .sub{font-weight:400;color:var(--sub);font-size:15px;margin-left:8px}
 /* 주요 업데이트 */
 .upd{display:flex;flex-direction:row;gap:18px;align-items:flex-start}
 .upd .dl{flex:0 0 200px;border-right:1px solid var(--line);padding-right:12px;max-height:380px;overflow-y:auto}
@@ -186,6 +188,7 @@ footer p{margin:0 0 6px}
 </form>
 
 <div id="result" class="panel" hidden>
+  <div class="rhead" id="rhead"></div>
 
   <section style="display:flex;flex-direction:column;gap:10px">
     <h2>공식 공표 통계</h2>
@@ -270,6 +273,7 @@ footer p{margin:0 0 6px}
 </form>
 
 <div id="fresult" class="panel" hidden>
+  <div class="rhead" id="fhead"></div>
   <section class="card">
     <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:baseline">
       <h2 id="ftitle"></h2>
@@ -722,6 +726,11 @@ footer p{margin:0 0 6px}
     $("evsrc").textContent = "막대 아래 줄은 그 주에 있었던 일: " + (r["일정 출처"] || []).join(", ");
     $("shareurl").disabled = false;
 
+    var ma = Math.min(+$("start").value, +$("end").value), mb = Math.max(+$("start").value, +$("end").value);
+    var ym = function (m, y) { return (y ? Math.floor(m / 100) + "년 " : "") + (m % 100) + "월"; };
+    var per = ma === mb ? ym(ma, true) : ym(ma, true) + "~" + ym(mb, Math.floor(ma / 100) !== Math.floor(mb / 100));
+    $("rhead").textContent = r["지역"] || ($("sido").value + " " + $("sigungu").value);
+    $("rhead").appendChild(el("span", { cls: "sub" }, per));
     $("fbregion").value = r["지역"]; $("fbperiod").value = r["기간"].slice(0, 40);
     $("result").hidden = false; $("hint").hidden = true;
   }
@@ -892,6 +901,8 @@ footer p{margin:0 0 6px}
       if (!r.ok || r.j.error) { $("fresult").hidden = true; $("fhint").textContent = (r.j && r.j.error) || "조회하지 못했습니다."; return; }
       var j = r.j, f = j["축제"];
       FCUR = f;
+      $("fhead").textContent = "[" + $("fsigungu").value + "] " + f["이름"];
+      $("fhead").appendChild(el("span", { cls: "sub" }, $("fyear").value + "년"));
       $("ftitle").textContent = f["이름"] + " 기간 전후 유입";
       $("ftitle").appendChild(el("span", { cls: "tag" }, "참고"));
       $("fscope").textContent = "축제 현장 방문객이 아니라 " + $("fsigungu").value + " 전체로 들어온 외부 유입을 보여 줍니다. 그래서 축제 효과가 그래프에 그대로 나타나지 않을 수 있습니다.";
