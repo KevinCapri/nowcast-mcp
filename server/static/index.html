@@ -844,7 +844,8 @@ footer p{margin:0 0 6px}
     $("fm-all").classList.toggle("on", all); $("fm-reg").classList.toggle("on", !all);
     $("fm-all").setAttribute("aria-pressed", all); $("fm-reg").setAttribute("aria-pressed", !all);
     $("fallbox").hidden = !all; $("fpick").hidden = all;
-    if (all) { $("fresult").hidden = true; $("fhint").hidden = true; loadAll(); }
+    // 전체 목록에서 고른 결과는 목록 아래에 그대로 둠
+    if (all) { $("fresult").hidden = !(FCUR && FSRC === "all"); $("fhint").hidden = true; loadAll(); }
     else { $("fresult").hidden = !FCUR; $("fhint").hidden = !!FCUR; }
   }
   function loadAll() {
@@ -883,16 +884,19 @@ footer p{margin:0 0 6px}
     $("fcount").textContent = q ? (n ? "찾은 축제 " + fmt(n) + "개" : "맞는 축제가 없습니다.") : "자료가 들어온 축제 " + fmt(n) + "개, 가나다순";
   }
   function pickFest(f) {
-    fmode(false);
+    FSRC = "all";
     $("fsido").value = f.sido; fillFSigungu();
     $("fsigungu").value = f.sigungu;
-    loadFests(f.id).then(function () { fready(); if (!$("fgo").disabled) frun(); $("fpick").scrollIntoView({ behavior: "smooth", block: "start" }); });
+    loadFests(f.id).then(function () {
+      fready();
+      if (!$("fgo").disabled) frun().then(function () { if (!$("fresult").hidden) $("fresult").scrollIntoView({ behavior: "smooth", block: "start" }); });
+    });
   }
   $("fm-reg").onclick = function () { fmode(false); };
   $("fm-all").onclick = function () { fmode(true); };
   $("fq").oninput = function () { if (FALL) drawAll(); };
 
-  var FCUR = null;
+  var FCUR = null, FSRC = "reg";
   function fquery(s, e) {
     var q = { sido: $("fsido").value, sigungu: $("fsigungu").value, fest: $("fname").value, year: $("fyear").value };
     if (s && e) { q.s = s; q.e = e; }
@@ -902,7 +906,7 @@ footer p{margin:0 0 6px}
     var q = new URLSearchParams({ sido: $("fsido").value, sigungu: $("fsigungu").value, id: $("fname").value, year: $("fyear").value });
     if (s && e) { q.set("s", s); q.set("e", e); }
     $("fgo").disabled = true; $("fhint").hidden = false; $("fhint").textContent = "불러오는 중…";
-    getJSON("/api/fest_view?" + q).then(function (r) {
+    return getJSON("/api/fest_view?" + q).then(function (r) {
       if (!r.ok || r.j.error) { $("fresult").hidden = true; $("fhint").textContent = (r.j && r.j.error) || "조회하지 못했습니다."; return; }
       var j = r.j, f = j["축제"];
       FCUR = f;
@@ -951,7 +955,7 @@ footer p{margin:0 0 6px}
     n.hidden = !notes.length;
   }
   $("fadjbtn").onclick = function () { setAdj("fadjbtn", "fadjnote", !adjOn("fadjbtn")); if (FJ) fpaint(); };
-  $("fpick").onsubmit = function (e) { e.preventDefault(); $("feditbox").hidden = true; if (!$("fgo").disabled) frun(); };
+  $("fpick").onsubmit = function (e) { e.preventDefault(); FSRC = "reg"; $("feditbox").hidden = true; if (!$("fgo").disabled) frun(); };
   $("fedit").onclick = function () { $("feditbox").hidden = !$("feditbox").hidden; };
   $("fre").onclick = function () { if ($("fs").value && $("fe").value) frun($("fs").value, $("fe").value); };
   $("fshareurl").onclick = function () { copyText($("fshareurl"), location.origin + location.pathname + (URLS.fest || ""), "링크 복사"); };
