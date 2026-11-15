@@ -40,6 +40,8 @@ CASES = [
     ("estimate_life_pop", ("강원특별자치도", "화천군", "2026-10")),
     ("estimate_life_pop", ("경기도", "가평군", "2026-09")),
     ("forecast_festival", ("강원특별자치도", "화천군", "산천어")),
+    ("get_region_calendar", ("경상북도", "경주시", "2025-10")),
+    ("get_bloom_foliage", (2025, "단풍")),
 ]
 KEYS = ["판정", "평소 출렁임의 몇 배", "평소 대비 변화(%)", "최종 변화(%)", "판정에 쓴 방식", "프로야구 홈경기 몫 추정(%)",
         "error"]
@@ -55,6 +57,11 @@ def core(tool, r):
     if tool == "find_unusual_regions":
         for k in ("평소보다 늘어난 곳", "평소보다 줄어든 곳"):
             out[k] = [[x.get("지역"), x.get("배수")] for x in (r.get(k) or [])][:5]
+    if tool == "get_region_calendar":
+        out["주별"] = [[w["주차"], len(w["일정"]), (w["그 주 유입"] or {}).get("판정") if isinstance(w["그 주 유입"], dict) else w["그 주 유입"]]
+                     for w in r.get("주별", [])]
+    if tool == "get_bloom_foliage":
+        out["관측"] = [[g["구분"], len(g["지점"])] for g in r.get("관측", [])]
     if tool in ("estimate_life_pop", "forecast_festival"):
         out["values"] = {k: v for k, v in r.items()
                          if k in ("공표", "추정", "등급") or "범위 안" in k or (k.startswith("추정") and isinstance(v, (int, float)))}
