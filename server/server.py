@@ -20,6 +20,8 @@ import regioncal
 import bigevents
 import feedback
 import festival
+import facility
+import tourism
 from pydantic import Field
 from mcp.types import ToolAnnotations
 
@@ -64,7 +66,7 @@ db = _ThreadDB(DB)
 SERVICE = "빅데이터 Insight: 지역별 유입인구"
 # 도구 목록이 바뀌면(추가·삭제·입력값·설명) 세 값을 같이 고친다. 회귀 시험이 TOOLS와 실제 도구가 다르면 잡는다.
 # 결과마다 붙여서, 예전에 연결한 이용자에게도 AI가 '새 도구가 생겼으니 다시 연결'을 알려 주게 한다(claude/변경_관리_원칙.md).
-VERSION = "0.4.0"
+VERSION = "0.4.1"
 TOOLS_CHANGED = "2026-11-16"
 TOOLS = ["get_metadata", "list_regions", "get_movement", "get_breakdown", "get_weather", "analyze_region_week",
          "find_unusual_regions", "estimate_life_pop", "forecast_festival", "get_datalab_daily", "report_issue",
@@ -210,6 +212,9 @@ def _profile(sido, sigungu):
         warn = "주민 30% 이상이 다른 지역으로 출근하는 지역: 생활인구 추정·몇 달 추세 해석은 신뢰도가 낮다."
     if warn:
         out["추세 해석 주의"] = warn
+    ts = safe.call("관광지 방문객 몫", tourism.share, db, sido, sigungu)
+    if ts:
+        out["관광지 방문객"] = ts
     return out or None
 
 
@@ -291,6 +296,11 @@ def get_metadata() -> dict:
                                           "벚꽃 만발 주(14곳 중 12곳 증가, 중앙값 +12.6%)에 관외 유입이 늘었다(2023~2026). "
                                           "효과가 확인된 명소 지역에만 '그 주 만발·절정'과 '이 지역 지난 기록'을 붙인다.",
             "대형 행사·축제·공연": "전국체전·국제행사(정부·주최 측 발표), 문체부 축제 계획, KOPIS 큰 공연장 공연을 같은 방식으로 붙인다.",
+            "관광지 방문객(한국문화관광연구원)": "주요 유료관광지 월별 방문객이 관외 유입의 약 4% 이상인 지역은 달마다 유입과 함께 "
+                                         "움직였다(2023.01~2026.05, 15곳 중 대부분 상관 0.6 이상). 2% 미만 지역은 안 보였다. "
+                                         "그런 지역에만 '지역 성격'에 몫을 붙이고, 일정 도구에는 달별 상위 관광지를 정보로 보여 준다. 약 5개월 늦게 나온다.",
+            "대형 시설 개점·폐점": "보도로 확인한 9곳을 시험해 스타필드 수원(2024.01)만 드러났다(개점 주 4.6배, 뒤로 관외 유입 약 30% 계단). "
+                            "효과가 확인된 큰 개점만 판정에 '개점 뒤 8주' 안내를 붙이고, 나머지는 일정에 시험 결과와 함께 보여 준다.",
         },
         "출처": SOURCE,
         "서비스 도구": TOOL_NOTICE,
@@ -479,6 +489,9 @@ def _addons(r, sido, sigungu, wo, mon, hd):
     be = safe.call("대형 행사", bigevents.in_range, sido, sigungu, mon, end)
     if be:
         r["그 주 대형 행사(정부·주최 측 발표 일정, 원인 단정 금지)"] = be
+    fo = safe.call("대형 시설 개점", facility.after_open, sido, sigungu, mon)
+    if fo:
+        r["그 주 큰 시설 개점 안내(원인 단정 금지)"] = fo
     pf = safe.call("공연", perf.in_range, db, sido, sigungu, mon, end)
     if pf:
         r["그 주 큰 공연장 공연(KOPIS, 원인 단정 금지)"] = pf
@@ -618,7 +631,7 @@ def compare_same_week(sido: Sido, sigungu: Sigungu, week: Week,
     tag, weeks = _same_weeks(wo, years_back)
     rows = [me] + [one(w, how) if w else {"주차": f"{k}년 전", "없음": "같은 주를 찾지 못함"} for k, w, how in weeks]
     def short(x):
-        return (f"{x['주차']} {x['최종 변화(%)']:+.1f}%({x['판정']})" if "판정" in x and x.get("최종 변화(%)") is not None
+        return (f"{x['주차']} {x['최종 변화(%)']:+.1f}% {x['판정']}" if "판정" in x and x.get("최종 변화(%)") is not None
                 else f"{x['주차']} 자료 없음")
     out = {
         "지역": f"{sido} {sigungu}",
@@ -822,16 +835,17 @@ def report_issue(message: str,
 
 @mcp.tool(annotations=READ_ONLY)
 def get_region_calendar(sido: Sido, sigungu: Sigungu, start: str, end: str = "") -> dict:
-    """한 시군구의 한 기간에 있었던 일(공휴일·축제·대형 행사·프로야구 홈경기·벚꽃 만발·단풍 절정·큰 공연·큰 눈비)을
+    """한 시군구의 한 기간에 있었던 일(공휴일·축제·대형 행사·프로야구 홈경기·벚꽃 만발·단풍 절정·큰 공연·큰 눈비·대형 시설 개점·폐점)을
     주별로 모아, 주마다 그 주의 관외 유입 판정을 함께 돌려준다.
     - '이번 달 경주에 무슨 행사 있었어?', '10월 대구 포스트시즌 경기랑 관중은?', '그때 사람 많이 왔어?'에 쓴다.
     - start·end는 'YYYY-MM-DD' 또는 'YYYY-MM'. start만 'YYYY-MM'이면 그 달 전체, 날짜 하나면 그 주. 한 번에 1년까지.
     - '그 주 유입'은 analyze_region_week와 같은 계산(판정 문구·배수를 그대로 전할 것). 자세한 판정은 그 도구로.
     - 일정은 '같은 시기에 있었던 일'로만 말하고 유입 변화의 원인으로 단정하지 말 것.
+    - 달마다 그 지역 주요 유료관광지 방문객(사람 수, 약 5개월 늦게 나옴)도 함께 준다. 이동 건수와 섞어 계산하지 말 것.
     - '자료 기준' 뒤의 일은 없다. 그 뒤를 물으면 이 서비스에 어디까지 있는지 말하고 원출처를 안내할 것.
     - sido·sigungu는 list_regions로 확인한 이름."""
     r = regioncal.region_calendar(db, sido, sigungu, start, end)
-    return _answer(r, "calendar", "일정: 한국천문연구원 특일 정보, 문화체육관광부 지역축제 개최 계획, 한국야구위원회(KBO) 경기 기록, "
+    return _answer(r, "calendar", "일정: 한국천문연구원 특일 정보, 문화체육관광부 지역축제 개최 계획, 한국야구위원회(KBO) 경기 기록, 한국문화관광연구원 관광자원통계, "
                    "기상청 계절관측·종관기상관측, 공연예술통합전산망(KOPIS), 정부·주최 측 발표 / " + SOURCE.removeprefix("출처: "),
                    calc=True)
 
