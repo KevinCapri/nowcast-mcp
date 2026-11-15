@@ -1,0 +1,337 @@
+"""생활인구 참고 추정: 생활인구가 아직 공표되지 않은 달을 나우캐스트 관외 유입으로 가늠한다.
+
+방법(2026-11 검증, 오차 중앙값 약 5.3%):
+- 체류인구 = 생활인구 − 주민등록인구 − 등록외국인 (생활인구 정의)
+- 비율 r = ln(체류인구 ÷ 그 달 나우캐스트 관외 유입 주 평균)
+- 추정 비율 = '작년 같은 달 r'과 '공표된 최근 12개월 r 평균'의 평균.
+  설·추석이 든 달이 작년과 어긋나면(명절이 달을 옮김) 12개월 평균만 쓴다.
+- 추정 생활인구 = 관외 유입 × exp(추정 비율) + 주민등록인구 + 등록외국인
+- 범위: 이 지역의 공표된 달들을 하나씩 '그 전까지만 알았다면' 추정해 본 오차의 중앙값(둘 중 한 번)·80%(열 중 여덟).
+  되짚어 본 달이 6개 미만이면 전국 오차(5.3%)를 쓴다.
+- 대상: 생활인구 공표 지역(인구감소·관심지역)만. 타지역 통근 비율 30% 이상이면 신뢰도 낮음.
+"""
+import math
+from statistics import mean
+
+import analysis as A
+
+ERR_HALF = 0.053      # 전국 과거 오차 중앙값. 지역 자체 채점 건수가 모자랄 때만 씀
+MIN_BACKTEST = 6      # 지역별 범위를 쓰려면 되짚어 본 달이 이만큼 있어야 함
+
+
+# 생활인구 공표 일정(국가데이터처 보도계획, 2026-11-14 확인): 분기마다 '○분기 생활인구 산정 결과'
+# 2025년 3분기 → 2026-02-24, 4분기 → 05-28, 2026년 1분기 → 07-30, 2분기 → 10-29, 3분기 → 12-29 (분기 끝나고 3~5개월 뒤)
+SCHEDULE_URL = "https://mods.go.kr/newsPln.es?mid=a10305000000&bid="
+KNOWN_RELEASES = {"2025Q3": "2026-02-24", "2025Q4": "2026-05-28", "2026Q1": "2026-07-30", "2026Q2": "2026-10-29",
+                  "2026Q3": "2026-12-29"}   # 2026Q3은 사용자 확인(2026-11-14), 보도계획 12월분에 올라오면 다시 확인
+
+
+def release_info(ym):
+    """그 달이 든 분기의 생활인구가 언제쯤 공표되는지(알려진 날짜 또는 과거 간격으로 어림)."""
+    y, m = int(ym[:4]), int(ym[4:])
+    q = (m - 1) // 3 + 1
+    key = f"{y}Q{q}"
+    if key in KNOWN_RELEASES:
+        return {"분기": f"{y}년 {q}분기", "공표일": KNOWN_RELEASES[key], "근거": "국가데이터처 공표 일정(바뀔 수 있음)"}
+    end = y * 12 + q * 3          # 분기 마지막 달(1부터 센 달 번호)
+    a, b = end + 3, end + 5
+    fmt = lambda t: f"{(t - 1) // 12}년 {(t - 1) % 12 + 1}월"
+    return {"분기": f"{y}년 {q}분기", "공표 예상": f"{fmt(a)}~{fmt(b)} 말경",
+            "근거": "지난 공표 간격(분기 끝나고 3~5개월 뒤)으로 어림. 확정 일정은 국가데이터처 보도계획에서 확인",
+            "보도계획": SCHEDULE_URL}
+
+
+def _codes(db, sido, sigungu, col):
+    """지역 연결표의 코드. 시도 이름이 바뀐 지역(전남광주통합특별시·군위)은 옛 이름·새 이름 줄을 모두 합친다
+    (2026-11-14 시험 E6: 강진을 '전라남도'로 찾으면 7월 이후가 비어 추정이 막혔음)."""
+    out = []
+    for sd, sg in A.variants(sido, sigungu):
+        try:
+            r = db.execute(f"SELECT {col} FROM region_map WHERE sido=? AND sigungu=?", (sd, sg)).fetchone()
+        except Exception:
+            r = None
+        if r and r[0]:
+            out += [c for c in str(r[0]).split(",") if c]
+    return sorted(set(out))
+
+
+def _by_period(db, table, codes, extra=""):
+    if not codes:
+        return {}
+    q = (f"SELECT PRD_DE, SUM(CAST(DT AS REAL)) FROM {table} WHERE C1 IN ({','.join('?' * len(codes))}) {extra} "
+         "GROUP BY PRD_DE")
+    return {str(p): v for p, v in db.execute(q, codes).fetchall() if v is not None}
+
+
+def _nc_month(db, sido, sigungu):
+    """월별(주차 라벨의 달) 관외 유입 주 평균. 옛 이름·새 이름 자료를 이어 붙인다(주차가 겹치면 하나만)."""
+    seen = {}
+    for _, w, v in A.series(db, sido, sigungu):
+        if v:
+            seen[w] = v
+    m = {}
+    for w, v in seen.items():
+        m.setdefault(w[:4] + w[5:7], []).append(v)
+    return {k: (mean(v), len(v)) for k, v in m.items()}
+
+
+def _lunar_months(db):
+    try:
+        rows = db.execute("SELECT day FROM holidays WHERE name LIKE '%설날%' OR name LIKE '%추석%'").fetchall()
+    except Exception:
+        return set()
+    return {str(d[0]).replace("-", "")[:6] for d in rows}
+
+
+def _prev(ym, n):
+    y, m = int(ym[:4]), int(ym[4:])
+    t = y * 12 + m - 1 - n
+    return f"{t // 12}{t % 12 + 1:02d}"
+
+
+def _latest_le(d, key):
+    ks = [k for k in d if k <= key]
+    return d[max(ks)] if ks else None
+
+
+def estimate(db, sido, sigungu, ym):
+    """ym: 'YYYYMM'"""
+    lp_codes = _codes(db, sido, sigungu, "life_pop")
+    if not lp_codes:
+        return estimate_unpublished(db, sido, sigungu, ym)
+    live = _by_period(db, "kosis_life_pop", lp_codes, "AND ITM_ID='T001'")
+    jumin = _by_period(db, "kosis_reg_pop", _codes(db, sido, sigungu, "reg_pop"))
+    frn = _by_period(db, "kosis_foreigners", _codes(db, sido, sigungu, "foreigners"))
+    nc = _nc_month(db, sido, sigungu)
+    if ym in live:
+        return {"지역": f"{sido} {sigungu}", "달": ym, "공표된 생활인구": round(live[ym]), "공표": release_info(ym),
+                "안내": "이미 공표된 달이라 추정하지 않는다. 공표 값(국가데이터처 생활인구, KOSIS)을 그대로 쓸 것."}
+    if ym not in nc or nc[ym][1] < 3:
+        return {"error": "그 달의 나우캐스트 주 자료가 3주 미만이라 추정할 수 없다."}
+
+    def ratio(m):
+        if m not in live or m not in nc:
+            return None
+        j, f = _latest_le(jumin, m), _latest_le(frn, m[:4])
+        if j is None or f is None:
+            return None
+        stay = live[m] - j - f
+        return math.log(stay / nc[m][0]) if stay > 0 else None
+
+    pub = sorted(m for m in live if m < ym)
+    rs = {m: ratio(m) for m in pub}
+    lunar = _lunar_months(db)
+
+    def predict(target, known):
+        """known(공표된 달 목록, 오름차순)만 보고 target 달의 비율을 정한다."""
+        recent = [rs[m] for m in known[-12:] if rs.get(m) is not None]
+        if len(recent) < 6:
+            return None, None
+        r12 = mean(recent)
+        ly = _prev(target, 12)
+        rly = rs.get(ly) if ly in known else None
+        moved = (target in lunar) != (ly in lunar)
+        if rly is not None and not moved:
+            return (r12 + rly) / 2, "작년 같은 달 비율과 최근 12개월 평균 비율의 평균"
+        return r12, "최근 12개월 평균 비율(" + ("설·추석이 작년과 다른 달이라" if moved else "작년 같은 달 공표값이 없어") + ")"
+
+    r_est, how = predict(ym, pub)
+    if r_est is None:
+        return {"error": "공표된 달이 부족해 비율을 정할 수 없다."}
+
+    # 이 지역 자체 채점: 공표된 각 달을 그 전 달까지만 보고 추정했을 때의 체류인구 오차(로그)
+    errs = []
+    for i, m in enumerate(pub):
+        if rs.get(m) is None:
+            continue
+        r_hat, _ = predict(m, pub[:i])
+        if r_hat is not None:
+            errs.append(abs(r_hat - rs[m]))
+    if len(errs) >= MIN_BACKTEST:
+        errs.sort()
+        q = lambda p: errs[min(len(errs) - 1, int(p * len(errs)))]
+        e50, e80 = q(0.5), q(0.8)
+        basis = f"이 지역의 과거 {len(errs)}개월 되짚어 보기"
+    else:
+        e50 = math.log(1 + ERR_HALF)
+        e80 = e50 * 2
+        basis = "전국 과거 오차(이 지역 자료가 모자람)"
+
+    j, f = _latest_le(jumin, ym), _latest_le(frn, ym[:4])
+    stay = nc[ym][0] * math.exp(r_est)
+    est = stay + j + f
+    rng = lambda e: [round(stay * math.exp(-e) + j + f, -2), round(stay * math.exp(e) + j + f, -2)]
+
+    notes = []
+    if ym[4:] == "05" or ym in lunar:
+        notes.append("연휴가 많은 달(5월, 설·추석 달)은 오차가 컸다(2026년 5월 시험에서 오차 중앙값 약 15%). 범위를 넓게 볼 것.")
+    cm = _by_period(db, "kosis_commute", _codes(db, sido, sigungu, "commute"), "AND ITM_ID='T30'")
+    ce = _by_period(db, "kosis_commute", _codes(db, sido, sigungu, "commute"), "AND ITM_ID='T10'")
+    if cm and ce:
+        p = max(set(cm) & set(ce))
+        share = cm[p] / ce[p] * 100 if ce[p] else None
+        if share is not None and share >= 30:
+            notes.append(f"타지역 통근 비율이 {share:.0f}%(30% 이상)라 신뢰도가 낮다.")
+    return {
+        "지역": f"{sido} {sigungu}",
+        "달": ym,
+        "참고 추정 생활인구(명)": round(est, -2),
+        "참고 추정 체류인구(명, 비공식)": round(stay, -2),
+        "과거 둘 중 한 번은 이 범위 안": rng(e50),
+        "과거 열 번 중 여덟 번은 이 범위 안": rng(e80),
+        "범위를 정한 근거": basis,
+        "등급": "A(공표 지역의 아직 공표 전 달)",
+        "추정 방법": "체류인구 = 이 지역의 과거 '체류인구 ÷ 나우캐스트 관외 유입' 비율 × 그 달 관외 유입. "
+                   "생활인구 = 체류인구 + 주민등록인구 + 등록외국인",
+        "추정에 쓴 비율": how,
+        "그 달 나우캐스트 관외 유입 주 평균(건)": round(nc[ym][0]),
+        "주민등록인구(명, 공표)": round(j),
+        "등록외국인(명, 공표, 연)": round(f),
+        "보고서용 표기 예": (f"{sido} {sigungu} {ym[:4]}년 {int(ym[4:])}월 생활인구 비공식 참고 추정치 "
+                       f"약 {rng(e50)[0] / 10000:.1f}만~{rng(e50)[1] / 10000:.1f}만 명(과거 둘 중 한 번 범위, "
+                       "빅데이터 Insight: 지역별 유입인구 계산, 공표 전 값)"),
+        "가장 최근 공표 달": pub[-1],
+        "이 달 생활인구 공표": release_info(ym),
+        "주의": notes + [
+            "이 값은 서비스가 계산한 비공식 참고 추정치다. 공표된 생활인구가 아니다. 공표되면 공표 값을 쓸 것"
+            "('이 달 생활인구 공표'의 날짜를 함께 알려 줄 것).",
+            "'신뢰구간'·'오차범위'라고 부르지 말고 '과거 둘 중 한 번'·'열 번 중 여덟 번은 이 범위 안'이라고 말할 것.",
+            "주민등록인구·등록외국인은 공표 통계, 체류인구 몫만 추정이다. 체류인구를 말할 때도 '참고 추정'이라고 밝힐 것.",
+            "일반적인 한계: 잠깐 들르는 이동이 많은 길목 지역은 높게 나올 수 있다(생활인구는 하루 3시간 이상 체류, "
+            "나우캐스트는 30분). 이 지역이 그렇다는 뜻은 아니니 지역 사정을 지어내 붙이지 말 것.",
+        ],
+    }
+
+
+# ---------- 등급 B: 생활인구가 공표되지 않은 지역 ----------
+# 방법(등급 B): 공표 지역(통근 비율 30% 미만)의 최근 12개월
+# log 체류인구 = a + b·log 관외 유입 + c·log 등록인구 를 함께 맞춘 공식으로 추정.
+# 범위는 지역 하나씩 빼고 맞혀 본 오차(둘 중 한 번·열 번 중 여덟 번)로 서버가 매번 계산한다(검증 때 중앙값 약 12%).
+COMMUTE_LIMIT = 30.0
+_fit_cache = {}
+
+
+def commute_share(db, sido, sigungu):
+    """타지역 통근 비율(%, 지역별고용조사 최근 반기). 없으면 None."""
+    codes = _codes(db, sido, sigungu, "commute")
+    try:
+        cm = _by_period(db, "kosis_commute", codes, "AND ITM_ID='T30'")
+        ce = _by_period(db, "kosis_commute", codes, "AND ITM_ID='T10'")
+    except Exception:
+        return None
+    common = set(cm) & set(ce)
+    if not common:
+        return None
+    p = max(common)
+    return round(cm[p] / ce[p] * 100, 1) if ce[p] else None
+
+
+def _reg(db, sido, sigungu):
+    jumin = _by_period(db, "kosis_reg_pop", _codes(db, sido, sigungu, "reg_pop"))
+    frn = _by_period(db, "kosis_foreigners", _codes(db, sido, sigungu, "foreigners"))
+    return jumin, frn
+
+
+def _fit(db):
+    """공표 지역으로 공식을 맞추고, 지역 하나씩 빼고 맞혀 오차 분포를 낸다(최신 공표 달이 바뀔 때만 다시)."""
+    import numpy as np
+    regions = db.execute("SELECT sido, sigungu FROM region_map WHERE life_pop IS NOT NULL AND life_pop<>''").fetchall()
+    seen, rows = set(), []
+    for sd, sg in regions:
+        k = A.canon(sd, sg)
+        if k in seen:
+            continue
+        seen.add(k)
+        share = commute_share(db, sd, sg)
+        if share is None or share >= COMMUTE_LIMIT:
+            continue
+        live = _by_period(db, "kosis_life_pop", _codes(db, sd, sg, "life_pop"), "AND ITM_ID='T001'")
+        jumin, frn = _reg(db, sd, sg)
+        nc = _nc_month(db, sd, sg)
+        for m in sorted(live)[-12:]:
+            j, f = _latest_le(jumin, m), _latest_le(frn, m[:4])
+            if m not in nc or nc[m][1] < 3 or j is None or f is None:
+                continue
+            stay = live[m] - j - f
+            if stay > 0:
+                rows.append((k, math.log(stay), math.log(nc[m][0]), math.log(j + f)))
+    if len(seen) < 20 or len(rows) < 100:
+        return None
+    key = (len(rows), round(sum(r[1] for r in rows), 3))
+    if key in _fit_cache:
+        return _fit_cache[key]
+    ks = np.array([r[0][0] + "|" + r[0][1] for r in rows])
+    y = np.array([r[1] for r in rows])
+    X = np.column_stack([np.ones(len(rows)), [r[2] for r in rows], [r[3] for r in rows]])
+    coef = np.linalg.lstsq(X, y, rcond=None)[0]
+    errs = []
+    for k in set(ks):
+        tr, te = ks != k, ks == k
+        c = np.linalg.lstsq(X[tr], y[tr], rcond=None)[0]
+        errs += list(np.abs(X[te] @ c - y[te]))
+    errs.sort()
+    q = lambda p: float(errs[min(len(errs) - 1, int(p * len(errs)))])
+    out = {"coef": [float(x) for x in coef], "e50": q(0.5), "e80": q(0.8),
+           "n_regions": int(len(set(ks))), "n_rows": len(rows)}
+    if len(_fit_cache) > 5:
+        _fit_cache.clear()
+    _fit_cache[key] = out
+    return out
+
+
+def estimate_unpublished(db, sido, sigungu, ym):
+    base = {"지역": f"{sido} {sigungu}", "달": ym, "공표": "이 지역은 생활인구 공표 대상(인구감소·관심지역)이 아니다."}
+    share = commute_share(db, sido, sigungu)
+    if share is None:
+        return {**base, "추정": "하지 않음",
+                "이유": "타지역 통근 비율 자료가 없어 추정 공식을 써도 되는 지역인지 판단할 수 없다. 숫자를 지어내지 말 것."}
+    if share >= COMMUTE_LIMIT:
+        return {**base, "추정": "하지 않음(등급 C)", "타지역 통근 비율(%)": share,
+                "이유": f"주민의 {share:.0f}%가 다른 지역으로 출근하는 지역이라 통근 이동이 방문과 섞인다. "
+                       "시험한 대도시 구에서 오차가 23~28%(최대 115%)여서 추정치를 내지 않는다. "
+                       "대신 외부 유입 규모와 평소 대비 변화(analyze_region_week)로 답할 것."}
+    nc = _nc_month(db, sido, sigungu)
+    if ym not in nc or nc[ym][1] < 3:
+        return {"error": "그 달의 나우캐스트 주 자료가 3주 미만이라 추정할 수 없다(진행 중인 달은 추정하지 않음)."}
+    jumin, frn = _reg(db, sido, sigungu)
+    j, f = _latest_le(jumin, ym), _latest_le(frn, ym[:4])
+    if j is None or f is None:
+        return {"error": "주민등록인구나 등록외국인 자료가 없어 추정할 수 없다."}
+    F = _fit(db)
+    if not F:
+        return {"error": "추정 공식을 맞출 공표 지역 자료가 모자란다."}
+    a, b, c = F["coef"]
+    ls = a + b * math.log(nc[ym][0]) + c * math.log(j + f)
+    stay = math.exp(ls)
+    rng = lambda e: [round(stay * math.exp(-e) + j + f, -2), round(stay * math.exp(e) + j + f, -2)]
+    notes = [
+        "생활인구가 공표되지 않는 지역의 비공식 참고 추정치다. 실제 값이 한 번도 없어 맞았는지 확인할 수 없는 추정이다.",
+        "공식은 대부분 인구감소지역인 공표 지역에서 배웠다. 인구가 늘거나 도시 성격이 강한 지역은 오차가 더 클 수 있다.",
+        "관광 중심 지역은 방문 한 번당 머무는 방식이 달라 규모 오차가 30~40%까지 커진 적이 있다(평창·태안·보령·울릉 등).",
+        "보고서에 '생활인구 ○만 명'으로 쓰지 말 것. 쓰려면 '비공식 참고 추정치'라고 밝히고 범위·계산 방법·오차를 함께 적을 것.",
+    ]
+    try:
+        r = db.execute("SELECT weekend_ratio FROM region_rhythm WHERE sido=? AND sigungu=?", (sido, sigungu)).fetchone()
+        if r and r[0] and r[0] >= 1.5:
+            notes.insert(2, f"주말 외지인이 평일의 {r[0]:.1f}배인 주말형(관광형) 지역이라 규모 오차가 클 수 있다.")
+    except Exception:
+        pass
+    return {
+        **base,
+        "등급": "B(미공표 지역, 다른 지역에서 배운 공식)",
+        "참고 추정 생활인구(명, 비공식)": round(stay + j + f, -2),
+        "참고 추정 체류인구(명, 비공식)": round(stay, -2),
+        "과거 둘 중 한 번은 이 범위 안": rng(F["e50"]),
+        "과거 열 번 중 여덟 번은 이 범위 안": rng(F["e80"]),
+        "범위를 정한 근거": f"공표 지역 {F['n_regions']}곳을 하나씩 빼고 맞혀 본 오차(통근 비율 30% 미만 지역, 최근 12개월)",
+        "추정 방법": "log 체류인구 = a + b·log(그 달 관외 유입 주 평균) + c·log(주민등록인구+등록외국인), "
+                   f"a={a:.3f}, b={b:.3f}, c={c:.3f}. 생활인구 = 체류인구 + 주민등록인구 + 등록외국인",
+        "그 달 나우캐스트 관외 유입 주 평균(건)": round(nc[ym][0]),
+        "주민등록인구(명, 공표)": round(j),
+        "등록외국인(명, 공표, 연)": round(f),
+        "타지역 통근 비율(%)": share,
+        "보고서용 표기 예": (f"{sido} {sigungu} {ym[:4]}년 {int(ym[4:])}월 생활인구 비공식 참고 추정치 "
+                       f"약 {rng(F['e50'])[0] / 10000:.1f}만~{rng(F['e50'])[1] / 10000:.1f}만 명"
+                       "(공표되지 않는 지역, 다른 지역에서 배운 공식으로 계산해 맞았는지 확인할 수 없는 추정, 빅데이터 Insight: 지역별 유입인구 계산)"),
+        "주의": notes,
+    }

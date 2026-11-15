@@ -1,0 +1,14 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.KevinCapri/nowcast-mcp",
+  "title": "Big Data Insights for Regional Inflow in Korea",
+  "description": "Uses multiple data sources to analyze changes in regional inflows in Korea. Personal, not official.",
+  "version": "0.2.2",
+  "websiteUrl": "https://nowcast-mcp.azurewebsites.net/",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://nowcast-mcp.azurewebsites.net/mcp"
+    }
+  ]
+}

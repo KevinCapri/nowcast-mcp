@@ -1,0 +1,963 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>빅데이터 Insight: 지역별 유입인구</title>
+<meta name="description" content="다양한 출처의 데이터를 활용하여 지역별 유입인구의 변화를 분석하기 위해 만들었습니다. 개인이 개발한 참고용 서비스이며, 정부의 공식 통계나 입장이 아닙니다.">
+<meta name="google-site-verification" content="i9BhrhUdzDiDaQ_rPN-x9mYc7aHAONyfqrYxm7TWtxM" />
+<meta name="naver-site-verification" content="ba57e0c7c8c8e08bfb0938e585872fc3f2b71b41" />
+<link rel="canonical" href="https://nowcast-mcp.azurewebsites.net/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://nowcast-mcp.azurewebsites.net/">
+<meta property="og:title" content="빅데이터 Insight: 지역별 유입인구">
+<meta property="og:description" content="다양한 출처의 데이터를 활용하여 지역별 유입인구의 변화를 분석하기 위해 만들었습니다. 개인이 개발한 참고용 서비스이며, 정부의 공식 통계나 입장이 아닙니다.">
+<meta property="og:image" content="https://nowcast-mcp.azurewebsites.net/og.png">
+<meta property="og:locale" content="ko_KR">
+<link rel="icon" type="image/png" href="/og.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F6F7F9;--card:#FFFFFF;--line:#E2E5EA;--ink:#1B1F24;--sub:#5B616A;--muted:#6B7280;
+  --up3:#173F8F;--up2:#2F6FDE;--up1:#9DBCF0;--flat:#B9BEC6;--down1:#EDBF95;--down2:#C2620F;--down3:#7E3A06;--warn-bg:#FCEFDF;--warn:#8A4B0B}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Noto Sans KR',system-ui,sans-serif;line-height:1.55}
+a{color:#2F6FDE}a:hover{color:#1E4FA8}
+.wrap{max-width:1120px;margin:0 auto;padding:32px 20px 56px;display:flex;flex-direction:column;gap:22px}
+.wrap>*,.panel>*,#result>*{min-width:0}
+header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:10px 16px}
+header .lead{margin:6px 0 0;font-size:14px;color:var(--sub)}
+h1{margin:0;font-size:28px;font-weight:700}
+.h1sub{font-weight:400}
+h2{margin:0;font-size:16px;font-weight:700}
+h3{margin:0;font-size:15px;font-weight:700}
+.pill{font-size:13px;color:var(--warn);background:var(--warn-bg);padding:6px 12px;border-radius:999px;white-space:nowrap}
+.tag{font-size:12px;font-weight:400;color:var(--warn);background:var(--warn-bg);padding:2px 8px;border-radius:6px;margin-left:6px;vertical-align:2px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+.tabs button{appearance:none;border:0;background:none;font:inherit;font-size:15px;font-weight:500;color:var(--sub);padding:12px 16px;min-height:44px;white-space:nowrap;flex:none;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--ink)}
+.panel{display:flex;flex-direction:column;gap:22px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px;display:flex;flex-direction:column;gap:14px;min-width:0}
+form.pick{flex-direction:row;flex-wrap:wrap;align-items:flex-end;gap:14px}
+label.f{display:flex;flex-direction:column;gap:6px;font-size:13px;color:#4B5159;flex:1 1 170px;min-width:0}
+select,input,textarea{font:inherit;font-size:15px;color:var(--ink);border:1px solid #C9CED6;border-radius:8px;background:#fff;width:100%}
+select:disabled{color:#9AA0A8;background:#F3F4F6}
+select,input{height:44px;padding:0 10px}
+input::placeholder,textarea::placeholder{color:#9AA0A8}
+textarea{padding:10px 12px;min-height:96px;resize:vertical}
+.btn{height:44px;padding:0 26px;border:0;border-radius:8px;background:var(--ink);color:#fff;font:inherit;font-size:15px;font-weight:500;cursor:pointer;white-space:nowrap}
+.btn:disabled{opacity:.4;cursor:default}
+.adj{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.adj .btn{height:36px;padding:0 14px;font-size:14px}
+.adj .btn[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.adj .note{margin:0}
+.btn.light{background:#fff;color:var(--ink);border:1px solid #C9CED6}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:4px}
+.stat .k{font-size:13px;color:var(--sub)}
+.stat .v{font-size:26px;font-weight:700}
+.stat .v small{font-size:13px;font-weight:400;color:var(--sub);margin-left:6px}
+.stat .t{font-size:15px;margin-top:4px}
+.stat .s{font-size:12px;color:var(--muted)}
+.stat .i{font-size:13px;color:#3D434B}
+.legend{display:flex;flex-wrap:wrap;gap:8px 14px;font-size:12px;color:#4B5159}
+.legend span{display:flex;align-items:center;gap:6px}
+.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+.chart{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
+.grid{display:grid;gap:0 2px}
+.mon{font-size:13px;font-weight:600;color:var(--ink);padding:0 0 6px 6px;white-space:nowrap;overflow:hidden}
+.col{display:flex;flex-direction:column;align-items:center;min-width:0;cursor:pointer;border-radius:6px;outline:none}
+.mon.ms,.col.ms{border-left:1px solid #C9CED6;border-radius:0}
+.col:hover,.col:focus-visible,.col.on{background:#F1F3F6}
+.ftag{margin-top:4px;font-size:11px;line-height:1.5;padding:0 5px;border-radius:4px;border:1px solid #E9B65C;color:#8A5300;white-space:nowrap}
+.up-area{display:flex;align-items:flex-end}
+.dn-area{display:flex;align-items:flex-start}
+.axis{height:2px;width:100%;background:var(--muted)}
+.bar{width:20px}
+.wk{font-size:12px;color:#4B5159;margin-top:8px;white-space:nowrap}
+.col.fest .wk{color:var(--ink);font-weight:600}
+.ev{margin-top:8px;min-height:40px;font-size:11px;line-height:1.35;color:#3D434B;text-align:center;padding:0 2px;word-break:keep-all}
+.ev.none{color:#9AA0A8}
+.col.nd .axis{background:repeating-linear-gradient(90deg,#C9CED6 0 4px,transparent 4px 8px)}
+.col.nd .wk{color:#9AA0A8}
+@media (max-width:639px){.ev{display:none}.mon{font-size:12px;padding-left:3px}.ftag{font-size:0;padding:0;border:0;height:4px;width:100%;background:#E9B65C;border-radius:2px;margin-top:6px}}
+.hold{font-size:11px;color:var(--muted);white-space:nowrap}
+#tip{position:fixed;z-index:10;background:var(--ink);color:#fff;font-size:13px;line-height:1.45;padding:8px 12px;border-radius:8px;pointer-events:none;white-space:nowrap;transform:translate(-50%,-100%)}
+#tip b{font-weight:500}
+ul.lines{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px;font-size:15px}
+.note{font-size:13px;color:var(--sub);margin:0}
+.warnbox{background:var(--warn-bg);color:#5C3306;border-radius:10px;padding:12px 14px;font-size:13px}
+.empty{color:var(--sub);font-size:14px}
+.simple{background:#F1F5FD;border:1px solid #D6E2F7;border-radius:12px;padding:16px 18px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;font-size:14px}
+.simple p{margin:0;flex:1 1 420px}
+.share{display:flex;justify-content:flex-end}
+.fdate{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;font-size:15px}
+.fedit{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+.fedit label.f{flex:0 1 190px}
+.layers{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;font-size:13px}
+.layers div{border:1px solid var(--line);border-radius:10px;padding:12px;background:#FBFBFC}
+.layers b{display:block;margin-bottom:4px;font-size:14px}
+.urlrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+code.url{font-size:15px;background:#F0F2F5;border:1px solid var(--line);border-radius:8px;padding:10px 12px;word-break:break-all;flex:1 1 320px}
+ol,ul{margin:0;padding-left:22px}
+ol li,ul li{margin:4px 0}
+.ex{display:flex;flex-direction:column;gap:8px}
+.ex div{background:#F6F8FB;border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:14px}
+.tools{display:flex;flex-direction:column}
+.tools>div{padding:12px 0;border-top:1px solid var(--line)}
+.tools>div:first-child{border-top:0;padding-top:0}
+.tools code{font-size:14px;font-weight:700;background:#F0F2F5;border-radius:6px;padding:2px 8px}
+.tools ul{margin-top:6px;font-size:14px;color:#3D434B}
+.tools li{margin:2px 0}
+footer{font-size:12px;line-height:1.7;color:var(--sub);border-top:1px solid var(--line);padding-top:16px}
+footer p{margin:0 0 6px}
+.fbrow{display:flex;flex-wrap:wrap;gap:12px}
+.scope{margin:0;background:#F1F5FD;border:1px solid #D6E2F7;border-radius:10px;padding:12px 14px;font-size:14px;color:#1F3A66}
+.seg{display:inline-flex;align-self:flex-start;width:max-content;border:1px solid #C9CED6;border-radius:8px;overflow:hidden;margin-bottom:12px;background:#fff}
+.seg button{border:0;background:transparent;font:inherit;font-size:14px;padding:9px 16px;cursor:pointer;color:var(--ink);white-space:nowrap}
+.seg button.on{background:var(--ink);color:#fff}
+.cho{display:flex;flex-wrap:wrap;gap:4px}
+.cho button{width:36px;height:32px;border:1px solid #C9CED6;border-radius:6px;background:#fff;font:inherit;font-size:14px;cursor:pointer}
+.cho button:disabled{color:#C9CED6;cursor:default}
+.fg{font-size:16px;font-weight:600;margin:14px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--line);scroll-margin-top:12px}
+.fgr{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:2px 14px}
+.fit{display:block;text-align:left;border:0;background:transparent;font:inherit;font-size:14px;line-height:1.4;padding:6px 8px;border-radius:6px;cursor:pointer;color:var(--ink)}
+.fit:hover,.fit:focus-visible{background:#F1F3F6}
+.fit small{display:block;font-size:12px;color:var(--sub)}
+.fbrow label.f{flex:1 1 200px}
+.msg{font-size:14px}
+.msg.ok{color:#1E6B3A}.msg.err{color:#A23B0B}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+[hidden]{display:none!important}
+/* 주요 업데이트 */
+.upd{display:flex;flex-direction:row;gap:18px;align-items:flex-start}
+.upd .dl{flex:0 0 200px;border-right:1px solid var(--line);padding-right:12px;max-height:380px;overflow-y:auto}
+.upd .dl button{display:block;width:100%;text-align:left;padding:10px 12px;margin:2px 0;border:0;background:none;border-radius:8px;font:inherit;font-size:15px;color:var(--ink);cursor:pointer}
+.upd .dl button.on{background:#eef2ff;color:#1e3a8a;font-weight:700}
+.upd .dl button.first{color:var(--sub);font-size:14px}
+.upd .ct{flex:1;min-width:0}.upd .ct h3{margin:6px 0 10px;font-size:17px}
+.upd ul,.updm ul{margin:0;padding-left:20px}.upd li,.updm li{margin:5px 0;line-height:1.6}
+.updm{display:none}
+.updm .row{border-bottom:1px solid var(--line)}
+.updm .row>button{display:flex;justify-content:space-between;width:100%;padding:12px 4px;border:0;background:none;font:inherit;font-size:15px;font-weight:700;color:var(--ink);cursor:pointer;text-align:left}
+.updm .row.on>button{color:#1e3a8a}.updm .row.first>button{color:var(--sub);font-weight:500}
+.updm .row ul{margin-bottom:12px;font-size:14px}
+@media (max-width:640px){.tabs{display:grid;grid-template-columns:1fr 1fr;gap:0}.tabs button{text-align:center}.upd{display:none}.updm{display:block}}
+@media (max-width:640px){.tabs button{padding:12px 10px;font-size:14px}h1{font-size:23px}.card{padding:16px}.wrap{padding:22px 14px 44px}.pill{white-space:normal}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div>
+    <h1>빅데이터 Insight <span class="h1sub">지역별 유입인구</span></h1>
+    <p class="lead">다양한 출처의 데이터를 활용하여 지역별 유입인구의 변화를 분석하기 위해 만들었습니다.</p>
+  </div>
+  <span class="pill">개인이 개발한 참고용 서비스로, 정부 공식 통계가 아님</span>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" id="t-look" aria-controls="p-look" aria-selected="true">지역 흐름 보기</button>
+  <button role="tab" id="t-fest" aria-controls="p-fest" aria-selected="false">축제 기간 보기</button>
+  <button role="tab" id="t-guide" aria-controls="p-guide" aria-selected="false">AI 연결 방법</button>
+  <button role="tab" id="t-upd" aria-controls="p-upd" aria-selected="false">주요 업데이트</button>
+</nav>
+
+<!-- ================= 지역 흐름 보기 ================= -->
+<main id="p-look" class="panel" role="tabpanel" aria-labelledby="t-look">
+
+<form class="card pick" id="pick">
+  <label class="f">시도
+    <select id="sido" disabled><option value="">불러오는 중…</option></select>
+  </label>
+  <label class="f">시군구
+    <select id="sigungu" disabled><option value="">먼저 시도를 고르세요</option></select>
+  </label>
+  <label class="f">시작 월
+    <select id="start" disabled><option value="">불러오는 중…</option></select>
+  </label>
+  <label class="f">끝 월
+    <select id="end" disabled><option value="">불러오는 중…</option></select>
+  </label>
+  <button class="btn" type="submit" id="go" disabled>조회</button>
+  <button class="btn light" type="button" id="shareurl" disabled>링크 복사</button>
+</form>
+
+<div id="result" class="panel" hidden>
+
+  <section style="display:flex;flex-direction:column;gap:10px">
+    <h2>공식 공표 통계</h2>
+    <div class="cards" id="official"></div>
+  </section>
+
+  <section class="card">
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:baseline">
+      <h2>외부 유입 흐름<span class="tag">참고</span></h2>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--up3)"></i>아주 많음</span>
+        <span><i class="sw" style="background:var(--up2)"></i>많음</span>
+        <span><i class="sw" style="background:var(--up1)"></i>조금 많음</span>
+        <span><i class="sw" style="height:2px;background:var(--muted)"></i>평소 수준</span>
+        <span><i class="sw" style="background:var(--down1)"></i>조금 적음</span>
+        <span><i class="sw" style="background:var(--down2)"></i>적음</span>
+        <span><i class="sw" style="background:var(--down3)"></i>아주 적음</span>
+      </div>
+    </div>
+    <p class="note">가운데 선이 평소 수준입니다. 막대 높이는 많고 적은 정도를 단계로만 나타냅니다. 막대를 누르거나 마우스를 올리면 자세한 내용이 보입니다.</p>
+    <div class="adj"><button class="btn light" type="button" id="adjbtn" aria-pressed="false">이 지역만의 변화 보기</button><span class="note" id="adjnote" hidden>계절·날씨처럼 어디서나 생기는 변화는 비슷한 지역과 비교해 뺐습니다.</span></div>
+    <div class="chart" id="chart"><div class="grid" id="bars"></div></div>
+    <p class="note" id="evsrc"></p>
+  </section>
+
+  <section class="card">
+    <h2>이 기간을 한 줄씩 보면</h2>
+    <ul class="lines" id="lines"></ul>
+    <div class="warnbox" id="notes" hidden></div>
+  </section>
+
+  <div class="simple">
+    <p>이 화면은 평소와 비교한 결과만 간단히 보여 줍니다. 지난 회차 비교, 생활인구 추정, 축제 참고 예측 등 자세한 분석은 AI 에이전트에 MCP를 연결해 직접 물어보세요.</p>
+    <button class="btn light toguide" type="button">AI 연결 방법 보기 →</button>
+  </div>
+
+
+  <section class="card">
+    <h2>이 화면의 숫자와 막대를 읽는 법</h2>
+    <div class="layers">
+      <div><b>공식 공표 통계</b>정부가 공표한 값입니다(주민등록인구, 생활인구). 숫자로 보여 줍니다.</div>
+      <div><b>기관 추정 통계</b>나우캐스트 인구이동량은 통신자료로 추정해 공표한 실험적 통계입니다. 이동 건수이며 사람 수가 아닙니다.</div>
+      <div><b>이 사이트의 계산 결과(공식 통계 아님)</b>그래프와 설명은 이 사이트가 국가데이터처 KOBIGS의 나우캐스트 자료를 바탕으로 만든 것입니다. 공식 통계로 인용하지 마세요.</div>
+    </div>
+  </section>
+</div>
+
+<p class="empty" id="hint">지역과 기간을 고른 뒤 조회를 누르세요.</p>
+</main>
+
+
+<!-- ================= 축제 기간 보기 ================= -->
+<section id="p-fest" class="panel" role="tabpanel" aria-labelledby="t-fest" hidden>
+
+<div class="seg" role="group" aria-label="축제 고르는 방법">
+  <button type="button" id="fm-reg" class="on" aria-pressed="true">지역별로 고르기</button>
+  <button type="button" id="fm-all" aria-pressed="false">전체 축제 목록</button>
+</div>
+
+<section class="card" id="fallbox" hidden>
+  <input id="fq" placeholder="축제 이름으로 찾기 (예: 산천어, 국화)" autocomplete="off">
+  <div class="cho" id="fcho"></div>
+  <p class="note" id="fcount"></p>
+  <div id="flist"></div>
+</section>
+
+<form class="card pick" id="fpick">
+  <label class="f">시도
+    <select id="fsido" disabled><option value="">불러오는 중…</option></select>
+  </label>
+  <label class="f">시군구
+    <select id="fsigungu" disabled><option value="">먼저 시도를 고르세요</option></select>
+  </label>
+  <label class="f" style="flex:2 1 240px">축제
+    <select id="fname" disabled><option value="">먼저 시군구를 고르세요</option></select>
+  </label>
+  <label class="f" style="flex:0 1 130px">개최년도
+    <select id="fyear" disabled><option value="">–</option></select>
+  </label>
+  <button class="btn" type="submit" id="fgo" disabled>보기</button>
+  <button class="btn light" type="button" id="fshareurl" disabled>링크 복사</button>
+</form>
+
+<div id="fresult" class="panel" hidden>
+  <section class="card">
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:baseline">
+      <h2 id="ftitle"></h2>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--up3)"></i>아주 많음</span>
+        <span><i class="sw" style="background:var(--up2)"></i>많음</span>
+        <span><i class="sw" style="background:var(--up1)"></i>조금 많음</span>
+        <span><i class="sw" style="height:2px;background:var(--muted)"></i>평소 수준</span>
+        <span><i class="sw" style="background:var(--down1)"></i>조금 적음</span>
+        <span><i class="sw" style="background:var(--down2)"></i>적음</span>
+        <span><i class="sw" style="background:var(--down3)"></i>아주 적음</span>
+      </div>
+    </div>
+    <p class="scope" id="fscope"></p>
+    <div class="fdate"><span id="fperiod"></span><button class="btn light" type="button" id="fedit" style="height:36px;padding:0 14px;font-size:14px">날짜 고치기</button></div>
+    <div class="fedit" id="feditbox" hidden>
+      <label class="f">시작 날<input type="date" id="fs"></label>
+      <label class="f">끝 날<input type="date" id="fe"></label>
+      <button class="btn" type="button" id="fre">다시 보기</button>
+      <p class="note" style="flex-basis:100%">축제 날짜는 문화체육관광부가 연초에 낸 개최 계획 기준입니다. 실제 날짜와 다르면 고쳐서 다시 보세요.</p>
+    </div>
+    <p class="note">날짜 아래 노란 표시가 붙은 주가 축제 기간입니다. 축제가 든 달과 앞뒤 2달(두 달에 걸친 축제는 앞뒤 1달, 휴대폰은 한 달씩 줄여서)을 보여 줍니다. 가운데 선이 평소 수준입니다. 막대 높이는 많고 적은 정도를 단계로만 나타냅니다. 막대를 누르거나 마우스를 올리면 자세한 내용이 보입니다.</p>
+    <div class="adj"><button class="btn light" type="button" id="fadjbtn" aria-pressed="false">축제 효과 가늠해 보기</button><span class="note" id="fadjnote" hidden>계절·날씨처럼 어디서나 생기는 변화는 비슷한 지역과 비교해 뺐습니다.</span></div>
+    <div class="chart" id="fchart"><div class="grid" id="fbars"></div></div>
+    <p class="note" id="fevsrc"></p>
+  </section>
+
+  <section class="card">
+    <h2>이 기간을 한 줄씩 보면</h2>
+    <ul class="lines" id="flines"></ul>
+    <div class="warnbox" id="fnotes" hidden></div>
+  </section>
+
+  <div class="simple">
+    <p>이 화면은 평소와 비교한 결과만 간단히 보여 줍니다. 지난 회차 비교, 생활인구 추정, 축제 참고 예측 등 자세한 분석은 AI 에이전트에 MCP를 연결해 직접 물어보세요.</p>
+    <button class="btn light toguide" type="button">AI 연결 방법 보기 →</button>
+  </div>
+
+</div>
+
+<p class="empty" id="fhint">축제를 고른 뒤 보기를 누르세요. 자료가 들어온 지난 축제만 고를 수 있습니다.</p>
+</section>
+
+<!-- ================= AI 연결 방법 ================= -->
+<section id="p-guide" class="panel" role="tabpanel" aria-labelledby="t-guide" hidden>
+
+<div class="card">
+  <h2>MCP로 AI에 연결하기</h2>
+  <p style="margin:0">국가데이터처 나우캐스트의 <b>통신 모바일 인구이동량</b>(시군구별·주별 하루 평균 이동 건수)을 AI가 직접 조회하도록 연결해 주는 MCP 서버입니다. AI에게 "우리 군 지난주 외부 유입이 평소보다 많았어?"처럼 물으면, AI가 이 서버의 도구로 자료를 불러와 답합니다.</p>
+  <p style="margin:0">이 사이트는 <b>평소보다 많은지 적은지, 얼마나 다른지</b>까지만 알려 줍니다. 늘거나 준 원인은 정하지 않고, 그 주의 공휴일·날씨·축제 계획을 판단 재료로 함께 보여 줍니다.</p>
+</div>
+
+<div class="card">
+  <h2>연결 주소</h2>
+  <div class="urlrow">
+    <code class="url" id="mcpurl">https://nowcast-mcp.azurewebsites.net/mcp</code>
+    <button class="btn light" type="button" id="copy">주소 복사</button>
+  </div>
+  <p class="note">접속 키 없이 쓸 수 있습니다. 많은 요청이 한꺼번에 몰리면 잠시 받지 않을 수 있습니다.</p>
+</div>
+
+<div class="card">
+  <h2>Claude에 연결하기</h2>
+  <ol>
+    <li>Claude(웹·데스크톱)에서 <b>설정 → 커넥터</b>로 갑니다.</li>
+    <li><b>커스텀 커넥터 추가</b>를 누르고, 이름(예: 나우캐스트)과 위의 연결 주소를 넣습니다.</li>
+    <li>대화창의 도구 목록에서 이 커넥터를 켜고 질문합니다.</li>
+  </ol>
+  <p class="note">서버에 도구가 새로 생기면 커넥터를 한 번 끊었다 다시 연결해야 보입니다.</p>
+</div>
+
+<div class="card">
+  <h2>ChatGPT에 연결하기</h2>
+  <ol>
+    <li>ChatGPT <b>설정 → 통합 → 플러그인</b>에서 오른쪽 위 <b>디렉터리 둘러보기</b>로 갑니다.</li>
+    <li>오른쪽 위 <b>추가 → 사용자 지정 MCP 서버 추가</b>를 누르고, 이름(예: 빅데이터 Insight)과 위의 연결 주소를 넣습니다. 인증은 <b>인증 없음</b>을 고릅니다.</li>
+    <li>대화창 입력칸의 <b>+</b> 버튼에서 이 플러그인을 켜고 질문합니다. 도구를 부를 때 확인 버튼이 뜨면 눌러 주세요.</li>
+  </ol>
+  <p class="note">서버의 도구가 바뀌면 플러그인을 지웠다가 다시 추가해야 반영됩니다. 연결을 확인한 AI만 적었습니다. 다른 AI는 연결이 확인되는 대로 추가합니다. ChatGPT는 웹 검색 결과를 함께 섞어 답하는 경우가 있으니, 이 사이트의 결과는 답 끝의 출처·계산 줄로 구분해 보세요.</p>
+</div>
+
+<div class="card">
+  <h2>이렇게 물어보세요</h2>
+  <div class="ex">
+    <div>강원 화천군 2026년 1월 셋째 주 외부 유입이 평소와 얼마나 달랐어?</div>
+    <div>우리 군(정선군) 지난달 생활인구가 아직 안 나왔는데 대략 어느 정도일까?</div>
+    <div>내년 화천 산천어축제 주에는 외부 유입이 평소보다 얼마나 늘 것 같아?</div>
+    <div>정선군 9월 외지인 방문이 장날에 늘었어?</div>
+    <div>지금 이 서비스에 자료가 언제까지 들어와 있어?</div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>연결하면 보이는 도구 (12개)</h2>
+  <div class="tools">
+    <div><code>get_metadata</code><ul><li>통신 모바일 인구이동량의 정의와 이용 주의사항 조회</li><li>값을 바르게 읽기 위한 기본 안내 (사람 수가 아닌 이동 건수 등)</li></ul></div>
+    <div><code>list_regions</code><ul><li>시도·시군구 이름 검색</li><li>다른 도구에 넣을 정확한 지역 이름을 확인하기 위한 자료</li><li>같은 이름이 여러 곳에 있거나 행정구역이 바뀐 지역 구분 (예: 중구, 화성시의 구)</li></ul></div>
+    <div><code>analyze_region_week</code><ul><li>한 지역·한 주의 유입이 평소와 얼마나 달랐는지 판정</li><li>평소보다 많았는지 적었는지 확인하기 위한 핵심 도구</li><li>계절·날씨처럼 어디서나 생기는 변화는 비슷한 지역과 비교해 빼고, 그 주의 공휴일·날씨·축제 일정을 함께 제공</li></ul></div>
+    <div><code>find_unusual_regions</code><ul><li>한 주를 정해 전국 시군구 중 평소와 가장 크게 달랐던 지역 순위 조회</li><li>그 주에 눈에 띄는 변화가 있었던 지역을 찾기 위한 자료</li><li>늘어난 지역과 줄어든 지역을 따로 제공</li></ul></div>
+    <div><code>get_movement</code><ul><li>유입·유출 주별 이동 건수를 기간으로 조회</li><li>흐름을 직접 그려 보거나 지역끼리 비교하기 위한 원자료</li><li>시군구·시도·전국 단위, 성별·연령·입지유형별 (2019년 1월부터)</li></ul></div>
+    <div><code>get_breakdown</code><ul><li>한 주의 이동 건수를 성별·연령·입지유형·시도별로 나눠 조회</li><li>어떤 사람들의 이동이 많았는지 구성을 보기 위한 자료</li></ul></div>
+    <div><code>get_weather</code><ul><li>지역의 주별 날씨(기온·강수량·적설량) 조회</li><li>유입이 늘거나 줄었을 때 날씨 영향을 함께 보기 위한 자료</li><li>가까운 기상청 관측소 자료 사용 (예: 가평 → 춘천 관측소)</li></ul></div>
+    <div><code>get_datalab_daily</code><ul><li>시군구의 날짜별 방문자 흐름 조회</li><li>주 단위로는 안 보이는 요일별·5일장 날짜별 증감을 보기 위한 자료</li><li>한국관광공사 한국관광 데이터랩 자료 사용</li></ul></div>
+    <div><code>estimate_life_pop</code><ul><li>아직 공표되지 않은 달, 또는 공표하지 않는 지역의 생활인구 참고 추정</li><li>공표를 기다리지 않고 대략의 규모를 가늠하기 위한 자료</li><li>공표 지역들의 생활인구와 유입의 관계로 계산 (공식 통계 아님)</li></ul></div>
+    <div><code>forecast_festival</code><ul><li>축제 주에 유입이 평소보다 얼마나 늘지 참고 예측</li><li>다가올 축제의 규모를 미리 가늠하기 위한 자료</li><li>지난 회차 기록으로 계산, 처음 여는 축제는 비슷한 지역의 축제로 추정 (방문객 수는 내지 않음)</li></ul></div>
+    <div><code>get_data_status</code><ul><li>자료별 최신 시점과 받아 온 날 조회</li><li>지금 어느 주까지 분석할 수 있는지 확인하기 위한 자료</li></ul></div>
+    <div><code>report_issue</code><ul><li>이상한 값이나 틀린 설명을 운영자에게 신고</li></ul></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>함께 쓰면 좋은 MCP</h2>
+  <ul>
+    <li><b>KOSIS 국가통계 MCP</b>(국가데이터처 시범): 전국 통계표 검색·조회. 연결 주소 <code>https://kosismcp2026.vercel.app/api/mcp</code></li>
+    <li><b>이번 주말: 축제·공연·전시 찾기</b>(PlayMCP): 지금 열리는 전국 행사 찾기. 이 사이트는 과거 축제 계획만 가지고 있어 함께 쓰면 좋습니다.</li>
+  </ul>
+  <p class="note">다른 MCP의 안내문이 이 사이트 결과에 섞여 보일 수 있습니다. 이 사이트의 결과에는 항상 출처와 '비공식' 표시가 붙어 있습니다.</p>
+</div>
+
+<div class="card">
+  <h2>꼭 알아 둘 점</h2>
+  <ul>
+    <li>값은 <b>사람 수가 아니라 이동 건수</b>(하루 평균)입니다. 한 사람이 여러 번 이동하면 여러 건입니다. '몇 명이 왔다'로 바꿔 말하지 마세요.</li>
+    <li>여러 주를 더해 '한 달 이동량'을 만들지 마세요. 값이 하루 평균입니다.</li>
+    <li>이 사이트가 계산한 판정·추정·예측은 <b>비공식 참고값</b>입니다. 공식 통계로 인용하지 마세요.</li>
+    <li>생활인구 추정·축제 예측의 범위는 과거에 같은 방법으로 맞혀 봤을 때 실제 값이 들어간 폭입니다. 통계적 신뢰구간이 아닙니다.</li>
+    <li>원자료는 나중에 고쳐질 수 있습니다. 인용할 때는 자료 시점과 받아 온 날을 함께 적으세요.</li>
+    <li>행정구역이 바뀐 지역(부천·화성의 구, 인천 새 구, 군위, 전남광주통합특별시)은 바뀌기 전후를 바로 비교하기 어렵습니다.</li>
+    <li>AI의 설명에는 틀린 내용이 있을 수 있습니다. 중요한 판단에는 출처와 원자료를 꼭 확인하세요.</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>자료 출처</h2>
+  <ul>
+    <li>국가데이터처 KOBIGS 나우캐스트, 통신 모바일 인구이동량(SK텔레콤 통신자료 기반 추정)</li>
+    <li>국가통계포털(KOSIS): 생활인구(국가데이터처), 주민등록인구(행정안전부), 등록외국인(법무부), 지역별고용조사, 국내인구이동통계</li>
+    <li>한국관광공사 한국관광 데이터랩 지역별 방문자 수</li>
+    <li>기상청 종관기상관측(ASOS) 일자료(기상청 API허브)</li>
+    <li>한국천문연구원 특일 정보, 문화체육관광부 지역축제 개최 계획, 소상공인시장진흥공단 전국전통시장표준데이터(공공데이터포털)</li>
+  </ul>
+  <p class="note">각 자료의 저작권과 이용 조건은 제공 기관에 있습니다. 이 사이트는 위 기관들의 공식 서비스가 아니며, 기관의 공식 입장을 대변하지 않습니다.</p>
+</div>
+
+<div class="card">
+  <h2>운영 방식</h2>
+  <ul>
+    <li>개인이 개발한 비공식 참고용 서비스입니다. 수익을 목적으로 하지 않습니다.</li>
+    <li>개인정보를 받지 않습니다. 이용 기록은 어떤 도구가 어떤 지역·기간으로 불렸는지만 남기며, 접속 주소(IP)는 저장하지 않습니다.</li>
+    <li>자료는 매일 새벽 자동으로 확인해 새로 나온 것을 받아 옵니다.</li>
+  </ul>
+</div>
+</section>
+
+<!-- ================= 주요 업데이트 ================= -->
+<section id="p-upd" class="panel" role="tabpanel" aria-labelledby="t-upd" hidden>
+<div class="card upd"><div class="dl" id="upd-dl"></div><div class="ct" id="upd-ct"></div></div>
+<div class="card updm" id="upd-m"></div>
+</section>
+
+<!-- ================= 의견 보내기(두 탭 공통) ================= -->
+<section class="card" id="fb">
+  <h2>의견 보내기</h2>
+  <p class="note">값이 이상하거나 설명이 틀렸으면 알려 주세요. 이름·연락처는 받지 않습니다.</p>
+  <div class="fbrow">
+    <label class="f">종류
+      <select id="fbkind"><option>값이 이상함</option><option>설명이 틀림</option><option>작동 오류(조회 안 됨·화면 깨짐)</option><option>제안</option><option selected>기타</option></select>
+    </label>
+    <label class="f">문제가 된 지역(선택)
+      <input id="fbregion" maxlength="60" autocomplete="off" placeholder="○○도 ○○군">
+    </label>
+    <label class="f">문제가 된 기간(선택)
+      <input id="fbperiod" maxlength="40" autocomplete="off" placeholder="2026년 ○월 ○주">
+    </label>
+  </div>
+  <label class="f" style="flex:none">내용(1,000자 이하)
+    <textarea id="fbmsg" maxlength="1000"></textarea>
+  </label>
+  <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+    <button class="btn" type="button" id="fbsend">보내기</button>
+    <span class="msg" id="fbout" role="status"></span>
+  </div>
+</section>
+
+<footer>
+  <p>공식 공표 통계 칸의 숫자만 정부가 공표한 값입니다. '참고'로 표시한 흐름과 판정은 이 사이트가 나우캐스트 공표 자료로 계산한 비공식 참고 정보이며, 방문객 수가 아니라 외부에서 들어온 이동 건수의 변화입니다.</p>
+  <p>출처: 국가데이터처 KOBIGS 나우캐스트, 통신 모바일 인구이동량(SK텔레콤 통신자료 기반 추정)<br>
+  판정 계산: 「빅데이터 Insight: 지역별 유입인구」(개인이 개발한 참고용 서비스, 정부 공식 통계 아님)</p>
+  <p id="asof"></p>
+</footer>
+</div>
+<div id="tip" hidden></div>
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  function el(tag, attrs, text) {
+    var e = document.createElement(tag);
+    if (attrs) for (var k in attrs) {
+      if (k === "style") e.style.cssText = attrs[k]; else if (k === "cls") e.className = attrs[k]; else e.setAttribute(k, attrs[k]);
+    }
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function getJSON(url) {
+    return fetch(url).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); });
+  }
+  function copyText(btn, text, label) {
+    (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(
+      function () { btn.textContent = "복사했습니다"; setTimeout(function () { btn.textContent = label; }, 1500); },
+      function () { btn.textContent = "주소창에서 직접 복사하세요"; });
+  }
+
+
+  // ---------- 주요 업데이트 (새 항목은 맨 앞에 추가, 사소한 변경은 넣지 않음) ----------
+  var UPDATES = [
+    { d: "2026년 11월 15일", items: [
+      "이름을 「빅데이터 Insight: 지역별 유입인구」로 바꿈",
+      "지역 흐름 보기 탭 개편, 축제 기간 보기 탭과 전체 축제 목록 추가",
+      "대표 축제 14개 추가, 빠진 개최 연도 채움 (진해군항제, 진주남강유등축제, 세종한글축제 등)",
+      "김제지평선축제 2025년 날짜, 대전 0시 축제 2025년 개최 지역 바로잡음",
+      "결과를 일곱 단계로 표시, '이 지역만의 변화 보기'·'축제 효과 가늠해 보기' 버튼, 연휴·징검다리 표시",
+      "달 단위 기간 고르기, 그래프·조회 속도 개선"] },
+    { d: "최초 공개", first: true, items: [
+      "2026년 11월 14일",
+      "안내 페이지와 AI 연결 주소 공개, 공식 MCP 레지스트리 등록"] }
+  ];
+  (function () {
+    function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+    function ul(u) { return "<ul>" + u.items.map(function (t) { return "<li>" + esc(t) + "</li>"; }).join("") + "</ul>"; }
+    var dl = $("upd-dl"), ct = $("upd-ct"), m = $("upd-m");
+    function pick(i) {
+      [].forEach.call(dl.children, function (b, j) { b.className = (j === i ? "on " : "") + (UPDATES[j].first ? "first" : ""); });
+      ct.innerHTML = "<h3>" + esc(UPDATES[i].d) + "</h3>" + ul(UPDATES[i]);
+    }
+    UPDATES.forEach(function (u, i) {
+      var b = document.createElement("button"); b.type = "button"; b.textContent = u.d;
+      b.onclick = function () { pick(i); }; dl.appendChild(b);
+      var r = document.createElement("div"); r.className = "row" + (u.first ? " first" : "") + (i === 0 ? " on" : "");
+      r.innerHTML = '<button type="button" aria-expanded="' + (i === 0) + '"><span>' + esc(u.d) + '</span><span>' + (i === 0 ? "▴" : "▾") + "</span></button>" + ul(u);
+      r.lastChild.hidden = i !== 0;
+      r.firstChild.onclick = function () {
+        var open = r.lastChild.hidden; r.lastChild.hidden = !open;
+        r.className = "row" + (u.first ? " first" : "") + (open ? " on" : "");
+        r.firstChild.setAttribute("aria-expanded", open); r.firstChild.lastChild.textContent = open ? "▴" : "▾";
+      };
+      m.appendChild(r);
+    });
+    pick(0);
+  })();
+
+  // ---------- 탭 ----------
+  var tabs = { look: [$("t-look"), $("p-look")], fest: [$("t-fest"), $("p-fest")], guide: [$("t-guide"), $("p-guide")], upd: [$("t-upd"), $("p-upd")] };
+  function show(name) {
+    for (var k in tabs) {
+      var on = k === name;
+      tabs[k][0].setAttribute("aria-selected", on ? "true" : "false");
+      tabs[k][1].hidden = !on;
+    }
+    hideTip();
+  }
+  // 탭마다 주소를 따로 기억해 두고, 탭을 바꾸면 그 탭의 주소로 바꿈
+  var URLS = { look: "", fest: "", guide: "", upd: "" };
+  function go(name) {
+    show(name);
+    var u = name === "guide" ? "#guide" : name === "upd" ? "#updates" : (URLS[name] || (name === "fest" ? "#festival" : ""));
+    history.replaceState(null, "", location.pathname + u);
+  }
+  $("t-look").onclick = function () { go("look"); };
+  $("t-fest").onclick = function () { go("fest"); };
+  $("t-guide").onclick = function () { go("guide"); };
+  $("t-upd").onclick = function () { go("upd"); };
+  [].forEach.call(document.querySelectorAll(".toguide"), function (b) { b.onclick = function () { go("guide"); window.scrollTo(0, 0); }; });
+  var P0 = new URLSearchParams(location.search);
+  if (location.hash === "#guide") show("guide");
+  else if (location.hash === "#updates") show("upd");
+  else if (location.hash === "#festival" || P0.get("fest")) show("fest");
+
+  // ---------- 연결 주소 ----------
+  if (location.protocol === "https:" || location.hostname === "localhost") {
+    $("mcpurl").textContent = location.origin + "/mcp";
+  }
+  $("copy").onclick = function () { copyText($("copy"), $("mcpurl").textContent, "주소 복사"); };
+
+  // ---------- 목록 ----------
+  var REG = {}, WEEKS = [], MONTHS = [], MAX_MONTHS = 12;
+  function opt(sel, value, text, disabled) {
+    var o = el("option", { value: value }, text); if (disabled) o.disabled = true; sel.appendChild(o); return o;
+  }
+  function fillSigungu() {
+    var s = $("sigungu"); s.textContent = "";
+    var list = REG[$("sido").value] || [];
+    if (!list.length) { opt(s, "", "먼저 시도를 고르세요"); s.disabled = true; }
+    else { opt(s, "", "시군구를 고르세요"); list.forEach(function (g) { opt(s, g, g); }); s.disabled = false; }
+    ready();
+  }
+  function ready() { $("go").disabled = !($("sido").value && $("sigungu").value); }
+
+  var P = P0.get("fest") ? new URLSearchParams() : P0;
+  Promise.all([getJSON("/api/regions"), getJSON("/api/weeks")]).then(function (res) {
+    REG = res[0].j; WEEKS = res[1].j;
+    var sido = $("sido"); sido.textContent = "";
+    opt(sido, "", "시도를 고르세요");
+    Object.keys(REG).forEach(function (k) { opt(sido, k, k); });
+    sido.disabled = false;
+    sido.onchange = fillSigungu;
+    $("sigungu").onchange = ready;
+    // 주차 번호(YYYYMMN) → 달(YYYYMM). 주는 그 주 목요일이 속한 달로 묶임
+    MONTHS = [];
+    WEEKS.forEach(function (w) { var m = Math.floor(w[0] / 10); if (MONTHS.indexOf(m) < 0) MONTHS.push(m); });
+    ["start", "end"].forEach(function (id) {
+      var s = $(id); s.textContent = "";
+      MONTHS.forEach(function (m) { opt(s, m, Math.floor(m / 100) + "년 " + (m % 100) + "월"); });
+      s.disabled = false;
+    });
+    $("end").selectedIndex = 0;
+    $("start").selectedIndex = Math.min(5, MONTHS.length - 1);       // 처음엔 최근 6개월
+    // 공유 주소로 들어오면 그 지역·기간을 골라 바로 조회(예전 주 단위 주소도 그 달로 바꿔 엶)
+    var sd = P.get("sido"), sg = P.get("sigungu");
+    var toMonth = function (v) { v = String(v || ""); return v.length === 7 ? String(Math.floor(+v / 10)) : v; };
+    var from = toMonth(P.get("from") || P.get("start")), to = toMonth(P.get("to") || P.get("end"));
+    if (from && MONTHS.some(function (m) { return String(m) === from; })) $("start").value = from;
+    if (to && MONTHS.some(function (m) { return String(m) === to; })) $("end").value = to;
+    if (sd && REG[sd]) {
+      sido.value = sd; fillSigungu();
+      if (sg && REG[sd].indexOf(sg) >= 0) { $("sigungu").value = sg; ready(); run(); }
+    }
+  }).catch(function () { $("hint").textContent = "목록을 불러오지 못했습니다. 잠시 뒤 새로 고침해 주세요."; });
+
+  function fmtTime(s) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(s || "");
+    return m ? (+m[1]) + "년 " + (+m[2]) + "월 " + (+m[3]) + "일 " + m[4] + ":" + m[5] : (s || "");
+  }
+  function fmtWeek(s) {
+    var m = /^(\d{4})\.(\d{2})\.(\d)주차$/.exec(s || "");
+    return m ? (+m[1]) + "년 " + (+m[2]) + "월 " + m[3] + "주" : (s || "");
+  }
+  getJSON("/api/status").then(function (r) {
+    var nc = (r.j || []).filter(function (x) { return x["자료"].indexOf("나우캐스트") >= 0; })[0];
+    if (nc) $("asof").textContent = "자료 기준: 나우캐스트 " + fmtWeek(nc["최신"]) + "까지 (받아 온 날 " + fmtTime(nc["받아 온 날"]) + ")" + (nc["최근 실패"] ? " · 최근 받기에 실패해 최신이 아닐 수 있음" : "");
+  }).catch(function () {});
+
+  // ---------- 그리기 ----------
+  var COLOR = { up3: "var(--up3)", up2: "var(--up2)", up1: "var(--up1)", down3: "var(--down3)", down2: "var(--down2)", down1: "var(--down1)" };
+  var WORD = { up3: "평소보다 아주 많음", up2: "평소보다 많음", up1: "평소보다 조금 많음", normal: "평소 수준",
+    down1: "평소보다 조금 적음", down2: "평소보다 적음", down3: "평소보다 아주 적음",
+    hold: "판정 보류", na: "판정 못함", nodata: "자료 아직 없음" };
+  var STEP = { up1: 1, up2: 2, up3: 3, down1: 1, down2: 2, down3: 3 };
+  function fmt(n) { return Number(n).toLocaleString("ko-KR"); }
+
+  function statCard(k, v, small, lines) {
+    var d = el("div", { cls: "stat" });
+    d.appendChild(el("span", { cls: "k" }, k));
+    if (v != null) {
+      var vv = el("span", { cls: "v" }, v);
+      if (small) vv.appendChild(el("small", null, small));
+      d.appendChild(vv);
+    }
+    (lines || []).forEach(function (x) { d.appendChild(el("span", { cls: x[0] }, x[1])); });
+    return d;
+  }
+
+  // 말풍선(마우스 올림·누름 모두)
+  var tip = $("tip"), tipOn = null, shownAt = 0;
+  function showTip(col, w) {
+    if (tipOn !== col) shownAt = Date.now();
+    var r = col.getBoundingClientRect();
+    tip.textContent = "";
+    tip.appendChild(el("b", null, w.full + " (" + w.dates + ")"));
+    tip.appendChild(el("br"));
+    tip.appendChild(document.createTextNode(WORD[w.level] || ""));
+    var evs = w.events || [];
+    if (w.hol_tip) { tip.appendChild(el("br")); tip.appendChild(document.createTextNode(w.hol_tip)); evs = w.ev_other || []; }
+    if (evs.length) { tip.appendChild(el("br")); tip.appendChild(document.createTextNode(evs.join("·"))); }
+    tip.hidden = false;
+    var x = Math.min(Math.max(r.left + r.width / 2, tip.offsetWidth / 2 + 6), window.innerWidth - tip.offsetWidth / 2 - 6);
+    tip.style.left = x + "px"; tip.style.top = Math.max(r.top - 6, tip.offsetHeight + 6) + "px";
+    if (tipOn) tipOn.classList.remove("on");
+    tipOn = col; col.classList.add("on");
+  }
+  function hideTip() { if (!tip) return; tip.hidden = true; if (tipOn) tipOn.classList.remove("on"); tipOn = null; }
+  document.addEventListener("click", function (e) { if (!e.target.closest || !e.target.closest(".col")) hideTip(); });
+  window.addEventListener("scroll", hideTip, { passive: true });
+  $("chart").addEventListener("scroll", hideTip, { passive: true });
+  $("fchart").addEventListener("scroll", hideTip, { passive: true });
+
+  function drawChart(bars, chart, W, fit) {
+    bars.textContent = ""; hideTip();
+    var UNIT = 24, upN = 1, dnN = 1;
+    W.forEach(function (w) { var n = STEP[w.level] || 0; if (w.dir > 0) upN = Math.max(upN, n); if (w.dir < 0) dnN = Math.max(dnN, n); });
+    var upH = upN * UNIT + 6, dnH = dnN * UNIT + 6;
+    bars.style.gridTemplateColumns = "repeat(" + W.length + ", minmax(" + (fit ? 0 : 36) + "px, 1fr))";
+    bars.style.minWidth = fit ? "0" : (W.length * 38) + "px";
+    var mo = function (w) { return Math.floor(w.wo / 10) % 100; };
+    for (var i = 0; i < W.length;) {                 // 달 이름 줄
+      var j = i; while (j < W.length && mo(W[j]) === mo(W[i])) j++;
+      var y = Math.floor(W[i].wo / 1000);
+      var wide = (j - i) >= (fit && window.innerWidth < 640 ? 4 : 2);
+      var t = (wide && (i === 0 || mo(W[i]) === 1)) ? y + "년 " + mo(W[i]) + "월" : mo(W[i]) + "월";
+      bars.appendChild(el("div", { cls: "mon" + (i ? " ms" : ""), style: "grid-column:span " + (j - i) }, t));
+      i = j;
+    }
+    W.forEach(function (w, k) {
+      var ms = k > 0 && mo(W[k - 1]) !== mo(w);
+      var c = el("div", { cls: "col" + (w.fest ? " fest" : "") + (ms ? " ms" : "") + (w.level === "nodata" ? " nd" : ""), tabindex: "0", role: "button", "aria-label": w.full + " (" + w.dates + "): " + WORD[w.level] + (w.fest ? ", 축제 기간" : "") });
+      var up = el("div", { cls: "up-area", style: "height:" + upH + "px" }), dn = el("div", { cls: "dn-area", style: "height:" + dnH + "px" });
+      var color = COLOR[w.level], n = STEP[w.level] || 0;
+      if (w.level === "hold" || w.level === "na") {
+        up.appendChild(el("span", { cls: "hold" }, w.level === "hold" ? "보류" : "판정 못함"));
+      } else if (n && w.dir > 0) {
+        up.appendChild(el("div", { cls: "bar", style: "height:" + (n * UNIT) + "px;background:" + color + ";border-radius:4px 4px 0 0" }));
+      } else if (n && w.dir < 0) {
+        dn.appendChild(el("div", { cls: "bar", style: "height:" + (n * UNIT) + "px;background:" + color + ";border-radius:0 0 4px 4px" }));
+      }
+      c.appendChild(up); c.appendChild(el("div", { cls: "axis" })); c.appendChild(dn);
+      c.appendChild(el("span", { cls: "wk" }, (w.wo % 10) + "주"));
+      if (w.fest) c.appendChild(el("span", { cls: "ftag" }, "축제"));
+      c.appendChild(w.events.length ? el("div", { cls: "ev" }, w.events.join("·")) : el("div", { cls: "ev none" }, (w.level === "nodata" || w.fest) ? "" : "–"));
+      c.onmouseenter = function () { showTip(c, w); };
+      c.onmouseleave = function () { if (tipOn === c) hideTip(); };
+      c.onfocus = function () { showTip(c, w); };
+      // 휴대폰: 누르면 보이고 한 번 더 누르면 닫힘(누를 때 함께 생기는 focus·mouseenter로 바로 닫히지 않게 시간으로 구분)
+      c.onclick = function (e) { e.stopPropagation(); if (tipOn === c && Date.now() - shownAt > 400) hideTip(); else showTip(c, w); };
+      bars.appendChild(c);
+    });
+    chart.scrollLeft = fit ? 0 : chart.scrollWidth;      // 최근 주가 먼저 보이게
+  }
+
+  function render(r) {
+    var o = $("official"); o.textContent = "";
+    var g = r["공식"] || {};
+    if (g["주민등록인구"]) {
+      var a = g["주민등록인구"];
+      o.appendChild(statCard("주민등록인구", fmt(a["값"]) + "명", "(" + a["달"] + " 기준)", [["s", "출처: " + a["출처"]]]));
+    }
+    var lp = g["생활인구"];
+    if (lp && lp["공표"]) {
+      var lines = [];
+      if (lp["기간 중 가장 많은 달"]) lines.push(["i", "조회 기간 중 가장 많은 달: " + lp["기간 중 가장 많은 달"]["달"] + " " + fmt(lp["기간 중 가장 많은 달"]["값"]) + "명"]);
+      if (lp["안내"]) lines.push(["i", lp["안내"]]);
+      if (lp["다음 공표"]) lines.push(["i", "다음 공표: " + lp["다음 공표"]]);
+      lines.push(["s", "출처: " + lp["출처"]]);
+      o.appendChild(statCard("생활인구", fmt(lp["값"]) + "명", "(" + lp["달"] + " 기준)", lines));
+    } else if (lp) {
+      o.appendChild(statCard("생활인구", null, null, [["t", lp["설명"]]]));
+    }
+
+    LAST = r; setAdj("adjbtn", "adjnote", false); $("adjbtn").hidden = !r["비교 가능"];
+    paint();
+    $("evsrc").textContent = "막대 아래 줄은 그 주에 있었던 일: " + (r["일정 출처"] || []).join(", ");
+    $("shareurl").disabled = false;
+
+    $("fbregion").value = r["지역"]; $("fbperiod").value = r["기간"].slice(0, 40);
+    $("result").hidden = false; $("hint").hidden = true;
+  }
+
+  // 기본은 평소 대비 그대로, 버튼을 누르면 비슷한 지역 변화를 뺀 결과
+  var LAST = null;
+  function adjOn(id) { return $(id).getAttribute("aria-pressed") === "true"; }
+  function setAdj(btn, note, on) { $(btn).setAttribute("aria-pressed", on ? "true" : "false"); $(note).hidden = !on; }
+  function pick(weeks, on) { return on ? weeks.map(function (w) { return Object.assign({}, w, { level: w.level_adj, dir: w.dir_adj }); }) : weeks; }
+  function paint() {
+    var r = LAST, on = adjOn("adjbtn");
+    drawChart($("bars"), $("chart"), pick(r.weeks, on));
+    var ul = $("lines"); ul.textContent = "";
+    (r[on ? "문장_비교" : "문장"] || []).forEach(function (s) { ul.appendChild(el("li", null, s)); });
+    var notes = (r["주의"] || []).concat(on ? (r["주의_비교"] || []) : []);
+    var n = $("notes"); n.textContent = "";
+    notes.forEach(function (s) { n.appendChild(el("div", null, s)); });
+    n.hidden = !notes.length;
+  }
+  $("adjbtn").onclick = function () { setAdj("adjbtn", "adjnote", !adjOn("adjbtn")); if (LAST) paint(); };
+
+  function query() {
+    return "?sido=" + encodeURIComponent($("sido").value) + "&sigungu=" + encodeURIComponent($("sigungu").value) +
+           "&from=" + $("start").value + "&to=" + $("end").value;
+  }
+  function run() {
+    var a = +$("start").value, b = +$("end").value;
+    if (a > b) { var t = a; a = b; b = t; }
+    var span = (Math.floor(b / 100) - Math.floor(a / 100)) * 12 + (b % 100) - (a % 100) + 1;
+    if (span > MAX_MONTHS) { $("result").hidden = true; $("hint").hidden = false; $("hint").textContent = "한 번에 " + MAX_MONTHS + "개월까지 볼 수 있습니다. 기간을 줄여 주세요."; return; }
+    var q = new URLSearchParams({ sido: $("sido").value, sigungu: $("sigungu").value, start: a * 10 + 1, end: b * 10 + 9 });
+    $("go").disabled = true; $("hint").hidden = false; $("hint").textContent = "불러오는 중…";
+    getJSON("/api/view?" + q).then(function (r) {
+      if (!r.ok || r.j.error) { $("result").hidden = true; $("hint").textContent = (r.j && r.j.error) || "조회하지 못했습니다."; return; }
+      render(r.j);
+      URLS.look = query();
+      if (!$("p-look").hidden) history.replaceState(null, "", location.pathname + URLS.look);
+    }).catch(function () { $("hint").textContent = "조회하지 못했습니다. 잠시 뒤 다시 시도해 주세요."; })
+      .then(function () { ready(); });
+  }
+  $("pick").onsubmit = function (e) { e.preventDefault(); if (!$("go").disabled) run(); };
+  $("shareurl").onclick = function () { copyText($("shareurl"), location.origin + location.pathname + query(), "링크 복사"); };
+
+  // ---------- 축제 기간 보기 ----------
+  var FREG = {}, FLIST = [];
+  function resetSel(sel, text) { sel.textContent = ""; opt(sel, "", text); sel.disabled = true; }
+  function fready() { $("fgo").disabled = !($("fname").value && $("fyear").value); }
+  function fillYears() {
+    var y = $("fyear"); y.textContent = "";
+    var f = FLIST.filter(function (x) { return x.id === $("fname").value; })[0];
+    if (!f) { opt(y, "", "–"); y.disabled = true; fready(); return; }
+    f.years.forEach(function (v) { opt(y, v, v + "년"); });
+    y.disabled = false; fready();
+  }
+  function loadFests(sel) {
+    var n = $("fname"); resetSel(n, "불러오는 중…"); resetSel($("fyear"), "–"); fready();
+    return getJSON("/api/fests?" + new URLSearchParams({ sido: $("fsido").value, sigungu: $("fsigungu").value })).then(function (r) {
+      FLIST = r.j || []; n.textContent = "";
+      opt(n, "", FLIST.length ? "축제를 고르세요" : "자료가 들어온 축제가 없습니다");
+      FLIST.forEach(function (f) { opt(n, f.id, f.name); });
+      n.disabled = !FLIST.length;
+      if (sel && FLIST.some(function (f) { return f.id === sel; })) n.value = sel;
+      fillYears();
+    });
+  }
+  function fillFSigungu() {
+    var s = $("fsigungu"); s.textContent = "";
+    var list = FREG[$("fsido").value] || [];
+    if (!list.length) { opt(s, "", "먼저 시도를 고르세요"); s.disabled = true; }
+    else { opt(s, "", "시군구를 고르세요"); list.forEach(function (g) { opt(s, g, g); }); s.disabled = false; }
+    resetSel($("fname"), "먼저 시군구를 고르세요"); resetSel($("fyear"), "–"); fready();
+  }
+  getJSON("/api/fest_regions").then(function (r) {
+    FREG = r.j || {};
+    var s = $("fsido"); s.textContent = ""; opt(s, "", "시도를 고르세요");
+    Object.keys(FREG).forEach(function (k) { opt(s, k, k); });
+    s.disabled = false;
+    s.onchange = fillFSigungu;
+    $("fsigungu").onchange = function () { if ($("fsigungu").value) loadFests(); else { resetSel($("fname"), "먼저 시군구를 고르세요"); resetSel($("fyear"), "–"); fready(); } };
+    $("fname").onchange = fillYears;
+    $("fyear").onchange = fready;
+    var sd = P0.get("sido"), sg = P0.get("sigungu"), id = P0.get("fest"), yr = P0.get("year");
+    if (id && sd && FREG[sd]) {
+      s.value = sd; fillFSigungu();
+      if ((FREG[sd] || []).indexOf(sg) >= 0) {
+        $("fsigungu").value = sg;
+        loadFests(id).then(function () {
+          if (yr && [].some.call($("fyear").options, function (o) { return o.value === yr; })) $("fyear").value = yr;
+          fready();
+          if (!$("fgo").disabled) frun(P0.get("s"), P0.get("e"));
+        });
+      }
+    }
+  }).catch(function () { $("fhint").textContent = "목록을 불러오지 못했습니다. 잠시 뒤 새로 고침해 주세요."; });
+
+  // 전체 축제 목록에서 고르기
+  var FALL = null, CHO = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ", CHO_B = "ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎ".split("");
+  var SHORT = { "서울특별시": "서울", "부산광역시": "부산", "대구광역시": "대구", "인천광역시": "인천", "광주광역시": "광주", "대전광역시": "대전",
+    "울산광역시": "울산", "세종특별자치시": "세종", "경기도": "경기", "강원특별자치도": "강원", "강원도": "강원", "충청북도": "충북", "충청남도": "충남",
+    "전북특별자치도": "전북", "전라북도": "전북", "전라남도": "전남", "경상북도": "경북", "경상남도": "경남", "제주특별자치도": "제주", "전남광주통합특별시": "전남광주" };
+  function cho(t) {
+    var o = t.charCodeAt(0) - 0xAC00, c = o >= 0 && o < 11172 ? CHO[Math.floor(o / 588)] : "기타";
+    return { "ㄲ": "ㄱ", "ㄸ": "ㄷ", "ㅃ": "ㅂ", "ㅆ": "ㅅ", "ㅉ": "ㅈ" }[c] || c;
+  }
+  function fmode(all) {
+    $("fm-all").classList.toggle("on", all); $("fm-reg").classList.toggle("on", !all);
+    $("fm-all").setAttribute("aria-pressed", all); $("fm-reg").setAttribute("aria-pressed", !all);
+    $("fallbox").hidden = !all; $("fpick").hidden = all;
+    if (all) { $("fresult").hidden = true; $("fhint").hidden = true; loadAll(); }
+    else { $("fresult").hidden = !FCUR; $("fhint").hidden = !!FCUR; }
+  }
+  function loadAll() {
+    if (FALL) return drawAll();
+    $("fcount").textContent = "불러오는 중…";
+    getJSON("/api/fest_all").then(function (r) {
+      FALL = (r.j || []).slice().sort(function (a, b) { return a.name.localeCompare(b.name, "ko"); });
+      drawAll();
+    }).catch(function () { $("fcount").textContent = "목록을 불러오지 못했습니다. 잠시 뒤 다시 시도해 주세요."; });
+  }
+  function drawAll() {
+    var q = $("fq").value.trim().replace(/\s+/g, ""), box = $("flist"), G = {}, keys = [], n = 0;
+    box.textContent = "";
+    FALL.forEach(function (f) {
+      if (q && f.name.replace(/\s+/g, "").indexOf(q) < 0) return;
+      var k = cho(f.name); if (!G[k]) { G[k] = []; keys.push(k); } G[k].push(f); n++;
+    });
+    keys.sort(function (a, b) { return (a === "기타") - (b === "기타") || a.localeCompare(b, "ko"); });
+    keys.forEach(function (k) {
+      box.appendChild(el("div", { cls: "fg", id: "fg-" + k }, k === "기타" ? "영문·숫자 등" : k));
+      var gr = el("div", { cls: "fgr" });
+      G[k].forEach(function (f) {
+        var b = el("button", { cls: "fit", type: "button" }, f.name);
+        b.appendChild(el("small", null, (SHORT[f.sido] || f.sido) + " " + f.sigungu));
+        b.onclick = function () { pickFest(f); };
+        gr.appendChild(b);
+      });
+      box.appendChild(gr);
+    });
+    var c = $("fcho"); c.textContent = "";
+    CHO_B.concat(["기타"]).forEach(function (k) {
+      var b = el("button", { type: "button", style: k === "기타" ? "width:auto;padding:0 10px" : "" }, k === "기타" ? "A·1" : k); b.disabled = !G[k];
+      b.onclick = function () { var t = $("fg-" + k); if (t) t.scrollIntoView({ behavior: "smooth", block: "start" }); };
+      c.appendChild(b);
+    });
+    $("fcount").textContent = q ? (n ? "찾은 축제 " + fmt(n) + "개" : "맞는 축제가 없습니다.") : "자료가 들어온 축제 " + fmt(n) + "개, 가나다순";
+  }
+  function pickFest(f) {
+    fmode(false);
+    $("fsido").value = f.sido; fillFSigungu();
+    $("fsigungu").value = f.sigungu;
+    loadFests(f.id).then(function () { fready(); if (!$("fgo").disabled) frun(); $("fpick").scrollIntoView({ behavior: "smooth", block: "start" }); });
+  }
+  $("fm-reg").onclick = function () { fmode(false); };
+  $("fm-all").onclick = function () { fmode(true); };
+  $("fq").oninput = function () { if (FALL) drawAll(); };
+
+  var FCUR = null;
+  function fquery(s, e) {
+    var q = { sido: $("fsido").value, sigungu: $("fsigungu").value, fest: $("fname").value, year: $("fyear").value };
+    if (s && e) { q.s = s; q.e = e; }
+    return "?" + new URLSearchParams(q);
+  }
+  function frun(s, e) {
+    var q = new URLSearchParams({ sido: $("fsido").value, sigungu: $("fsigungu").value, id: $("fname").value, year: $("fyear").value });
+    if (s && e) { q.set("s", s); q.set("e", e); }
+    $("fgo").disabled = true; $("fhint").hidden = false; $("fhint").textContent = "불러오는 중…";
+    getJSON("/api/fest_view?" + q).then(function (r) {
+      if (!r.ok || r.j.error) { $("fresult").hidden = true; $("fhint").textContent = (r.j && r.j.error) || "조회하지 못했습니다."; return; }
+      var j = r.j, f = j["축제"];
+      FCUR = f;
+      $("ftitle").textContent = f["이름"] + " 기간 전후 유입";
+      $("ftitle").appendChild(el("span", { cls: "tag" }, "참고"));
+      $("fscope").textContent = "축제 현장 방문객이 아니라 " + $("fsigungu").value + " 전체로 들어온 외부 유입을 보여 줍니다. 그래서 축제 효과가 그래프에 그대로 나타나지 않을 수 있습니다.";
+      $("fperiod").textContent = "축제 기간: " + f["기간"] + (f["고침"] ? " (고친 날짜)" : "");
+      $("fs").value = f["시작"]; $("fe").value = f["끝"];
+      FJ = j; FF = f;
+      setAdj("fadjbtn", "fadjnote", false); $("fadjbtn").hidden = !j["비교 가능"];
+      fpaint();
+      $("fevsrc").textContent = "막대 아래 줄은 그 주에 있었던 일: " + (j["일정 출처"] || []).join(", ");
+      $("fshareurl").disabled = false;
+      $("fbregion") && ($("fbregion").value = j["지역"]);
+      $("fbperiod") && ($("fbperiod").value = f["이름"].slice(0, 30) + " " + $("fyear").value);
+      $("fresult").hidden = false; $("fhint").hidden = true;
+      URLS.fest = fquery(f["고침"] ? f["시작"] : "", f["고침"] ? f["끝"] : "");
+      if (!$("p-fest").hidden) history.replaceState(null, "", location.pathname + URLS.fest);
+    }).catch(function () { $("fhint").textContent = "조회하지 못했습니다. 잠시 뒤 다시 시도해 주세요."; })
+      .then(function () { fready(); });
+  }
+  var FJ = null, FF = null;
+  function fpaint() {
+    var j = FJ, f = FF, on = adjOn("fadjbtn");
+    var FW = pick(j.weeks, on);
+    FW.forEach(function (w) { if (w.fest) { var nf = function (t) { return t.indexOf(f["이름"]) < 0; }; w.events = w.events.filter(nf); w.ev_other = (w.ev_other || []).filter(nf); } });   // 꼬리표가 있으니 축제 이름은 되풀이하지 않음
+    var all = FW;
+    if (window.innerWidth < 640) {                                // 휴대폰: 보기 좋게 앞뒤 1달씩 줄임(두 달에 걸치면 그 달들만)
+      var mo = function (w) { return Math.floor(w.wo / 1000) * 12 + Math.floor(w.wo / 10) % 100; };
+      var fm = FW.filter(function (w) { return w.fest; }).map(mo);
+      if (fm.length) {
+        var a = Math.min.apply(null, fm), z = Math.max.apply(null, fm), p = a === z ? 1 : 0;
+        FW = FW.filter(function (w) { return mo(w) >= a - p && mo(w) <= z + p; });
+      }
+    }
+    drawChart($("fbars"), $("fchart"), FW, true);
+    var ul = $("flines"); ul.textContent = "";
+    var strong = all.some(function (w) { return w.fest && /^(up|down)[23]$/.test(w.level); });
+    if (!strong) ul.appendChild(el("li", null, "축제 기간에 뚜렷한 변화가 잡히지 않았습니다(효과가 없었다는 뜻은 아닙니다)."));
+    (j[on ? "문장_비교" : "문장"] || []).forEach(function (t) { if (!(strong === false && /많이 늘어나거나 줄어든 주는 없었습니다/.test(t))) ul.appendChild(el("li", null, t)); });
+    var notes = (j["주의"] || []).concat(on ? (j["주의_비교"] || []) : []);
+    var n = $("fnotes"); n.textContent = "";
+    notes.forEach(function (t) { n.appendChild(el("div", null, t)); });
+    n.hidden = !notes.length;
+  }
+  $("fadjbtn").onclick = function () { setAdj("fadjbtn", "fadjnote", !adjOn("fadjbtn")); if (FJ) fpaint(); };
+  $("fpick").onsubmit = function (e) { e.preventDefault(); $("feditbox").hidden = true; if (!$("fgo").disabled) frun(); };
+  $("fedit").onclick = function () { $("feditbox").hidden = !$("feditbox").hidden; };
+  $("fre").onclick = function () { if ($("fs").value && $("fe").value) frun($("fs").value, $("fe").value); };
+  $("fshareurl").onclick = function () { copyText($("fshareurl"), location.origin + location.pathname + (URLS.fest || ""), "링크 복사"); };
+
+  // ---------- 의견 ----------
+  $("fbsend").onclick = function () {
+    var out = $("fbout"); out.className = "msg";
+    if (!$("fbmsg").value.trim()) { out.className = "msg err"; out.textContent = "내용을 적어 주세요."; return; }
+    $("fbsend").disabled = true;
+    fetch("/api/feedback", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: $("fbkind").value, region: $("fbregion").value, period: $("fbperiod").value, message: $("fbmsg").value }) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j.error) { out.className = "msg err"; out.textContent = j.error; return; }
+        out.className = "msg ok";
+        out.textContent = "잘 받았습니다. 따로 답장은 드리지 않으며, 반영된 내용은 사이트에 바로 적용됩니다.";
+        $("fbmsg").value = "";
+      })
+      .catch(function () { out.className = "msg err"; out.textContent = "보내지 못했습니다. 잠시 뒤 다시 시도해 주세요."; })
+      .then(function () { $("fbsend").disabled = false; });
+  };
+})();
+</script>
+</body>
+</html>

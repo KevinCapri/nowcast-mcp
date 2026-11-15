@@ -1,0 +1,23 @@
+# 공식 MCP 레지스트리(registry.modelcontextprotocol.io)에 server.json을 올린다.
+# GitHub 저장소 화면 → Actions → "Publish to MCP Registry" → Run workflow 로 손으로 실행.
+# GitHub OIDC로 로그인하므로 비밀번호·키가 필요 없다(이름은 io.github.KevinCapri/...).
+name: Publish to MCP Registry
+on:
+  workflow_dispatch:
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: mcp-publisher 설치
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+      - name: 검증
+        run: ./mcp-publisher validate
+      - name: GitHub OIDC 로그인
+        run: ./mcp-publisher login github-oidc
+      - name: 게시
+        run: ./mcp-publisher publish
