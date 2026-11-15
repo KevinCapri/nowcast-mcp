@@ -46,6 +46,18 @@ def in_range(sido, sigungu, a, b):
     return out
 
 
+def after_open_short(sido, sigungu, mon):
+    """after_open의 짧은 안내(일정·전국 순위·해마다 비교의 주별 줄에 붙임)."""
+    key = analysis.canon(sido, sigungu)
+    end = mon + dt.timedelta(days=6)
+    for r in _load():
+        o = r["_open"]
+        if r["_key"] == key and r.get("big") == "Y" and o and end - dt.timedelta(days=AFTER_DAYS) < o <= end:
+            return (f"{r['name']} 개점({o.month}월 {o.day}일) 뒤 8주 안이다. 평소 값이 개점 전 수준이라 '많음'이 이어질 수 있다. "
+                    "개점 때문이라고 단정하지 말 것.")
+    return None
+
+
 def after_open(sido, sigungu, mon):
     """효과가 확인된 큰 시설이 그 주 또는 그 전 8주 안에 문을 열었으면 안내."""
     key = analysis.canon(sido, sigungu)

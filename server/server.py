@@ -633,9 +633,13 @@ def compare_same_week(sido: Sido, sigungu: Sigungu, week: Week,
             row["없음"] = r["error"]
             return row
         row.update({k: r[k] for k in keep if k in r})
-        ev = {k: v for k, v in r.items() if k.startswith("그 주 ") and v}
+        ev = {k: v for k, v in r.items() if k.startswith("그 주 ") and v and "개점 안내" not in k}
         if ev:
             row["그 주에 있었던 일"] = ev
+        ao = safe.call("개점 뒤 안내(해마다)", facility.after_open_short, sido, sigungu,
+                       dt.date.fromisoformat(analysis.week_dates(w)[:10]))
+        if ao:
+            row["개점 뒤 안내"] = ao
         return row
 
     me = one(wo, "물은 주")
@@ -656,6 +660,8 @@ def compare_same_week(sido: Sido, sigungu: Sigungu, week: Week,
                "'건'은 사람 수가 아니다. '명'으로 바꿔 말하지 말 것."],
         "출처": SOURCE,
     }
+    if any("개점 뒤 안내" in x for x in rows):
+        out["주의"].insert(0, "'개점 뒤 안내'가 붙은 해는 판정이 부풀려졌을 수 있으니, 그 해와 견줘 '더 왔다·덜 왔다'고 말하지 말 것.")
     if tag:
         out["주의"].insert(0, f"{tag} 주라서 지난 해도 그 해 {tag} 주와 견줬다(날짜가 달라도).")
     return _answer(out, "judge", SOURCE, calc=True)
@@ -681,8 +687,14 @@ def find_unusual_regions(week: Week = "", top: int = 15) -> dict:
     rows = analysis.rank_week(db, wo)
     if not rows:
         return {"error": "그 주차 자료가 없거나 판정할 수 없다. get_data_status로 최신 주차를 확인할 것."}
-    up = [x for x in rows if x["배수"] > 0][:top]
-    down = [x for x in rows if x["배수"] < 0][:top]
+    up = [dict(x) for x in rows if x["배수"] > 0][:top]
+    down = [dict(x) for x in rows if x["배수"] < 0][:top]
+    mon = dt.date.fromisoformat(analysis.week_dates(wo)[:10])
+    for x in up + down:
+        sd, _, sg = x["지역"].partition(" ")
+        ao = safe.call("개점 뒤 안내(순위)", facility.after_open_short, sd, sg, mon)
+        if ao:
+            x["개점 뒤 안내"] = ao
     h = analysis.holidays(db).get(wo)
     notes = []
     if analysis.is_long_holiday(h):

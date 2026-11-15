@@ -123,8 +123,13 @@ def region_calendar(db, sido, sigungu, start, end=""):
         for w in weather.get(wo, []):
             ev.append({"종류": "날씨", "이름": w, "출처": f"기상청 {stn} 관측소"})
         n_ev += bool(ev)
+        inflow = safe.call("그 주 유입", _inflow, P, wo) if wo else "이동 자료에 없는 주"
+        if isinstance(inflow, dict):
+            ao = safe.call("개점 뒤 안내(일정)", facility.after_open_short, sido, sigungu, mon)
+            if ao:
+                inflow["개점 뒤 안내"] = ao
         weeks.append({"주차": P["me"][wo][0] if wo else _label(mon), "기간(월~일)": f"{mon}~{sun}", "일정": ev,
-                      "그 주 유입": safe.call("그 주 유입", _inflow, P, wo) if wo else "이동 자료에 없는 주"})
+                      "그 주 유입": inflow})
     hist = safe.call("벚꽃·단풍 지난 기록(일정)", season.history, P, sido, sigungu,
                      skip_year=range(a.year, z.year + 1), default=[]) if season.spots(sido, sigungu) else []
     out = {"지역": f"{sido} {sigungu}", "기간": f"{a}~{z}", "일정 있는 주": n_ev, "주별": weeks,
