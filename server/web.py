@@ -26,6 +26,7 @@ import feedback
 import festival as F
 import guard
 import lifepop
+import perf as PF
 
 STATIC = Path(__file__).with_name("static")
 MAX_WEEKS = 56           # 지역 탭: 최대 12개월(웹 화면에서 막음) 넘는 요청만 자름
@@ -373,7 +374,21 @@ def _events(sido, sigungu, P, wos):
         if names:
             fest_weeks[wo] = names
             ev[wo] += names   # 다 넘김. 줄이는 건 화면에서
-    return ev, fest_weeks, stn, nhol
+    # 큰 공연장 공연(KOPIS). 축제 뒤에 붙임
+    has_perf = False
+    try:
+        a, z = _monday(wos[0]), _monday(wos[-1]) + dt.timedelta(days=6)
+        perfs = PF.in_range(_conn(), sido, sigungu, a, z)
+        has_perf = _conn().execute("SELECT 1 FROM kopis_perf LIMIT 1").fetchone() is not None
+        for wo in wos:
+            mon = _monday(wo)
+            sun = mon + dt.timedelta(days=6)
+            for p in perfs:
+                if p["시작"] <= sun.isoformat() and p["끝"] >= mon.isoformat() and p["이름"] not in ev[wo]:
+                    ev[wo].append(p["이름"])
+    except Exception:
+        pass
+    return ev, fest_weeks, stn, nhol, has_perf
 
 
 # ---------- 조회 ----------
@@ -475,7 +490,7 @@ def view(sido, sigungu, start_wo, end_wo):
     wos = wos[-MAX_WEEKS:]
     js = {wo: A.judge_week(P, wo) for wo in wos}
     opp = []
-    ev, fest_weeks, stn, nhol = _events(sido, sigungu, P, wos)
+    ev, fest_weeks, stn, nhol, has_perf = _events(sido, sigungu, P, wos)
     weeks = []
     for wo in wos:
         j = js[wo]
@@ -529,6 +544,8 @@ def view(sido, sigungu, start_wo, end_wo):
     if stn:
         srcs.append(f"날씨(기상청 {stn} 관측소, 눈 5cm·비 80mm 이상만 표시)")
     srcs.append("축제(문화체육관광부 지역축제 개최 계획, 연초 계획 일정)")
+    if has_perf:
+        srcs.append(PF.SOURCE)
     try:
         r = db.execute("SELECT latest, fetched_ok FROM source_status WHERE name LIKE '나우캐스트%유입%'").fetchone()
         as_of = {"최신 주차": r[0], "받아 온 날": r[1]} if r else None

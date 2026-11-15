@@ -11,6 +11,7 @@ from typing import Literal
 
 import analysis
 import lifepop
+import perf
 import feedback
 import festival
 
@@ -368,6 +369,10 @@ def analyze_region_week(sido: str, sigungu: str, week: str) -> dict:
         fest = festival.in_week(sido, sigungu, mon, hd)
         if fest:
             r["그 주 축제(문체부 계획 일정, 원인 단정 금지)"] = fest
+        pf = perf.in_range(db, sido, sigungu, mon, mon + dt.timedelta(days=6))
+        if pf:
+            r["그 주 큰 공연장 공연(KOPIS, 원인 단정 금지)"] = pf
+            r["공연 자료 안내"] = perf.NOTE
         r["함께 볼 것"] = ["get_weather(같은 주 날씨)", "get_datalab_daily(그 주 일별 외지인 방문자, 약 한 달 늦게 나옴)"]
         sus = analysis.suspect(sido, sigungu, wo)
         if sus:
