@@ -15,7 +15,8 @@ DB = Path(os.environ.get("NOWCAST_DB", DEFAULT_DB))
 
 def connect():
     DB.parent.mkdir(parents=True, exist_ok=True)
-    return sqlite3.connect(DB)
+    # 서버가 긴 읽기(연도별 흐름 검증 등)를 하는 동안 쓰기가 막혀도 바로 실패하지 않게 기다린다(기본 5초 → 120초)
+    return sqlite3.connect(DB, timeout=120)
 
 
 def key(name):
