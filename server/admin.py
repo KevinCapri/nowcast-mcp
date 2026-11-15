@@ -58,13 +58,13 @@ def _login_page(msg=""):
     m = f'<p class="err">{_e(msg)}</p>' if msg else ""
     return f"""<!doctype html><html lang="ko"><head><meta charset="utf-8">
 <meta name="robots" content="noindex, nofollow"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>운영 현황</title><style>
+<title>로그인</title><style>
 body{{font-family:Pretendard,'Noto Sans KR',system-ui,sans-serif;background:#f5f6f8;color:#1f2937;margin:0}}
 form{{max-width:320px;margin:18vh auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px}}
-h1{{font-size:18px;margin:0 0 14px}} input{{width:100%;box-sizing:border-box;height:42px;border:1px solid #d1d5db;border-radius:8px;padding:0 12px;font:inherit}}
+input{{width:100%;box-sizing:border-box;height:42px;border:1px solid #d1d5db;border-radius:8px;padding:0 12px;font:inherit}}
 button{{margin-top:12px;width:100%;height:42px;border:0;border-radius:8px;background:#1e3a8a;color:#fff;font:inherit;cursor:pointer}}
 .err{{color:#c2410c;font-size:14px;margin:10px 0 0}}
-</style></head><body><form method="post" action="/admin"><h1>운영 현황</h1>
+</style></head><body><form method="post" action="/admin">
 <input type="password" name="pw" placeholder="비밀번호" autocomplete="current-password" autofocus required>
 <button type="submit">들어가기</button>{m}</form></body></html>"""
 
