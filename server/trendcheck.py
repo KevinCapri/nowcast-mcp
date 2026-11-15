@@ -134,6 +134,8 @@ def run(db):
         "2019→2025 몫 변화": {"상관": _corr(lr_nc, lr_dl), "순위상관": _spear(lr_nc, lr_dl), "방향 일치(%)": _agree(lr_nc, lr_dl)},
         "변화 크기별 방향 일치(나우캐스트 몫 변화 절댓값 기준)": {
             "해마다(1년 간격, 모든 해)": buckets(yy_sh_nc, yy_sh_dl),
+            "최근 1년 간격(2023→24, 2024→25)": buckets(window(2023, 2024)[0] + window(2024, 2025)[0],
+                                                window(2023, 2024)[1] + window(2024, 2025)[1]),
             "3년 간격(2019→22, 2022→25)": buckets(window(2019, 2022)[0] + window(2022, 2025)[0],
                                               window(2019, 2022)[1] + window(2022, 2025)[1]),
             "2019→2025": buckets(lr_nc, lr_dl),
