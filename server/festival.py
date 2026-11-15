@@ -20,6 +20,7 @@ from pathlib import Path
 from statistics import mean, median
 
 import analysis as A
+import safe
 
 CSV = Path(__file__).with_name("festivals.csv")
 BANDS = {"2~3.5배": ((-0.04, 0.05), (-0.12, 0.11)), "3.5배 초과": ((-0.08, 0.02), (-0.11, 0.05))}
@@ -29,7 +30,14 @@ def _load():
     rows = []
     with open(CSV, encoding="utf-8") as f:
         for r in csv.DictReader(f):
-            r["y"] = int(r["y"])
+            try:
+                r["y"] = int(r["y"])
+                for k in ("s", "e"):
+                    if r.get(k):
+                        dt.date.fromisoformat(r[k])
+            except Exception as e:
+                safe.bad_row("festivals.csv", r, e)
+                continue
             rows.append(r)
     return rows
 

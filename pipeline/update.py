@@ -126,6 +126,23 @@ def write_source_status(st):
     con.close()
 
 
+def manual_alert(st):
+    """손으로 넣는 자료의 '다음 갱신 예상'이 지났으면 일주일에 한 번 메일(server/manual_sources.json)."""
+    sys.path.insert(0, str(HERE.parent / "server"))
+    import manual
+    due_ = [s for s in manual.status() if s["갱신 시점 지남"]]
+    last = st.get("manual_alert", {}).get("last")
+    if not due_ or (last and (now() - dt.datetime.fromisoformat(last)).days < 7):
+        return
+    send("손으로 넣는 자료 확인할 때 됨: " + ", ".join(s["자료"] for s in due_),
+         "\n".join(f"- {s['자료']}: 다음 갱신 예상 {s['다음 갱신 예상']} ({s['갱신 때']}), 출처 {s['출처']}, "
+                   f"지금 자료 기준 {s['자료 기준(가장 늦은 날짜)']}" for s in due_)
+         + "\n\n받아서 넣은 뒤 server/manual_sources.json의 '받은 날'·'다음 갱신'을 고칠 것. "
+           "올리기 전 python pipeline/check_manual_data.py")
+    st["manual_alert"] = {"last": now().isoformat(timespec="seconds")}
+    save_status(st)
+
+
 def main():
     DATA.mkdir(parents=True, exist_ok=True)
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
@@ -164,6 +181,10 @@ def main():
             write_source_status(st)
         except Exception as e:
             print("source_status 계산 실패:", e, flush=True)
+        try:
+            manual_alert(st)
+        except Exception as e:
+            print("손 자료 갱신 알림 확인 실패:", e, flush=True)
         if failed:
             send(f"자료 갱신 실패: {', '.join(failed)}",
                  "\n\n".join(f"[{n}]\n{st[n].get('last_error', '')}" for n in failed)

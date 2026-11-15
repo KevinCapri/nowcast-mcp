@@ -11,6 +11,8 @@ import datetime as dt
 from pathlib import Path
 from statistics import mean
 
+import safe
+
 SOURCE = "벚꽃 만발·단풍 절정(기상청 계절관측)"
 
 # (시도, 시군구) → (종류, 명소 이름, 계절관측 구분, 관측 지점, 날짜로 쓸 단계)
@@ -60,7 +62,10 @@ def _dates():
         try:
             with open(Path(__file__).with_name("kma_season.csv"), encoding="utf-8") as f:
                 for r in csv.DictReader(f):
-                    _D[(r["구분"], r["지점"], r["단계"], int(r["연도"]))] = dt.date.fromisoformat(r["날짜"])
+                    try:
+                        _D[(r["구분"], r["지점"], r["단계"], int(r["연도"]))] = dt.date.fromisoformat(r["날짜"])
+                    except Exception as e:
+                        safe.bad_row("kma_season.csv", r, e)
         except FileNotFoundError:
             pass
     return _D

@@ -1,0 +1,20 @@
+# PR마다 기본 검사(claude/변경_관리_원칙.md): 코드가 읽히는지, 손으로 넣는 자료 파일 형식·KBO 합계가 맞는지.
+# 판정 회귀 시험(tests/regression.py)은 자료 DB가 있어야 해서 PR 전에 따로 돌린다.
+name: 기본 검사
+
+on:
+  pull_request:
+    branches: ['main']
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 코드 문법
+        run: python -m compileall -q server pipeline tests
+      - name: 손으로 넣는 자료 파일
+        run: python pipeline/check_manual_data.py

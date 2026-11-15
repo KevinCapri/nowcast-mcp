@@ -12,6 +12,8 @@
 """
 import csv
 import re
+
+import safe
 import datetime as dt
 from collections import defaultdict
 from pathlib import Path
@@ -57,9 +59,14 @@ def _load():
     try:
         with open(Path(__file__).with_name("kbo_games.csv"), encoding="utf-8") as f:
             for r in csv.DictReader(f):
-                if r["구장"] not in STADIUM:
+                try:
+                    if r["구장"] not in STADIUM:
+                        raise ValueError(f"모르는 구장 {r['구장']}")
+                    d = dt.date.fromisoformat(r["날짜"])
+                    int(r["관중수"] or 0)
+                except Exception as e:
+                    safe.bad_row("kbo_games.csv", r, e)
                     continue
-                d = dt.date.fromisoformat(r["날짜"])
                 mon = d - dt.timedelta(days=d.weekday())
                 _W[(_key(*STADIUM[r["구장"]]), mon)].append(r)
                 a, b = _SEASON.get(d.year, (mon, mon))
