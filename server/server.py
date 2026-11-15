@@ -15,6 +15,7 @@ import perf
 import baseball
 import season
 import safe
+import regioncal
 import bigevents
 import feedback
 import festival
@@ -46,9 +47,11 @@ INSTRUCTIONS = (
     "'이 자료로는 원인을 확정할 수 없다'를 먼저 말한 뒤 같은 시기에 있었던 일은 '같은 시기에 ~가 있었다'로만 말할 것. "
     "물가·고용 같은 일반 통계는 이 서비스 범위 밖이므로 KOSIS 국가통계 MCP를 안내할 것. "
     "이용자가 이 서비스에 없는 자료를 찾으면 대화에서 한 번만 '이 자료를 서비스에 넣어 달라고 개발자에게 요청할까요?'라고 묻고, "
-    "그러겠다고 할 때만 report_issue(kind='자료 추가 요청')로 보낼 것."
+    "그러겠다고 할 때만 report_issue(kind='자료 추가 요청')로 보낼 것. "
+    "'그 달 그 지역에 무슨 행사·경기가 있었나', '언제였나'는 get_region_calendar로, '올해(그해) 벚꽃·단풍 언제였나'는 "
+    "get_bloom_foliage로 답하고, 결과에 함께 나오는 그 주 유입으로 '그래서 사람이 많이 왔나'까지 이어서 답할 것."
 )
-mcp = MCPServer("nowcast-mobility", title=SERVICE, instructions=INSTRUCTIONS, version="0.2.0",
+mcp = MCPServer("nowcast-mobility", title=SERVICE, instructions=INSTRUCTIONS, version="0.3.0",
                 log_level=os.environ.get("LOG_LEVEL", "INFO"))
 
 SOURCE = "출처: 국가데이터처 KOBIGS 나우캐스트, 통신 모바일 인구이동량(SK텔레콤 통신자료 기반 추정)"
@@ -66,6 +69,8 @@ NATURE = {
     "datalab": "방문자 수는 한국관광공사가 통신자료로 추정해 공개한 값(하루 단위 사람 수)이다. 이 서비스가 계산한 값이 아니다.",
     "weather": "기상청 관측값이다.",
     "rank": "이동 건수는 국가데이터처 공표 통계, 판정과 순위는 이 서비스의 비공식 계산이다.",
+    "calendar": "일정은 각 기관 자료(천문연구원·문체부·KBO·기상청·KOPIS·정부 발표)이고, 이동 건수는 국가데이터처 공표 통계, "
+                "그 주 판정·야구 몫 추정·지난 기록은 이 서비스의 비공식 계산이다. 셋을 구분해 말할 것.",
 }
 RULES = {
     "judge": ["'평소 출렁임의 몇 배'는 결과 값을 소수 한 자리 그대로 말할 것(1.9를 '약 2배'로 반올림하면 판정 기준과 어긋나 보인다).",
@@ -190,6 +195,8 @@ def get_metadata() -> dict:
         ],
         "도구 사용 규칙": [
             "'평소와 다른가·얼마나 늘었나'는 analyze_region_week로 판정할 것. 직접 평균을 내서 판정하지 말 것.",
+            "'그때 무슨 일이 있었나·언제였나'는 get_region_calendar(지역·기간), 그해 벚꽃·단풍 날짜는 get_bloom_foliage로 볼 것. "
+            "둘 다 그 주 유입 판정을 함께 주므로 '그래서 사람이 많이 왔나'까지 이어서 답할 것.",
             "공표 전 달의 생활인구는 estimate_life_pop으로만 추정할 것. 다른 통계표를 조합해 즉석에서 비율을 계산하지 말 것"
             "(검증된 방법과 범위가 도구에만 들어 있다).",
             "자료가 어디까지 있는지는 get_data_status로 확인할 것.",
@@ -645,6 +652,33 @@ def report_issue(message: str,
       message에는 어떤 자료가 왜 필요한지, link에는 그 자료가 있는 공개 페이지 주소(http로 시작, 하나)를 넣을 것. 파일은 받지 않음.
     - 보낸 뒤에는 '받았다, 따로 답장은 없고 반영된 내용은 서비스에 바로 적용된다'고만 전할 것."""
     return feedback.submit(message, kind, region, period, tool, link)
+
+
+@mcp.tool()
+def get_region_calendar(sido: str, sigungu: str, start: str, end: str = "") -> dict:
+    """한 시군구의 한 기간에 있었던 일(공휴일·축제·대형 행사·프로야구 홈경기·벚꽃 만발·단풍 절정·큰 공연·큰 눈비)을
+    주별로 모아, 주마다 그 주의 관외 유입 판정을 함께 돌려준다.
+    - '이번 달 경주에 무슨 행사 있었어?', '10월 대구 포스트시즌 경기랑 관중은?', '그때 사람 많이 왔어?'에 쓴다.
+    - start·end는 'YYYY-MM-DD' 또는 'YYYY-MM'. start만 'YYYY-MM'이면 그 달 전체, 날짜 하나면 그 주. 한 번에 1년까지.
+    - '그 주 유입'은 analyze_region_week와 같은 계산(판정 문구·배수를 그대로 전할 것). 자세한 판정은 그 도구로.
+    - 일정은 '같은 시기에 있었던 일'로만 말하고 유입 변화의 원인으로 단정하지 말 것.
+    - '자료 기준' 뒤의 일은 없다. 그 뒤를 물으면 이 서비스에 어디까지 있는지 말하고 원출처를 안내할 것.
+    - sido·sigungu는 list_regions로 확인한 이름."""
+    r = regioncal.region_calendar(db, sido, sigungu, start, end)
+    return _answer(r, "calendar", "일정: 한국천문연구원 특일 정보, 문화체육관광부 지역축제 개최 계획, 한국야구위원회(KBO) 경기 기록, "
+                   "기상청 계절관측·종관기상관측, 공연예술통합전산망(KOPIS), 정부·주최 측 발표 / " + SOURCE.removeprefix("출처: "),
+                   calc=True)
+
+
+@mcp.tool()
+def get_bloom_foliage(year: int, kind: str) -> dict:
+    """그해 전국 벚꽃(개화·만발) 또는 단풍(유명산 첫 단풍·절정, 단풍나무 표준목) 관측일(기상청 계절관측)을 돌려준다.
+    유입 효과가 확인된 명소(단풍 17곳, 벚꽃 12곳)는 그 주 관외 유입 판정과 이 지역 지난 기록을 함께 준다.
+    - '올해 내장산 단풍 절정 언제였어?', '작년 진해 벚꽃 만발은?'과 이어지는 '그때 사람 많이 왔어?'에 쓴다.
+    - kind는 '벚꽃' 또는 '단풍'. 관측이 끝난 날짜만 있다(예보 없음). 없는 해는 기상청 날씨누리 '봄꽃·단풍'을 안내할 것.
+    - 유입 변화를 벚꽃·단풍 때문이라고 단정하지 말 것."""
+    r = regioncal.bloom_foliage(db, year, kind)
+    return _answer(r, "calendar", "기상청 기상자료개방포털 계절관측 / " + SOURCE.removeprefix("출처: "), calc=True)
 
 
 @mcp.tool()
