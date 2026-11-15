@@ -13,6 +13,7 @@ import analysis
 import lifepop
 import perf
 import baseball
+import season
 import feedback
 import festival
 
@@ -191,6 +192,16 @@ def get_metadata() -> dict:
             "이용자가 값이나 설명이 이상하다고 하거나, 결과에 원자료 오류 가능성 같은 주의가 나오면 "
             "'운영자에게 알릴 수 있다(report_issue)'고 한 번 안내할 것. 실제로 보내는 것은 이용자가 원할 때만.",
         ],
+        "함께 보여 주는 일정과 검증(2026-11)": {
+            "원칙": "판정은 실제로 들어온 양 그대로다. 아래 일정은 '같은 시기에 있었던 일'로만 붙이며 원인으로 단정하지 않는다.",
+            "프로야구 홈경기(KBO)": "구장이 있는 9개 시군구에서 2023~2026년 해마다 관중이 많은 주일수록 관외 유입이 많았다. "
+                                "'프로야구 홈경기 몫 추정(%)'은 그 주 관중이 시즌 평균과 다른 만큼의 추정치(2023~2024로 계수를 구하고 "
+                                "2025~2026에서 확인: 몫을 빼면 평소 출렁임 21% 감소).",
+            "벚꽃 만발·단풍 절정(기상청 계절관측)": "관광형 시군구에서 단풍 절정 주(21곳 중 17곳 증가, 중앙값 +9.8%), "
+                                          "벚꽃 만발 주(14곳 중 12곳 증가, 중앙값 +12.6%)에 관외 유입이 늘었다(2023~2026). "
+                                          "효과가 확인된 명소 지역에만 '그 주 만발·절정'과 '이 지역 지난 기록'을 붙인다.",
+            "대형 행사·축제·공연": "전국체전·국제행사(정부·주최 측 발표), 문체부 축제 계획, KOPIS 큰 공연장 공연을 같은 방식으로 붙인다.",
+        },
         "출처": SOURCE,
     }
 
@@ -381,6 +392,19 @@ def analyze_region_week(sido: str, sigungu: str, week: str) -> dict:
         else:
             r.pop("프로야구 홈경기 몫 추정(%)", None)
             r.pop("야구 몫 뺀 판정(참고)", None)
+        sw = season.in_week(sido, sigungu, mon)
+        if sw:
+            r["그 주 벚꽃 만발·단풍 절정(기상청 관측, 원인 단정 금지)"] = sw
+        if season.spots(sido, sigungu):
+            try:
+                hist = season.history(analysis.prepare(db, sido, sigungu), sido, sigungu, skip_year=wo // 1000)
+            except Exception:
+                hist = []
+            if hist:
+                r["이 지역 지난 기록(벚꽃·단풍)"] = hist
+                r["벚꽃·단풍 안내"] = ("지난 기록은 이 서비스가 같은 판정 계산으로 낸 과거 평균이다(묻는 해는 빼고 계산). "
+                                   "'이 지역은 그동안 단풍 절정 주에 평균 +X%였다'처럼 비교 근거로만 말하고, "
+                                   "이번 주 변화를 단풍·벚꽃 때문이라고 단정하지 말 것. 같은 주 축제와 겹치는 경우가 많다.")
         pf = perf.in_range(db, sido, sigungu, mon, mon + dt.timedelta(days=6))
         if pf:
             r["그 주 큰 공연장 공연(KOPIS, 원인 단정 금지)"] = pf
