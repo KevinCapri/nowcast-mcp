@@ -112,15 +112,44 @@ def _page(days):
     for r in rows:
         byday[r[0][:10]][1 if r[1].startswith("web:") else 0] += 1
     today = dt.datetime.now(KST).date()
-    days_list = [(today - dt.timedelta(days=i)).isoformat() for i in range(days - 1, -1, -1)]
-    mx = max([sum(v) for v in byday.values()] or [1]) or 1
+    # 30일까지는 하루씩, 90일은 주(월요일 시작)씩, 365일은 달씩 묶음
+    if days <= 30:
+        unit, key = "일", (lambda d: d)
+    elif days <= 90:
+        unit, key = "주", (lambda d: d - dt.timedelta(days=d.weekday()))
+    else:
+        unit, key = "월", (lambda d: d.replace(day=1))
+    start = today - dt.timedelta(days=days - 1)
+    buckets = []
+    for i in range(days):
+        k = key(start + dt.timedelta(days=i))
+        if not buckets or buckets[-1] != k:
+            buckets.append(k)
+    agg = defaultdict(lambda: [0, 0])
+    for d, (a, b) in byday.items():
+        try:
+            dd = dt.date.fromisoformat(d)
+        except ValueError:
+            continue
+        if dd >= start:
+            k = agg[key(dd)]; k[0] += a; k[1] += b
+    mx = max([sum(v) for v in agg.values()] or [1]) or 1
+    ttl = {"일": "날짜별", "주": "주별", "월": "달별"}[unit]
     day_html = ['<div class="days">']
-    for d in days_list:
-        a, b = byday.get(d, [0, 0])
+    for k in buckets:
+        a, b = agg.get(k, [0, 0])
         ha, hb = int(120 * a / mx), int(120 * b / mx)
-        day_html.append(f'<div class="d" title="{d}: MCP {a}, 사이트 {b}"><div class="col">'
+        if unit == "일":
+            # 30일 보기는 1일·5일 간격만 숫자를 적어 겹치지 않게
+            lab = f"{k.day}" if days <= 7 or k.day == 1 or k.day % 5 == 0 else ""
+            tip = k.isoformat()
+        elif unit == "주":
+            lab, tip = f"{k.month}/{k.day}", f"{k.isoformat()} 주"
+        else:
+            lab, tip = f"{k.month}월", f"{k.year}년 {k.month}월"
+        day_html.append(f'<div class="d" title="{tip}: MCP {a}, 사이트 {b}"><div class="col">'
                         f'<i class="w" style="height:{hb}px"></i><i class="m" style="height:{ha}px"></i></div>'
-                        f'<span>{int(d[8:])}</span></div>')
+                        f'<span>{lab}</span></div>')
     day_html.append("</div>")
 
     def group(rs, key):
@@ -181,7 +210,7 @@ h2{{font-size:16px;margin:0 0 12px}} .sub{{color:#6b7280;font-size:13px}}
 .card{{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px;margin:12px 0;overflow-x:auto}}
 .two{{display:grid;grid-template-columns:1fr 1fr;gap:12px}} @media(max-width:760px){{.two{{grid-template-columns:1fr}}}}
 .two .card{{margin:0}}
-.days{{display:flex;gap:2px;align-items:flex-end;min-height:140px}} .d{{flex:1;min-width:6px;text-align:center;font-size:10px;color:#9ca3af}}
+.days{{display:flex;gap:2px;align-items:flex-end;min-height:140px}} .d{{flex:1;min-width:0;text-align:center;font-size:10px;color:#9ca3af;white-space:nowrap;overflow:hidden}}
 .d .col{{display:flex;flex-direction:column;justify-content:flex-end;height:122px}} .d i{{display:block;width:100%}}
 .d .m{{background:#2563eb}} .d .w{{background:#93c5fd}}
 .lg i{{display:inline-block;width:10px;height:10px;margin:0 4px 0 10px;vertical-align:-1px}}
@@ -201,7 +230,7 @@ table.list th{{color:#6b7280;font-weight:500}} td.a{{color:#4b5563;word-break:br
 <div class="c">사이트 조회<b>{len(web):,}</b></div>
 <div class="c">들어온 의견(전체)<b>{fb_total:,}</b></div>
 </div>
-<div class="card"><h2>날짜별 <span class="lg sub"><i style="background:#2563eb"></i>MCP 콜<i style="background:#93c5fd"></i>사이트 조회</span></h2>{''.join(day_html)}</div>
+<div class="card"><h2>{ttl} <span class="lg sub"><i style="background:#2563eb"></i>MCP 콜<i style="background:#93c5fd"></i>사이트 조회</span></h2>{''.join(day_html)}</div>
 <div class="two">
 <div class="card"><h2>도구별 MCP 콜</h2>{_bars(tools)}{f'<p class="sub">외부 점검 호출(없는 도구 이름) {probes:,}건은 뺐습니다.</p>' if probes else ''}</div>
 <div class="card"><h2>어디서 왔나 (MCP)</h2>{_bars(clients)}<p class="sub">요청에 실린 앱 정보로 짐작한 이름. 2026-11-15 이전 기록은 '기록 전'.</p></div>
