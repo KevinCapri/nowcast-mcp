@@ -1,7 +1,7 @@
 """운영자 화면(/admin): 이용 현황과 들어온 의견을 한 화면에서 본다.
 
 - 앱 설정 ADMIN_PW가 없으면 이 주소는 없는 것처럼(404) 답한다
-- 비밀번호(ADMIN_PW) 하나만 넣는 로그인 화면. 맞으면 7일 동안 유지되는 쿠키를 준다
+- 비밀번호(ADMIN_PW) 하나만 넣는 로그인 화면. 로그아웃 버튼, 30분 동안 쓰지 않으면 저절로 로그아웃, 브라우저를 닫아도 로그아웃
 - 검색엔진에 잡히지 않게 noindex. 사이트 어디에도 링크를 두지 않는다
 - 보여 주는 것: 기간별 콜 수(MCP 도구 / 사이트 조회), 도구별·연결한 곳별 콜 수와 실패, 많이 물은 지역,
   최근 호출, 들어온 의견. 이름·IP는 원래 남기지 않으므로 보여 줄 것도 없다
@@ -33,7 +33,7 @@ TOOL_KO = {
 
 
 COOKIE = "nc_admin"
-SESSION_DAYS = 7
+IDLE_MIN = 30          # 아무것도 안 하고 30분 지나면 로그아웃
 
 
 def _sign(exp: str) -> str:
@@ -41,12 +41,17 @@ def _sign(exp: str) -> str:
 
 
 def _authorized(request: Request) -> bool:
-    """로그인하면 받는 쿠키(만료 시각 + 비밀번호로 만든 서명)가 맞는지. 비밀번호를 바꾸면 기존 로그인은 모두 풀린다."""
+    """로그인 쿠키(만료 시각 + 비밀번호로 만든 서명)가 맞는지. 화면을 열 때마다 만료를 30분 뒤로 미룬다.
+    비밀번호를 바꾸면 기존 로그인은 모두 풀린다. 브라우저를 닫아도 풀린다(세션 쿠키)."""
     v = request.cookies.get(COOKIE, "")
     exp, _, sig = v.partition(".")
     if not exp.isdigit() or int(exp) < int(time.time()):
         return False
     return hmac.compare_digest(sig, _sign(exp))
+
+
+def _cookie(r, exp):
+    r.set_cookie(COOKIE, f"{exp}.{_sign(exp)}", httponly=True, secure=True, samesite="strict", path="/admin")
 
 
 def _login_page(msg=""):
@@ -183,7 +188,9 @@ table.bars i{{display:inline-block;height:10px;background:#2563eb;border-radius:
 table.list{{border-collapse:collapse;width:100%;font-size:13px}} table.list th,table.list td{{border-bottom:1px solid #eef0f3;padding:6px;text-align:left;vertical-align:top;white-space:nowrap}} table.list td.a{{white-space:normal}}
 table.list th{{color:#6b7280;font-weight:500}} td.a{{color:#4b5563;word-break:break-all}} .bad{{color:#c2410c}} .none{{color:#9ca3af;font-size:14px}}
 </style></head><body><div class="wrap">
-<h1>운영 현황</h1><div class="sub">빅데이터 Insight: 지역별 유입인구 · 이름·IP는 남기지 않음 · 한국 시간 기준</div>
+<form method="post" action="/admin" style="float:right;margin:0"><input type="hidden" name="logout" value="1">
+<button style="height:34px;padding:0 14px;border:1px solid #d1d5db;border-radius:8px;background:#fff;font:inherit;font-size:14px;cursor:pointer">로그아웃</button></form>
+<h1>운영 현황</h1><div class="sub">빅데이터 Insight: 지역별 유입인구 · 이름·IP는 남기지 않음 · 한국 시간 기준 · 30분 동안 아무것도 안 하면 로그아웃</div>
 <div class="sel">{sel}</div>
 <div class="cards">
 <div class="c">MCP 콜 수<b>{len(mcp):,}</b></div>
@@ -217,21 +224,34 @@ async def admin(request: Request):
         _fails[:] = [t for t in _fails if now - t < 60]
         if len(_fails) >= 5:
             return HTMLResponse(_login_page("잠시 뒤 다시 시도해 주세요."), status_code=429, headers=nohead)
-        body = (await request.body())[:2000].decode("utf-8", "replace")
-        pw = (parse_qs(body).get("pw") or [""])[0]
+        q = parse_qs((await request.body())[:2000].decode("utf-8", "replace"))
+        if q.get("logout"):
+            r = HTMLResponse(_login_page("로그아웃했습니다."), headers=nohead)
+            r.delete_cookie(COOKIE, path="/admin")
+            return r
+        pw = (q.get("pw") or [""])[0]
         if not hmac.compare_digest(pw.encode(), os.environ["ADMIN_PW"].encode()):
             _fails.append(now)
             return HTMLResponse(_login_page("비밀번호가 맞지 않습니다."), status_code=401, headers=nohead)
-        exp = str(int(now) + SESSION_DAYS * 86400)
         r = RedirectResponse("/admin", status_code=303, headers=nohead)
-        r.set_cookie(COOKIE, f"{exp}.{_sign(exp)}", max_age=SESSION_DAYS * 86400, httponly=True, secure=True,
-                     samesite="strict", path="/admin")
+        _cookie(r, str(int(now) + IDLE_MIN * 60))
         return r
     if not _authorized(request):
-        return HTMLResponse(_login_page(), headers=nohead)
+        msg = "오래 쓰지 않아 로그아웃됐습니다." if request.cookies.get(COOKIE) else ""
+        r = HTMLResponse(_login_page(msg), headers=nohead)
+        if msg:
+            r.delete_cookie(COOKIE, path="/admin")
+        return r
     try:
         days = int(request.query_params.get("days", "30"))
     except ValueError:
         days = 30
     days = max(1, min(days, 365))
-    return HTMLResponse(_page(days), headers=nohead)
+    r = HTMLResponse(_page(days) + _IDLE_JS, headers=nohead)
+    _cookie(r, str(int(time.time()) + IDLE_MIN * 60))       # 쓸 때마다 30분 연장
+    return r
+
+
+# 화면을 열어 둔 채 30분 지나면 저절로 로그인 화면으로
+_IDLE_JS = f"""<script>(function(){{var t;function arm(){{clearTimeout(t);t=setTimeout(function(){{location.href='/admin';}},{IDLE_MIN * 60 * 1000});}}
+['click','keydown','scroll','mousemove'].forEach(function(e){{addEventListener(e,arm,{{passive:true}});}});arm();}})();</script>"""
