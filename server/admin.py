@@ -286,3 +286,18 @@ async def admin(request: Request):
 # 화면을 열어 둔 채 30분 지나면 저절로 로그인 화면으로
 _IDLE_JS = f"""<script>(function(){{var t;function arm(){{clearTimeout(t);t=setTimeout(function(){{location.href='/admin';}},{IDLE_MIN * 60 * 1000});}}
 ['click','keydown','scroll','mousemove'].forEach(function(e){{addEventListener(e,arm,{{passive:true}});}});arm();}})();</script>"""
+
+
+async def trend_check(request: Request):
+    """연도별 흐름 검증 결과(관리자 로그인 필요, JSON). trendcheck.py 참고."""
+    if not os.environ.get("ADMIN_PW") or not _authorized(request):
+        return PlainTextResponse("Not Found", status_code=404)
+    import json
+    import trendcheck
+    from server import db
+    try:
+        r = trendcheck.run(db)
+    except Exception as e:  # noqa: BLE001
+        r = {"오류": f"{type(e).__name__}: {e}"}
+    return PlainTextResponse(json.dumps(r, ensure_ascii=False, indent=1),
+                             headers={"X-Robots-Tag": "noindex", "Cache-Control": "no-store"})
