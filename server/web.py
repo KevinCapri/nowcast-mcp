@@ -372,7 +372,7 @@ def _events(sido, sigungu, P, wos):
                 names.append(nm)
         if names:
             fest_weeks[wo] = names
-            ev[wo] += names[:2] + ([f"외 {len(names) - 2}건"] if len(names) > 2 else [])
+            ev[wo] += names   # 다 넘김. 줄이는 건 화면에서
     return ev, fest_weeks, stn, nhol
 
 

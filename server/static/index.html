@@ -77,7 +77,7 @@ textarea{padding:10px 12px;min-height:96px;resize:vertical}
 .bar{width:20px}
 .wk{font-size:12px;color:#4B5159;margin-top:8px;white-space:nowrap}
 .col.fest .wk{color:var(--ink);font-weight:600}
-.ev{margin-top:8px;min-height:40px;font-size:11px;line-height:1.35;color:#3D434B;text-align:center;padding:0 2px;word-break:keep-all}
+.ev{margin-top:8px;min-height:40px;font-size:11px;line-height:1.35;color:#3D434B;text-align:center;padding:0 2px;word-break:keep-all;overflow-wrap:anywhere;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
 .ev.none{color:#9AA0A8}
 .col.nd .axis{background:repeating-linear-gradient(90deg,#C9CED6 0 4px,transparent 4px 8px)}
 .col.nd .wk{color:#9AA0A8}
@@ -653,7 +653,7 @@ footer p{margin:0 0 6px}
     tip.appendChild(document.createTextNode(WORD[w.level] || ""));
     var evs = w.events || [];
     if (w.hol_tip) { tip.appendChild(el("br")); tip.appendChild(document.createTextNode(w.hol_tip)); evs = w.ev_other || []; }
-    if (evs.length) { tip.appendChild(el("br")); tip.appendChild(document.createTextNode(evs.join("·"))); }
+    evs.forEach(function (t) { tip.appendChild(el("br")); tip.appendChild(document.createTextNode(t)); });   // 한 줄에 하나씩 전부
     tip.hidden = false;
     var x = Math.min(Math.max(r.left + r.width / 2, tip.offsetWidth / 2 + 6), window.innerWidth - tip.offsetWidth / 2 - 6);
     tip.style.left = x + "px"; tip.style.top = Math.max(r.top - 6, tip.offsetHeight + 6) + "px";
@@ -697,7 +697,8 @@ footer p{margin:0 0 6px}
       c.appendChild(up); c.appendChild(el("div", { cls: "axis" })); c.appendChild(dn);
       c.appendChild(el("span", { cls: "wk" }, (w.wo % 10) + "주"));
       if (w.fest) c.appendChild(el("span", { cls: "ftag" }, "축제"));
-      c.appendChild(w.events.length ? el("div", { cls: "ev" }, w.events.join("·")) : el("div", { cls: "ev none" }, (w.level === "nodata" || w.fest) ? "" : "–"));
+      // 좁은 칸에는 첫 번째 것만, 나머지는 개수로. 전부는 설명창에
+      c.appendChild(w.events.length ? el("div", { cls: "ev" }, w.events[0] + (w.events.length > 1 ? " +" + (w.events.length - 1) : "")) : el("div", { cls: "ev none" }, (w.level === "nodata" || w.fest) ? "" : "–"));
       c.onmouseenter = function () { showTip(c, w); };
       c.onmouseleave = function () { if (tipOn === c) hideTip(); };
       c.onfocus = function () { showTip(c, w); };
