@@ -315,6 +315,16 @@ def judge_week(P, week_order):
         method = "평소 대비(비교군 없음)"
     ratio = round(final / s, 1) if (final is not None and s) else None
     verdict = judge(ratio)
+    # 프로야구 홈경기 몫(구장이 있는 9개 시군구, 시즌 중만). 판정은 그대로 두고(야구로 들어온 것도 실제 유입)
+    # 몫과 '야구 몫 뺀 판정'을 참고로만 붙인다. baseball.py 참고
+    bb = ratio_nobb = verdict_nobb = None
+    if final is not None and s:
+        import datetime as _dt
+        import baseball
+        bb = baseball.adjust(P["sido"], P["sigungu"], _dt.date.fromisoformat(week_dates(week_order)[:10]))
+        if bb is not None:
+            ratio_nobb = round((final - bb) / s, 1)
+            verdict_nobb = judge(ratio_nobb)
     # 웹 기본 화면용: 아무것도 빼지 않은 평소 대비 그대로(실제로 들어온 양)
     s_raw = _mad(plain(raw))
     ratio_plain = round(dev / s_raw, 1) if s_raw else None
@@ -330,7 +340,8 @@ def judge_week(P, week_order):
         if n_after < BASE_WEEKS:
             verdict = verdict_plain = "판정 보류(행정구역 개편 직후)"
     return dict(ratio_plain=ratio_plain, verdict_plain=verdict_plain, wk=wk, v=v, base=base, dev=dev, h=h, one_day=one_day, hol_adj=hol_adj, final=final, s=s,
-                method=method, ratio=ratio, verdict=verdict, opposite=opposite)
+                method=method, ratio=ratio, verdict=verdict, opposite=opposite, baseball=bb,
+                ratio_nobb=ratio_nobb, verdict_nobb=verdict_nobb)
 
 
 def analyze(db, sido, sigungu, week_order):
@@ -373,6 +384,8 @@ def analyze(db, sido, sigungu, week_order):
         "비슷한 지역 10곳의 같은 주 변화(%)": _pct(P["com"][week_order]) if pdev else None,
         "비교군 대비 변화(%)": _pct(P["adj"][week_order]),
         "공휴일 보정(%)": _pct(hol_adj),
+        "프로야구 홈경기 몫 추정(%)": _pct(J["baseball"]),
+        "야구 몫 뺀 판정(참고)": (f'{J["verdict_nobb"]} ({J["ratio_nobb"]}배)' if J["verdict_nobb"] else None),
         "판정에 쓴 방식": method,
         "최종 변화(%)": _pct(final),
         "평소 출렁임(%)": _pct(s),

@@ -635,6 +635,7 @@ footer p{margin:0 0 6px}
     var evs = w.events || [];
     if (w.hol_tip) { tip.appendChild(el("br")); tip.appendChild(document.createTextNode(w.hol_tip)); evs = w.ev_other || []; }
     evs.forEach(function (t) { tip.appendChild(el("br")); tip.appendChild(document.createTextNode(t)); });   // 한 줄에 하나씩 전부
+    (w.games || []).forEach(function (t) { tip.appendChild(el("br")); tip.appendChild(document.createTextNode(t)); });   // 프로야구 홈경기(설명창에만)
     tip.hidden = false;
     var x = Math.min(Math.max(r.left + r.width / 2, tip.offsetWidth / 2 + 6), window.innerWidth - tip.offsetWidth / 2 - 6);
     tip.style.left = x + "px"; tip.style.top = Math.max(r.top - 6, tip.offsetHeight + 6) + "px";

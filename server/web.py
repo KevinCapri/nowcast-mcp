@@ -27,6 +27,7 @@ import festival as F
 import guard
 import lifepop
 import perf as PF
+import baseball as BB
 import bigevents as BE
 
 STATIC = Path(__file__).with_name("static")
@@ -521,6 +522,7 @@ def view(sido, sigungu, start_wo, end_wo):
                       "dir_adj": 1 if ra > 0 else (-1 if ra < 0 else 0),
                       "long_holiday": lh, "holiday_detail": _holiday_detail(wo) if lh else "",
                       "events": ev[wo],
+                      "games": BB.week(sido, sigungu, mon)[0],
                       "hol_tip": _holiday_tip(wo) if nhol[wo] else "",
                       "ev_other": ev[wo][nhol[wo]:]})
 
@@ -558,6 +560,8 @@ def view(sido, sigungu, start_wo, end_wo):
     srcs.append(BE.SOURCE)
     if has_perf:
         srcs.append(PF.SOURCE)
+    if any(w["games"] for w in weeks):
+        srcs.append(BB.SOURCE)
     try:
         r = db.execute("SELECT latest, fetched_ok FROM source_status WHERE name LIKE '나우캐스트%유입%'").fetchone()
         as_of = {"최신 주차": r[0], "받아 온 날": r[1]} if r else None
