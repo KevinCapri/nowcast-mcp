@@ -102,6 +102,20 @@ def run(db):
                                    "원값 변화 상관": _corr(c, d), "원값 방향 일치(%)": _agree(c, d),
                                    "전국 원값 변화 나우캐스트(%)": round(pct(nat_nc[y - 1], nat_nc[y]), 1),
                                    "전국 원값 변화 데이터랩(%)": round(pct(nat_dl[y - 1], nat_dl[y]), 1)}
+    def buckets(a, b):
+        """나우캐스트 몫 변화 크기(절댓값)별로 데이터랩과 방향이 맞는 비율."""
+        out = {}
+        for lo, hi in ((0, 5), (5, 10), (10, 15), (15, 20), (20, 30), (30, 1e9)):
+            pr = [(x, y) for x, y in zip(a, b) if x is not None and y is not None and lo <= abs(x) < hi]
+            name = f"{lo}~{hi:g}%" if hi < 1e9 else f"{lo}% 이상"
+            out[name] = {"사례 수": len(pr), "방향 일치(%)": _agree([x for x, _ in pr], [y for _, y in pr])}
+        return out
+
+    def window(y0, y1):
+        a = [pct(sh_nc[k][y0], sh_nc[k][y1]) for k in both]
+        b = [pct(sh_dl[k][y0], sh_dl[k][y1]) for k in both]
+        return a, b
+
     lr_nc = [pct(sh_nc[k][2019], sh_nc[k][2025]) for k in both]
     lr_dl = [pct(sh_dl[k][2019], sh_dl[k][2025]) for k in both]
     big = sorted(both, key=lambda k: -abs(lr_nc[both.index(k)]))[:15]
@@ -118,5 +132,17 @@ def run(db):
                                      "원값 상관": _corr(yy_raw_nc, yy_raw_dl), "원값 방향 일치(%)": _agree(yy_raw_nc, yy_raw_dl)},
         "해마다": by_year,
         "2019→2025 몫 변화": {"상관": _corr(lr_nc, lr_dl), "순위상관": _spear(lr_nc, lr_dl), "방향 일치(%)": _agree(lr_nc, lr_dl)},
+        "변화 크기별 방향 일치(나우캐스트 몫 변화 절댓값 기준)": {
+            "해마다(1년 간격, 모든 해)": buckets(yy_sh_nc, yy_sh_dl),
+            "3년 간격(2019→22, 2022→25)": buckets(window(2019, 2022)[0] + window(2022, 2025)[0],
+                                              window(2019, 2022)[1] + window(2022, 2025)[1]),
+            "2019→2025": buckets(lr_nc, lr_dl),
+            "최근 2022→2025": buckets(*window(2022, 2025)),
+        },
+        "두 자료가 같은 쪽으로 크게(둘 다 10% 넘게) 움직인 비율(2019→2025)": {
+            "사례 수": sum(1 for x, y in zip(lr_nc, lr_dl) if abs(x) >= 10 and abs(y) >= 10),
+            "그중 같은 방향(%)": _agree([x for x, y in zip(lr_nc, lr_dl) if abs(x) >= 10 and abs(y) >= 10],
+                                    [y for x, y in zip(lr_nc, lr_dl) if abs(x) >= 10 and abs(y) >= 10]),
+        },
         "예시(몫 변화가 큰 15곳 + 관심 지역, 연도 2019~2025)": ex,
     }
