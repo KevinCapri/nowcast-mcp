@@ -32,6 +32,16 @@ DB = Path(os.environ.get("NOWCAST_DB", DEFAULT_DB))
 DB.parent.mkdir(parents=True, exist_ok=True)
 db = sqlite3.connect(DB, check_same_thread=False)
 SERVICE = "빅데이터 Insight: 지역별 유입인구"
+# 도구 목록이 바뀌면(추가·삭제·입력값·설명) 세 값을 같이 고친다. 회귀 시험이 TOOLS와 실제 도구가 다르면 잡는다.
+# 결과마다 붙여서, 예전에 연결한 이용자에게도 AI가 '새 도구가 생겼으니 다시 연결'을 알려 주게 한다(claude/변경_관리_원칙.md).
+VERSION = "0.3.0"
+TOOLS_CHANGED = "2026-11-15"
+TOOLS = ["get_metadata", "list_regions", "get_movement", "get_breakdown", "get_weather", "analyze_region_week",
+         "find_unusual_regions", "estimate_life_pop", "forecast_festival", "get_datalab_daily", "report_issue",
+         "get_region_calendar", "get_bloom_foliage", "get_data_status"]
+TOOL_NOTICE = {"버전": VERSION, f"도구 목록({len(TOOLS)}개)": TOOLS, "도구가 바뀐 날": TOOLS_CHANGED,
+               "안내": "지금 쓸 수 있는 도구에 이 목록 중 없는 것이 있으면, 이용자에게 대화에서 한 번만 "
+                     "'이 서비스에 새 도구(이름)가 생겼다. 커넥터(앱)를 끊었다 다시 연결하면 쓸 수 있다'고 알릴 것."}
 SERVICE_FULL = SERVICE + "(개인이 개발한 참고용 서비스, 정부 공식 통계 아님)"
 INSTRUCTIONS = (
     f"{SERVICE_FULL}. 국가데이터처 KOBIGS 나우캐스트 '통신 모바일 인구이동량'(시군구·주별 하루 평균 이동 건수)을 조회하고, "
@@ -53,9 +63,10 @@ INSTRUCTIONS = (
     "판정·비교·추정·예측은 '빅데이터 Insight'의 계산이라고 부를 것. 커넥터 이름이 nowcast-mcp여도 '나우캐스트 분석', "
     "'나우캐스트 MCP 결과'라고 하지 말 것(나우캐스트는 국가데이터처가 공표한 이동 건수 원자료의 이름이다). "
     "모든 답의 맨 끝에는 도구 결과의 '답 끝에 적을 출처'를 줄마다 그대로 붙일 것. 문장 속 설명으로 대신하지 말고, "
-    "웹 검색에서 가져온 내용(경기 점수·기사 등)은 그 출처를 따로 한 줄 더 붙일 것."
+    "웹 검색에서 가져온 내용(경기 점수·기사 등)은 그 출처를 따로 한 줄 더 붙일 것. "
+    "결과의 '서비스 도구' 목록에 지금 쓸 수 없는 도구가 있으면, 이용자에게 한 번만 커넥터를 다시 연결하면 쓸 수 있다고 알릴 것."
 )
-mcp = MCPServer("nowcast-mobility", title=SERVICE, instructions=INSTRUCTIONS, version="0.3.0",
+mcp = MCPServer("nowcast-mobility", title=SERVICE, instructions=INSTRUCTIONS, version=VERSION,
                 log_level=os.environ.get("LOG_LEVEL", "INFO"))
 
 SOURCE = "출처: 국가데이터처 KOBIGS 나우캐스트, 통신 모바일 인구이동량(SK텔레콤 통신자료 기반 추정)"
@@ -172,7 +183,7 @@ def _answer(r, kind, source, calc=False):
                 "판정·비교·추정은 '빅데이터 Insight'의 계산이다. '나우캐스트 분석 결과'라고 부르지 말 것."],
             "답 끝에 적을 출처": lines}
     r = {k: v for k, v in r.items() if k != "출처"}
-    return {**head, **r}
+    return {**head, **r, "서비스 도구": TOOL_NOTICE}
 
 
 @mcp.tool()
@@ -234,6 +245,7 @@ def get_metadata() -> dict:
             "대형 행사·축제·공연": "전국체전·국제행사(정부·주최 측 발표), 문체부 축제 계획, KOPIS 큰 공연장 공연을 같은 방식으로 붙인다.",
         },
         "출처": SOURCE,
+        "서비스 도구": TOOL_NOTICE,
     }
 
 
