@@ -121,6 +121,11 @@ footer p{margin:0 0 6px}
 .cho button{width:36px;height:32px;border:1px solid #C9CED6;border-radius:6px;background:#fff;font:inherit;font-size:14px;cursor:pointer}
 .cho button:disabled{color:#C9CED6;cursor:default}
 .fg{font-size:16px;font-weight:600;margin:14px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--line);scroll-margin-top:12px}
+.ffilt{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;margin-bottom:12px}
+#flist{max-height:380px;overflow-y:auto;position:relative;margin-top:6px;border-top:1px solid var(--line)}
+.fyrow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin:-4px 0 12px}
+.fyrow .seg{margin:0}
+.fyrow .btn{height:36px;padding:0 14px;font-size:14px}
 .fgr{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:2px 14px}
 .fit{display:block;text-align:left;border:0;background:transparent;font:inherit;font-size:14px;line-height:1.4;padding:6px 8px;border-radius:6px;cursor:pointer;color:var(--ink)}
 .fit:hover,.fit:focus-visible{background:#F1F3F6}
@@ -243,37 +248,22 @@ footer p{margin:0 0 6px}
 <!-- ================= 축제 기간 보기 ================= -->
 <section id="p-fest" class="panel" role="tabpanel" aria-labelledby="t-fest" hidden>
 
-<div class="seg" role="group" aria-label="축제 고르는 방법">
-  <button type="button" id="fm-reg" class="on" aria-pressed="true">지역별로 고르기</button>
-  <button type="button" id="fm-all" aria-pressed="false">전체 축제 목록</button>
-</div>
-
-<section class="card" id="fallbox" hidden>
-  <input id="fq" placeholder="축제 이름으로 찾기 (예: 산천어, 국화)" autocomplete="off">
+<section class="card" id="fallbox">
+  <div class="ffilt">
+    <label class="f">시도<select id="fsido"><option value="">전체</option></select></label>
+    <label class="f">시군구<select id="fsigungu" disabled><option value="">전체</option></select></label>
+    <label class="f" style="flex:2 1 240px">축제 이름<input id="fq" placeholder="예: 산천어, 국화" autocomplete="off"></label>
+  </div>
   <div class="cho" id="fcho"></div>
-  <p class="note" id="fcount"></p>
+  <p class="note" id="fcount">불러오는 중…</p>
   <div id="flist"></div>
 </section>
 
-<form class="card pick" id="fpick">
-  <label class="f">시도
-    <select id="fsido" disabled><option value="">불러오는 중…</option></select>
-  </label>
-  <label class="f">시군구
-    <select id="fsigungu" disabled><option value="">먼저 시도를 고르세요</option></select>
-  </label>
-  <label class="f" style="flex:2 1 240px">축제
-    <select id="fname" disabled><option value="">먼저 시도를 고르세요</option></select>
-  </label>
-  <label class="f" style="flex:0 1 130px">개최년도
-    <select id="fyear" disabled><option value="">–</option></select>
-  </label>
-  <button class="btn" type="submit" id="fgo" disabled>보기</button>
-  <button class="btn light" type="button" id="fshareurl" disabled>링크 복사</button>
-</form>
+<p class="empty" id="fhint">위 목록에서 축제를 고르세요. 자료가 들어온 지난 축제만 나옵니다.</p>
 
 <div id="fresult" class="panel" hidden>
   <div class="rhead" id="fhead"></div>
+  <div class="fyrow"><div class="seg" id="fyears" role="group" aria-label="개최년도"></div><button class="btn light" type="button" id="fshareurl">링크 복사</button></div>
   <section class="card">
     <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:baseline">
       <h2 id="ftitle"></h2>
@@ -314,7 +304,6 @@ footer p{margin:0 0 6px}
 
 </div>
 
-<p class="empty" id="fhint">축제를 고른 뒤 보기를 누르세요. 자료가 들어온 지난 축제만 고를 수 있습니다.</p>
 </section>
 
 <!-- ================= AI 연결 방법 ================= -->
@@ -782,60 +771,8 @@ footer p{margin:0 0 6px}
   $("shareurl").onclick = function () { copyText($("shareurl"), location.origin + location.pathname + query(), "링크 복사"); };
 
   // ---------- 축제 기간 보기 ----------
-  var FREG = {}, FLIST = [];
-  function resetSel(sel, text) { sel.textContent = ""; opt(sel, "", text); sel.disabled = true; }
-  function fready() { $("fgo").disabled = !($("fname").value && $("fyear").value); }
-  function fillYears() {
-    var y = $("fyear"); y.textContent = "";
-    var f = FLIST.filter(function (x) { return x.id === $("fname").value; })[0];
-    if (f && $("fsigungu").value !== f.sigungu) $("fsigungu").value = f.sigungu;   // 시도 전체에서 고르면 시군구 칸을 맞춤
-    if (!f) { opt(y, "", "–"); y.disabled = true; fready(); return; }
-    f.years.forEach(function (v) { opt(y, v, v + "년"); });
-    y.disabled = false; fready();
-  }
-  function loadFests(sel) {
-    var n = $("fname"); resetSel(n, "불러오는 중…"); resetSel($("fyear"), "–"); fready();
-    return getJSON("/api/fests?" + new URLSearchParams({ sido: $("fsido").value, sigungu: $("fsigungu").value })).then(function (r) {
-      FLIST = r.j || []; n.textContent = "";
-      opt(n, "", FLIST.length ? "축제를 고르세요" : "자료가 들어온 축제가 없습니다");
-      FLIST.forEach(function (f) { opt(n, f.id, "[" + f.sigungu + "] " + f.name); });
-      n.disabled = !FLIST.length;
-      if (sel && FLIST.some(function (f) { return f.id === sel; })) n.value = sel;
-      fillYears();
-    });
-  }
-  function fillFSigungu() {
-    var s = $("fsigungu"); s.textContent = "";
-    var list = FREG[$("fsido").value] || [];
-    if (!list.length) { opt(s, "", "먼저 시도를 고르세요"); s.disabled = true; }
-    else { opt(s, "", "시군구 전체"); list.forEach(function (g) { opt(s, g, g); }); s.disabled = false; }
-    resetSel($("fname"), "먼저 시도를 고르세요"); resetSel($("fyear"), "–"); fready();
-  }
-  getJSON("/api/fest_regions").then(function (r) {
-    FREG = r.j || {};
-    var s = $("fsido"); s.textContent = ""; opt(s, "", "시도를 고르세요");
-    Object.keys(FREG).forEach(function (k) { opt(s, k, k); });
-    s.disabled = false;
-    s.onchange = function () { fillFSigungu(); if ((FREG[$("fsido").value] || []).length) loadFests(); };
-    $("fsigungu").onchange = function () { loadFests(); };
-    $("fname").onchange = fillYears;
-    $("fyear").onchange = fready;
-    var sd = P0.get("sido"), sg = P0.get("sigungu"), id = P0.get("fest"), yr = P0.get("year");
-    if (id && sd && FREG[sd]) {
-      s.value = sd; fillFSigungu();
-      if ((FREG[sd] || []).indexOf(sg) >= 0) {
-        $("fsigungu").value = sg;
-        loadFests(id).then(function () {
-          if (yr && [].some.call($("fyear").options, function (o) { return o.value === yr; })) $("fyear").value = yr;
-          fready();
-          if (!$("fgo").disabled) frun(P0.get("s"), P0.get("e"));
-        });
-      }
-    }
-  }).catch(function () { $("fhint").textContent = "목록을 불러오지 못했습니다. 잠시 뒤 새로 고침해 주세요."; });
-
-  // 전체 축제 목록에서 고르기
-  var FALL = null, CHO = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ", CHO_B = "ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎ".split("");
+  // 전체 축제 목록 하나로 고름: 시도·시군구·이름으로 좁히고, 고르면 목록 아래에 결과와 연도 버튼
+  var FALL = [], CHO = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ", CHO_B = "ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎ".split("");
   var SHORT = { "서울특별시": "서울", "부산광역시": "부산", "대구광역시": "대구", "인천광역시": "인천", "광주광역시": "광주", "대전광역시": "대전",
     "울산광역시": "울산", "세종특별자치시": "세종", "경기도": "경기", "강원특별자치도": "강원", "강원도": "강원", "충청북도": "충북", "충청남도": "충남",
     "전북특별자치도": "전북", "전라북도": "전북", "전라남도": "전남", "경상북도": "경북", "경상남도": "경남", "제주특별자치도": "제주", "전남광주통합특별시": "전남광주" };
@@ -843,26 +780,19 @@ footer p{margin:0 0 6px}
     var o = t.charCodeAt(0) - 0xAC00, c = o >= 0 && o < 11172 ? CHO[Math.floor(o / 588)] : "기타";
     return { "ㄲ": "ㄱ", "ㄸ": "ㄷ", "ㅃ": "ㅂ", "ㅆ": "ㅅ", "ㅉ": "ㅈ" }[c] || c;
   }
-  function fmode(all) {
-    $("fm-all").classList.toggle("on", all); $("fm-reg").classList.toggle("on", !all);
-    $("fm-all").setAttribute("aria-pressed", all); $("fm-reg").setAttribute("aria-pressed", !all);
-    $("fallbox").hidden = !all; $("fpick").hidden = all;
-    // 전체 목록에서 고른 결과는 목록 아래에 그대로 둠
-    if (all) { $("fresult").hidden = !(FCUR && FSRC === "all"); $("fhint").hidden = true; loadAll(); }
-    else { $("fresult").hidden = !FCUR; $("fhint").hidden = !!FCUR; }
-  }
-  function loadAll() {
-    if (FALL) return drawAll();
-    $("fcount").textContent = "불러오는 중…";
-    getJSON("/api/fest_all").then(function (r) {
-      FALL = (r.j || []).slice().sort(function (a, b) { return a.name.localeCompare(b.name, "ko"); });
-      drawAll();
-    }).catch(function () { $("fcount").textContent = "목록을 불러오지 못했습니다. 잠시 뒤 다시 시도해 주세요."; });
+  var FCUR = null, FSEL = null, FYEAR = "";   // FSEL: 고른 축제(목록 항목), FYEAR: 보고 있는 해
+  function fillFSigungu() {
+    var s = $("fsigungu"), sd = $("fsido").value, seen = {}; s.textContent = ""; opt(s, "", "전체");
+    FALL.forEach(function (f) { if (f.sido === sd && !seen[f.sigungu]) { seen[f.sigungu] = 1; } });
+    Object.keys(seen).sort(function (a, b) { return a.localeCompare(b, "ko"); }).forEach(function (g) { opt(s, g, g); });
+    s.disabled = !sd;
   }
   function drawAll() {
-    var q = $("fq").value.trim().replace(/\s+/g, ""), box = $("flist"), G = {}, keys = [], n = 0;
-    box.textContent = "";
+    var q = $("fq").value.trim().replace(/\s+/g, ""), sd = $("fsido").value, sg = $("fsigungu").value, box = $("flist"), G = {}, keys = [], n = 0;
+    box.textContent = ""; box.scrollTop = 0;
     FALL.forEach(function (f) {
+      if (sd && f.sido !== sd) return;
+      if (sg && f.sigungu !== sg) return;
       if (q && f.name.replace(/\s+/g, "").indexOf(q) < 0) return;
       var k = cho(f.name); if (!G[k]) { G[k] = []; keys.push(k); } G[k].push(f); n++;
     });
@@ -881,57 +811,73 @@ footer p{margin:0 0 6px}
     var c = $("fcho"); c.textContent = "";
     CHO_B.concat(["기타"]).forEach(function (k) {
       var b = el("button", { type: "button", style: k === "기타" ? "width:auto;padding:0 10px" : "" }, k === "기타" ? "A·1" : k); b.disabled = !G[k];
-      b.onclick = function () { var t = $("fg-" + k); if (t) t.scrollIntoView({ behavior: "smooth", block: "start" }); };
+      b.onclick = function () { var t = $("fg-" + k); if (t) box.scrollTo({ top: t.offsetTop, behavior: "smooth" }); };
       c.appendChild(b);
     });
-    $("fcount").textContent = q ? (n ? "찾은 축제 " + fmt(n) + "개" : "맞는 축제가 없습니다.") : "자료가 들어온 축제 " + fmt(n) + "개, 가나다순";
+    var where = sg ? sg + " " : sd ? (SHORT[sd] || sd) + " " : "";
+    $("fcount").textContent = n ? where + "축제 " + fmt(n) + "개, 가나다순" : "맞는 축제가 없습니다.";
   }
-  function pickFest(f) {
-    FSRC = "all";
-    $("fsido").value = f.sido; fillFSigungu();
-    $("fsigungu").value = f.sigungu;
-    loadFests(f.id).then(function () {
-      fready();
-      if (!$("fgo").disabled) frun().then(function () { if (!$("fresult").hidden) $("fresult").scrollIntoView({ behavior: "smooth", block: "start" }); });
+  function drawYears() {
+    var box = $("fyears"); box.textContent = "";
+    (FSEL.years || []).slice().sort().forEach(function (y) {
+      y = String(y);
+      var b = el("button", { type: "button", cls: y === FYEAR ? "on" : "", "aria-pressed": y === FYEAR ? "true" : "false" }, y + "년");
+      b.onclick = function () { if (y !== FYEAR) { FYEAR = y; $("feditbox").hidden = true; drawYears(); frun(); } };
+      box.appendChild(b);
     });
   }
-  $("fm-reg").onclick = function () { fmode(false); };
-  $("fm-all").onclick = function () { fmode(true); };
-  $("fq").oninput = function () { if (FALL) drawAll(); };
+  function pickFest(f, year, s, e) {
+    FSEL = f;
+    var ys = (f.years || []).map(String);
+    FYEAR = year && ys.indexOf(String(year)) >= 0 ? String(year) : ys.slice().sort().pop();
+    $("feditbox").hidden = true;
+    drawYears();
+    return frun(s, e).then(function () { if (!$("fresult").hidden && !year) $("fresult").scrollIntoView({ behavior: "smooth", block: "start" }); });
+  }
+  $("fq").oninput = drawAll;
+  $("fsido").onchange = function () { fillFSigungu(); drawAll(); };
+  $("fsigungu").onchange = drawAll;
+  getJSON("/api/fest_all").then(function (r) {
+    FALL = (r.j || []).slice().sort(function (a, b) { return a.name.localeCompare(b.name, "ko"); });
+    var s = $("fsido"), seen = {};
+    FALL.forEach(function (f) { seen[f.sido] = 1; });
+    Object.keys(seen).sort(function (a, b) { return a.localeCompare(b, "ko"); }).forEach(function (k) { opt(s, k, k); });
+    drawAll();
+    // 공유 주소로 들어오면 그 축제·년도를 바로 엶
+    var id = P0.get("fest"), sd = P0.get("sido"), sg = P0.get("sigungu");
+    var f = id && FALL.filter(function (x) { return x.id === id && (!sd || x.sido === sd) && (!sg || x.sigungu === sg); })[0];
+    if (f) pickFest(f, P0.get("year") || "", P0.get("s"), P0.get("e"));
+  }).catch(function () { $("fcount").textContent = "목록을 불러오지 못했습니다. 잠시 뒤 새로 고침해 주세요."; });
 
-  var FCUR = null, FSRC = "reg";
   function fquery(s, e) {
-    var q = { sido: $("fsido").value, sigungu: $("fsigungu").value, fest: $("fname").value, year: $("fyear").value };
+    var q = { sido: FSEL.sido, sigungu: FSEL.sigungu, fest: FSEL.id, year: FYEAR };
     if (s && e) { q.s = s; q.e = e; }
     return "?" + new URLSearchParams(q);
   }
   function frun(s, e) {
-    var q = new URLSearchParams({ sido: $("fsido").value, sigungu: $("fsigungu").value, id: $("fname").value, year: $("fyear").value });
+    var q = new URLSearchParams({ sido: FSEL.sido, sigungu: FSEL.sigungu, id: FSEL.id, year: FYEAR });
     if (s && e) { q.set("s", s); q.set("e", e); }
-    $("fgo").disabled = true; $("fhint").hidden = false; $("fhint").textContent = "불러오는 중…";
+    $("fhint").hidden = false; $("fhint").textContent = "불러오는 중…";
     return getJSON("/api/fest_view?" + q).then(function (r) {
       if (!r.ok || r.j.error) { $("fresult").hidden = true; $("fhint").textContent = (r.j && r.j.error) || "조회하지 못했습니다."; return; }
       var j = r.j, f = j["축제"];
       FCUR = f;
-      $("fhead").textContent = "[" + $("fsigungu").value + "] " + f["이름"];
-      $("fhead").appendChild(el("span", { cls: "sub" }, $("fyear").value + "년"));
+      $("fhead").textContent = "[" + FSEL.sigungu + "] " + f["이름"];
       $("ftitle").textContent = f["이름"] + " 기간 전후 유입";
       $("ftitle").appendChild(el("span", { cls: "tag" }, "공식 통계 아님"));
-      $("fscope").textContent = "축제 현장 방문객이 아니라 " + $("fsigungu").value + " 전체로 들어온 외부 유입을 보여 줍니다. 그래서 축제 효과가 그래프에 그대로 나타나지 않을 수 있습니다.";
+      $("fscope").textContent = "축제 현장 방문객이 아니라 " + FSEL.sigungu + " 전체로 들어온 외부 유입을 보여 줍니다. 그래서 축제 효과가 그래프에 그대로 나타나지 않을 수 있습니다.";
       $("fperiod").textContent = "축제 기간: " + f["기간"] + (f["고침"] ? " (고친 날짜)" : "");
       $("fs").value = f["시작"]; $("fe").value = f["끝"];
       FJ = j; FF = f;
       setAdj("fadjbtn", "fadjnote", false); $("fadjbtn").hidden = !j["비교 가능"];
       fpaint();
       $("fevsrc").textContent = "막대 아래 줄은 그 주에 있었던 일: " + (j["일정 출처"] || []).join(", ");
-      $("fshareurl").disabled = false;
       $("fbregion") && ($("fbregion").value = j["지역"]);
-      $("fbperiod") && ($("fbperiod").value = f["이름"].slice(0, 30) + " " + $("fyear").value);
+      $("fbperiod") && ($("fbperiod").value = f["이름"].slice(0, 30) + " " + FYEAR);
       $("fresult").hidden = false; $("fhint").hidden = true;
       URLS.fest = fquery(f["고침"] ? f["시작"] : "", f["고침"] ? f["끝"] : "");
       if (!$("p-fest").hidden) history.replaceState(null, "", location.pathname + URLS.fest);
-    }).catch(function () { $("fhint").textContent = "조회하지 못했습니다. 잠시 뒤 다시 시도해 주세요."; })
-      .then(function () { fready(); });
+    }).catch(function () { $("fhint").textContent = "조회하지 못했습니다. 잠시 뒤 다시 시도해 주세요."; });
   }
   var FJ = null, FF = null;
   function fpaint() {
@@ -958,9 +904,8 @@ footer p{margin:0 0 6px}
     n.hidden = !notes.length;
   }
   $("fadjbtn").onclick = function () { setAdj("fadjbtn", "fadjnote", !adjOn("fadjbtn")); if (FJ) fpaint(); };
-  $("fpick").onsubmit = function (e) { e.preventDefault(); FSRC = "reg"; $("feditbox").hidden = true; if (!$("fgo").disabled) frun(); };
   $("fedit").onclick = function () { $("feditbox").hidden = !$("feditbox").hidden; };
-  $("fre").onclick = function () { if ($("fs").value && $("fe").value) frun($("fs").value, $("fe").value); };
+  $("fre").onclick = function () { if (FSEL && $("fs").value && $("fe").value) frun($("fs").value, $("fe").value); };
   $("fshareurl").onclick = function () { copyText($("fshareurl"), location.origin + location.pathname + (URLS.fest || ""), "링크 복사"); };
 
   // ---------- 의견 ----------
