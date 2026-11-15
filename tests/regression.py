@@ -84,10 +84,22 @@ def run():
     return res, slow
 
 
+def tools_match():
+    """server.TOOLS(결과에 붙는 도구 목록)와 실제 등록된 도구가 같은지."""
+    import asyncio
+    import server as S
+    real = sorted(t.name for t in asyncio.run(S.mcp.list_tools()))
+    if real != sorted(S.TOOLS):
+        print(f"[도구 목록 불일치] server.TOOLS를 고치고 VERSION·TOOLS_CHANGED도 올릴 것: 실제 {real} / TOOLS {sorted(S.TOOLS)}")
+        return False
+    return True
+
+
 def main():
     if not os.environ.get("NOWCAST_DB"):
         print("NOWCAST_DB를 정해 줄 것")
         return 2
+    ok = tools_match()
     res, slow = run()
     if "--save" in sys.argv:
         BASE.write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -113,7 +125,7 @@ def main():
     for x in slow:
         print("[느림 3초 넘음]", x)
     print(f"시험 {len(res)}개, 바뀐 곳 {diff}개" + ("" if diff else " → 기존 결과 그대로"))
-    return 1 if diff else 0
+    return 1 if (diff or not ok) else 0
 
 
 if __name__ == "__main__":
