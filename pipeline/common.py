@@ -36,18 +36,29 @@ def week_label(d):
     return f"{k.year}.{k.month:02d}.{n}주차", k.year * 1000 + k.month * 10 + n, mon
 
 
-def get(url, params, tries=4, timeout=120, wait=20):
-    """외부 API 호출. 응답이 없거나 서버 오류(5xx)면 잠시 쉬었다가 다시 시도한다(공공데이터포털이 가끔 멈춤)."""
+SECRET_PARAMS = {"service", "serviceKey", "ServiceKey", "apiKey", "authKey", "key", "KEY"}
+
+
+def masked(params):
+    """오류 메시지·로그·메일에 인증키가 찍히지 않게 가린 사본."""
+    return {k: ("***" if k in SECRET_PARAMS else v) for k, v in (params or {}).items()}
+
+
+def get(url, params, tries=4, timeout=120, wait=20, retry_codes=()):
+    """외부 API 호출. 응답이 없거나 서버 오류(5xx)면 잠시 쉬었다가 다시 시도한다(공공데이터포털이 가끔 멈춤).
+    retry_codes: 4xx 중에서도 다시 시도할 코드(예: KOPIS는 호출이 몰리면 잠깐 400을 돌려줌).
+    오류 메시지에는 인증키를 가린 값만 남긴다."""
     for i in range(1, tries + 1):
         try:
             r = requests.get(url, params=params, timeout=timeout)
-            if r.status_code < 500:
-                r.raise_for_status()
+            if r.status_code < 400:
                 return r
             err = f"HTTP {r.status_code}"
+            if r.status_code < 500 and r.status_code not in retry_codes:
+                raise RuntimeError(f"{err}: {url} {masked(params)}")
         except (requests.Timeout, requests.ConnectionError) as e:
             err = type(e).__name__
         if i == tries:
-            raise RuntimeError(f"{tries}번 시도 모두 실패({err}): {url}")
+            raise RuntimeError(f"{tries}번 시도 모두 실패({err}): {url} {masked(params)}")
         print(f"  다시 시도 {i}/{tries - 1} ({err}), {wait * i}초 뒤", flush=True)
         time.sleep(wait * i)

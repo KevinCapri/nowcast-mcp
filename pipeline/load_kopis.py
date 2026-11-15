@@ -23,7 +23,7 @@ SIDO_ALIAS = {"강원도": "강원특별자치도", "전라북도": "전북특�
 
 
 def xml(path, **params):
-    r = get(f"{BASE}/{path}", params=params, timeout=60, wait=10)
+    r = get(f"{BASE}/{path}", params=params, timeout=60, wait=10, retry_codes=(400, 429))
     r.encoding = "utf-8"
     return ET.fromstring(r.text)
 
@@ -55,6 +55,7 @@ def setup(con):
     CREATE TABLE IF NOT EXISTS kopis_perf(
       mt20id TEXT PRIMARY KEY, name TEXT, s TEXT, e TEXT, mt10id TEXT, venue TEXT, genre TEXT, fetched TEXT);
     CREATE INDEX IF NOT EXISTS kopis_perf_venue ON kopis_perf(mt10id, s, e);
+    CREATE TABLE IF NOT EXISTS kopis_backfill(mt10id TEXT PRIMARY KEY, done TEXT);
     CREATE INDEX IF NOT EXISTS kopis_venue_region ON kopis_venue(sido, sigungu);
     """)
 
@@ -63,7 +64,11 @@ def load_venues(con, k):
     have = {r[0] for r in con.execute("SELECT mt10id FROM kopis_venue")}
     ids, page = [], 1
     while True:
-        root = xml("prfplc", service=k, cpage=page, rows=100)
+        try:
+            root = xml("prfplc", service=k, cpage=page, rows=100)
+        except Exception as e:                         # 목록이 중간에 끊기면 이미 받은 공연장으로 계속
+            print(f"  공연장 목록 {page}쪽 실패, 여기까지로 진행: {e}", flush=True)
+            break
         rows = root.findall("db")
         if not rows:
             break
@@ -102,20 +107,14 @@ def load_venues(con, k):
     con.commit()
 
 
-def load_perfs(con, k, full):
-    big = con.execute("SELECT mt10id, name FROM kopis_venue WHERE seats>=?", (BIG_SEATS,)).fetchall()
-    first = full or not con.execute("SELECT 1 FROM kopis_perf LIMIT 1").fetchone()
-    today = dt.date.today()
-    a = START if first else today - dt.timedelta(days=90)
-    z = today + dt.timedelta(days=180)
-    print(f"큰 공연장 {len(big)}곳, 기간 {a} ~ {z}", flush=True)
-    stamp = today.isoformat()
-    n = 0
-    for vid, vname in big:
-        s = a
-        while s <= z:                                   # 석 달씩 끊어 받음
-            e = min(s + dt.timedelta(days=91), z)
-            page = 1
+def _venue_range(con, k, vid, vname, a, z, stamp):
+    """한 공연장의 [a, z] 공연을 석 달씩 받는다. (받은 건수, 실패한 구간 수)"""
+    n = bad = 0
+    s = a
+    while s <= z:
+        e = min(s + dt.timedelta(days=91), z)
+        page = 1
+        try:
             while True:
                 root = xml("pblprfr", service=k, stdate=s.strftime("%Y%m%d"), eddate=e.strftime("%Y%m%d"),
                            cpage=page, rows=100, prfplccd=vid)
@@ -126,13 +125,44 @@ def load_perfs(con, k, full):
                                  txt(d, "prfpdto").replace(".", "-"), vid, txt(d, "fcltynm") or vname,
                                  txt(d, "genrenm"), stamp))
                     n += 1
-                time.sleep(0.15)
+                time.sleep(0.3)
                 if len(rows) < 100:
                     break
                 page += 1
-            s = e + dt.timedelta(days=1)
-        con.commit()
-    print(f"공연 {n}건 받음", flush=True)
+        except Exception as ex:                        # 한 구간이 실패해도 나머지는 계속 받음
+            bad += 1
+            print(f"  건너뜀 {vname} {s}~{e}: {ex}", flush=True)
+        s = e + dt.timedelta(days=1)
+    con.commit()
+    return n, bad
+
+
+def load_perfs(con, k, full):
+    """최근 석 달~앞으로 여섯 달은 매번 다시 받고, 2023년부터의 지난 자료는 공연장마다 한 번 다 받으면 끝(kopis_backfill).
+    중간에 실패한 공연장은 다음 실행 때 지난 자료를 다시 받는다. 일부 구간만 실패하면 단계는 성공으로 끝내고 건수만 알린다."""
+    big = con.execute("SELECT mt10id, name FROM kopis_venue WHERE seats>=?", (BIG_SEATS,)).fetchall()
+    if full:
+        con.execute("DELETE FROM kopis_backfill")
+    done = {r[0] for r in con.execute("SELECT mt10id FROM kopis_backfill")}
+    today = dt.date.today()
+    recent = today - dt.timedelta(days=90)
+    z = today + dt.timedelta(days=180)
+    stamp = today.isoformat()
+    todo = [v for v in big if v[0] not in done]
+    print(f"큰 공연장 {len(big)}곳(지난 자료 받을 곳 {len(todo)}곳), 최근 기간 {recent} ~ {z}", flush=True)
+    n = bad = 0
+    for vid, vname in big:
+        if vid in done:
+            m, b = _venue_range(con, k, vid, vname, recent, z, stamp)
+        else:
+            m, b = _venue_range(con, k, vid, vname, START, z, stamp)
+            if b == 0:
+                con.execute("INSERT OR REPLACE INTO kopis_backfill VALUES(?,?)", (vid, stamp))
+                con.commit()
+        n += m
+        bad += b
+    print(f"공연 {n}건 받음, 실패해 건너뛴 구간 {bad}개(다음 실행 때 다시 받음)", flush=True)
+    return n, bad
 
 
 def main():
@@ -141,10 +171,12 @@ def main():
     con = connect()
     setup(con)
     load_venues(con, k)
-    load_perfs(con, k, full)
+    got, bad = load_perfs(con, k, full)
     cnt = con.execute("SELECT COUNT(*), MIN(s), MAX(e) FROM kopis_perf").fetchone()
     print(f"쌓인 공연 {cnt[0]}건 ({cnt[1]} ~ {cnt[2]})", flush=True)
     con.close()
+    if bad and not got:                    # 하나도 못 받고 전부 실패(인증키 만료 등)면 실패로 끝내 메일이 가게
+        sys.exit(f"공연을 하나도 받지 못함(실패 구간 {bad}개)")
 
 
 if __name__ == "__main__":
