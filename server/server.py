@@ -6,6 +6,7 @@ import datetime as dt
 import json
 import os
 import sqlite3
+import threading
 from pathlib import Path
 from typing import Literal
 
@@ -30,7 +31,34 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB = Path("/home/data/nowcast.db") if os.environ.get("WEBSITE_SITE_NAME") else ROOT / "data" / "nowcast.db"
 DB = Path(os.environ.get("NOWCAST_DB", DEFAULT_DB))
 DB.parent.mkdir(parents=True, exist_ok=True)
-db = sqlite3.connect(DB, check_same_thread=False)
+
+
+class _ThreadDB:
+    """스레드마다 따로 연결을 쓰는 DB 창구.
+
+    도구는 여러 요청이 동시에 오면 스레드에서 함께 돈다. 연결 하나를 여러 스레드가 같이 쓰면
+    sqlite가 'Recursive use of cursors' 등으로 실패해 도구가 'Error executing tool'만 낸다
+    (2026-11-16, 동시 4건 요청에서 약 15% 실패 확인). 읽기만 하므로 스레드별 연결로 충분하다."""
+
+    def __init__(self, path):
+        self._path = path
+        self._local = threading.local()
+
+    def _con(self):
+        con = getattr(self._local, "con", None)
+        if con is None:
+            con = sqlite3.connect(self._path, check_same_thread=False, timeout=30)
+            self._local.con = con
+        return con
+
+    def execute(self, *args, **kwargs):
+        return self._con().execute(*args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._con(), name)
+
+
+db = _ThreadDB(DB)
 SERVICE = "빅데이터 Insight: 지역별 유입인구"
 # 도구 목록이 바뀌면(추가·삭제·입력값·설명) 세 값을 같이 고친다. 회귀 시험이 TOOLS와 실제 도구가 다르면 잡는다.
 # 결과마다 붙여서, 예전에 연결한 이용자에게도 AI가 '새 도구가 생겼으니 다시 연결'을 알려 주게 한다(claude/변경_관리_원칙.md).
