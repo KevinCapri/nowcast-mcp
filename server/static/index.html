@@ -595,6 +595,8 @@ footer p{margin:0 0 6px}
     });
     $("end").selectedIndex = 0;
     $("start").selectedIndex = Math.min(5, MONTHS.length - 1);       // 처음엔 최근 6개월
+    // 시작월을 고르면 끝월을 6개월치(시작월 포함)로 맞춤. 자료가 아직 없으면 가장 최근 달. 끝월은 그 뒤 따로 바꿀 수 있음
+    $("start").onchange = function () { $("end").selectedIndex = Math.max(0, $("start").selectedIndex - 5); };
     // 공유 주소로 들어오면 그 지역·기간을 골라 바로 조회(예전 주 단위 주소도 그 달로 바꿔 엶)
     var sd = P.get("sido"), sg = P.get("sigungu");
     var toMonth = function (v) { v = String(v || ""); return v.length === 7 ? String(Math.floor(+v / 10)) : v; };
