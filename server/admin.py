@@ -82,7 +82,7 @@ def _region(args):
     return (sd + " " + sg).strip() if (sd or sg) else ""
 
 
-def _bars(rows, width=260):
+def _bars(rows, width=170):
     """[(이름, 값, 실패)] → 가로 막대 표."""
     if not rows:
         return '<p class="none">기록 없음</p>'
@@ -102,7 +102,9 @@ def _page(days):
     rows = con.execute("SELECT at, tool, args, ok, ms, COALESCE(client,'') FROM usage WHERE at>=? ORDER BY at",
                        (since,)).fetchall()
     con.close()
-    mcp = [r for r in rows if not r[1].startswith("web:")]
+    allmcp = [r for r in rows if not r[1].startswith("web:")]
+    mcp = [r for r in allmcp if r[1] in TOOL_KO]          # 실제 도구 호출만
+    probes = len(allmcp) - len(mcp)                        # 없는 도구 이름으로 온 호출(레지스트리·검사기의 점검)
     web = [r for r in rows if r[1].startswith("web:")]
 
     # 날짜별
@@ -130,7 +132,7 @@ def _page(days):
                 bad[k] += 1
         return [(k, v, bad[k]) for k, v in c.most_common()]
 
-    tools = group(mcp, lambda r: TOOL_KO.get(r[1], r[1]) + f" ({r[1]})")
+    tools = group(mcp, lambda r: TOOL_KO.get(r[1], r[1]))
     clients = group(mcp, lambda r: r[5] or "기록 전")
     webk = group(web, lambda r: TOOL_KO.get(r[1], r[1]))
     regions = Counter(_region(r[2]) for r in rows if _region(r[2]))
@@ -183,7 +185,7 @@ h2{{font-size:16px;margin:0 0 12px}} .sub{{color:#6b7280;font-size:13px}}
 .d .col{{display:flex;flex-direction:column;justify-content:flex-end;height:122px}} .d i{{display:block;width:100%}}
 .d .m{{background:#2563eb}} .d .w{{background:#93c5fd}}
 .lg i{{display:inline-block;width:10px;height:10px;margin:0 4px 0 10px;vertical-align:-1px}}
-table.bars td{{padding:3px 6px;font-size:14px;white-space:nowrap}} table.bars td.k{{color:#374151}}
+table.bars td{{padding:3px 6px;font-size:14px;white-space:nowrap}} table.bars td.k{{max-width:11em;overflow:hidden;text-overflow:ellipsis}} table.bars td.k{{color:#374151}}
 table.bars i{{display:inline-block;height:10px;background:#2563eb;border-radius:2px;vertical-align:0}}
 table.list{{border-collapse:collapse;width:100%;font-size:13px}} table.list th,table.list td{{border-bottom:1px solid #eef0f3;padding:6px;text-align:left;vertical-align:top;white-space:nowrap}} table.list td.a{{white-space:normal}}
 table.list th{{color:#6b7280;font-weight:500}} td.a{{color:#4b5563;word-break:break-all}} .bad{{color:#c2410c}} .none{{color:#9ca3af;font-size:14px}}
@@ -201,7 +203,7 @@ table.list th{{color:#6b7280;font-weight:500}} td.a{{color:#4b5563;word-break:br
 </div>
 <div class="card"><h2>날짜별 <span class="lg sub"><i style="background:#2563eb"></i>MCP 콜<i style="background:#93c5fd"></i>사이트 조회</span></h2>{''.join(day_html)}</div>
 <div class="two">
-<div class="card"><h2>도구별 MCP 콜</h2>{_bars(tools)}</div>
+<div class="card"><h2>도구별 MCP 콜</h2>{_bars(tools)}{f'<p class="sub">외부 점검 호출(없는 도구 이름) {probes:,}건은 뺐습니다.</p>' if probes else ''}</div>
 <div class="card"><h2>어디서 왔나 (MCP)</h2>{_bars(clients)}<p class="sub">요청에 실린 앱 정보로 짐작한 이름. 2026-11-15 이전 기록은 '기록 전'.</p></div>
 <div class="card"><h2>사이트 조회</h2>{_bars(webk)}</div>
 <div class="card"><h2>많이 물은 지역 (상위 15)</h2>{_bars(reg_rows)}</div>
