@@ -44,6 +44,7 @@ STEPS = [
     ("region_map", ["build_region_map.py"], 27, 3600),
     ("rhythm", ["build_rhythm.py"], 27, 3600),
     ("kopis", ["load_kopis.py"], 6, 7200),
+    ("tourism", ["load_tourism.py"], 27, 7200),
 ]
 
 
