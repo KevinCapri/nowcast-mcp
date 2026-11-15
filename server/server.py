@@ -14,6 +14,7 @@ import lifepop
 import perf
 import baseball
 import season
+import bigevents
 import feedback
 import festival
 
@@ -405,6 +406,9 @@ def analyze_region_week(sido: str, sigungu: str, week: str) -> dict:
                 r["벚꽃·단풍 안내"] = ("지난 기록은 이 서비스가 같은 판정 계산으로 낸 과거 평균이다(묻는 해는 빼고 계산). "
                                    "'이 지역은 그동안 단풍 절정 주에 평균 +X%였다'처럼 비교 근거로만 말하고, "
                                    "이번 주 변화를 단풍·벚꽃 때문이라고 단정하지 말 것. 같은 주 축제와 겹치는 경우가 많다.")
+        be = bigevents.in_range(sido, sigungu, mon, mon + dt.timedelta(days=6))
+        if be:
+            r["그 주 대형 행사(정부·주최 측 발표 일정, 원인 단정 금지)"] = be
         pf = perf.in_range(db, sido, sigungu, mon, mon + dt.timedelta(days=6))
         if pf:
             r["그 주 큰 공연장 공연(KOPIS, 원인 단정 금지)"] = pf

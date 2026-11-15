@@ -28,6 +28,7 @@ import guard
 import lifepop
 import perf as PF
 import baseball as BB
+import bigevents as BE
 
 STATIC = Path(__file__).with_name("static")
 MAX_WEEKS = 56           # 지역 탭: 최대 12개월(웹 화면에서 막음) 넘는 요청만 자름
@@ -375,6 +376,16 @@ def _events(sido, sigungu, P, wos):
         if names:
             fest_weeks[wo] = names
             ev[wo] += names   # 다 넘김. 줄이는 건 화면에서
+    # 대형 행사(전국체전·국제행사). 축제 뒤에 붙임
+    try:
+        a, z = _monday(wos[0]), _monday(wos[-1]) + dt.timedelta(days=6)
+        for b in BE.in_range(sido, sigungu, a, z):
+            for wo in wos:
+                mon = _monday(wo)
+                if b["시작"] <= (mon + dt.timedelta(days=6)).isoformat() and b["끝"] >= mon.isoformat():
+                    ev[wo].append(b["이름"])
+    except Exception:
+        pass
     # 큰 공연장 공연(KOPIS). 축제 뒤에 붙임
     has_perf = False
     try:
@@ -546,6 +557,7 @@ def view(sido, sigungu, start_wo, end_wo):
     if stn:
         srcs.append(f"날씨(기상청 {stn} 관측소, 눈 5cm·비 80mm 이상만 표시)")
     srcs.append("축제(문화체육관광부 지역축제 개최 계획, 연초 계획 일정)")
+    srcs.append(BE.SOURCE)
     if has_perf:
         srcs.append(PF.SOURCE)
     if any(w["games"] for w in weeks):
