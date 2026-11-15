@@ -1,0 +1,36 @@
+name: 배포 뒤 실제 서비스 확인
+
+on:
+  workflow_run:
+    workflows: ["Build and deploy Python app to Azure Web App - nowcast-mcp"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      save:
+        description: "지금 결과를 기준값으로 만들어 파일로 받기(true/false)"
+        default: "false"
+
+jobs:
+  check:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - name: 서버가 다시 켜질 때까지 기다림
+        if: ${{ github.event_name == 'workflow_run' }}
+        run: sleep 180
+      - name: 비교
+        if: ${{ github.event.inputs.save != 'true' }}
+        run: python tests/live_check.py
+      - name: 기준값 만들기
+        if: ${{ github.event.inputs.save == 'true' }}
+        run: python tests/live_check.py --save live_baseline.json
+      - uses: actions/upload-artifact@v4
+        if: ${{ github.event.inputs.save == 'true' }}
+        with:
+          name: live_baseline
+          path: live_baseline.json
