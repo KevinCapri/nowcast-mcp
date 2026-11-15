@@ -630,9 +630,13 @@ def fest_all():
 
 
 def fest_list(sido, sigungu):
-    fs = _fests().get(A.canon(sido, sigungu), {})
-    return sorted(({"id": k, "name": v["name"], "years": sorted(v["years"], reverse=True)} for k, v in fs.items()),
-                  key=lambda x: x["name"])
+    """시군구를 비우면 그 시도 전체 축제(시군구 가나다순, 그 안에서 축제 이름순)."""
+    sgs = [sigungu] if sigungu else fest_regions().get(sido, [])
+    out = []
+    for sg in sgs:
+        for k, v in _fests().get(A.canon(sido, sg), {}).items():
+            out.append({"id": k, "name": v["name"], "sigungu": sg, "years": sorted(v["years"], reverse=True)})
+    return sorted(out, key=lambda x: (x["sigungu"], x["name"]))
 
 
 def fest_view(sido, sigungu, fid, year, s=None, e=None):

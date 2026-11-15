@@ -263,7 +263,7 @@ footer p{margin:0 0 6px}
     <select id="fsigungu" disabled><option value="">먼저 시도를 고르세요</option></select>
   </label>
   <label class="f" style="flex:2 1 240px">축제
-    <select id="fname" disabled><option value="">먼저 시군구를 고르세요</option></select>
+    <select id="fname" disabled><option value="">먼저 시도를 고르세요</option></select>
   </label>
   <label class="f" style="flex:0 1 130px">개최년도
     <select id="fyear" disabled><option value="">–</option></select>
@@ -781,6 +781,7 @@ footer p{margin:0 0 6px}
   function fillYears() {
     var y = $("fyear"); y.textContent = "";
     var f = FLIST.filter(function (x) { return x.id === $("fname").value; })[0];
+    if (f && $("fsigungu").value !== f.sigungu) $("fsigungu").value = f.sigungu;   // 시도 전체에서 고르면 시군구 칸을 맞춤
     if (!f) { opt(y, "", "–"); y.disabled = true; fready(); return; }
     f.years.forEach(function (v) { opt(y, v, v + "년"); });
     y.disabled = false; fready();
@@ -790,7 +791,7 @@ footer p{margin:0 0 6px}
     return getJSON("/api/fests?" + new URLSearchParams({ sido: $("fsido").value, sigungu: $("fsigungu").value })).then(function (r) {
       FLIST = r.j || []; n.textContent = "";
       opt(n, "", FLIST.length ? "축제를 고르세요" : "자료가 들어온 축제가 없습니다");
-      FLIST.forEach(function (f) { opt(n, f.id, f.name); });
+      FLIST.forEach(function (f) { opt(n, f.id, "[" + f.sigungu + "] " + f.name); });
       n.disabled = !FLIST.length;
       if (sel && FLIST.some(function (f) { return f.id === sel; })) n.value = sel;
       fillYears();
@@ -800,16 +801,16 @@ footer p{margin:0 0 6px}
     var s = $("fsigungu"); s.textContent = "";
     var list = FREG[$("fsido").value] || [];
     if (!list.length) { opt(s, "", "먼저 시도를 고르세요"); s.disabled = true; }
-    else { opt(s, "", "시군구를 고르세요"); list.forEach(function (g) { opt(s, g, g); }); s.disabled = false; }
-    resetSel($("fname"), "먼저 시군구를 고르세요"); resetSel($("fyear"), "–"); fready();
+    else { opt(s, "", "시군구 전체"); list.forEach(function (g) { opt(s, g, g); }); s.disabled = false; }
+    resetSel($("fname"), "먼저 시도를 고르세요"); resetSel($("fyear"), "–"); fready();
   }
   getJSON("/api/fest_regions").then(function (r) {
     FREG = r.j || {};
     var s = $("fsido"); s.textContent = ""; opt(s, "", "시도를 고르세요");
     Object.keys(FREG).forEach(function (k) { opt(s, k, k); });
     s.disabled = false;
-    s.onchange = fillFSigungu;
-    $("fsigungu").onchange = function () { if ($("fsigungu").value) loadFests(); else { resetSel($("fname"), "먼저 시군구를 고르세요"); resetSel($("fyear"), "–"); fready(); } };
+    s.onchange = function () { fillFSigungu(); if ((FREG[$("fsido").value] || []).length) loadFests(); };
+    $("fsigungu").onchange = function () { loadFests(); };
     $("fname").onchange = fillYears;
     $("fyear").onchange = fready;
     var sd = P0.get("sido"), sg = P0.get("sigungu"), id = P0.get("fest"), yr = P0.get("year");
