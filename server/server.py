@@ -8,7 +8,7 @@ import os
 import sqlite3
 import threading
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 import analysis
 import lifepop
@@ -20,6 +20,8 @@ import regioncal
 import bigevents
 import feedback
 import festival
+from pydantic import Field
+from mcp.types import ToolAnnotations
 
 try:  # mcp 2.x
     from mcp.server.mcpserver import MCPServer
@@ -62,8 +64,8 @@ db = _ThreadDB(DB)
 SERVICE = "빅데이터 Insight: 지역별 유입인구"
 # 도구 목록이 바뀌면(추가·삭제·입력값·설명) 세 값을 같이 고친다. 회귀 시험이 TOOLS와 실제 도구가 다르면 잡는다.
 # 결과마다 붙여서, 예전에 연결한 이용자에게도 AI가 '새 도구가 생겼으니 다시 연결'을 알려 주게 한다(claude/변경_관리_원칙.md).
-VERSION = "0.3.0"
-TOOLS_CHANGED = "2026-11-15"
+VERSION = "0.3.1"
+TOOLS_CHANGED = "2026-11-16"
 TOOLS = ["get_metadata", "list_regions", "get_movement", "get_breakdown", "get_weather", "analyze_region_week",
          "find_unusual_regions", "estimate_life_pop", "forecast_festival", "get_datalab_daily", "report_issue",
          "get_region_calendar", "get_bloom_foliage", "get_data_status"]
@@ -71,6 +73,15 @@ TOOL_NOTICE = {"버전": VERSION, f"도구 목록({len(TOOLS)}개)": TOOLS, "도
                "안내": "지금 쓸 수 있는 도구에 이 목록 중 없는 것이 있으면, 이용자에게 대화에서 한 번만 "
                      "'이 서비스에 새 도구(이름)가 생겼다. 커넥터(앱)를 끊었다 다시 연결하면 쓸 수 있다'고 알릴 것."}
 SERVICE_FULL = SERVICE + "(개인이 개발한 참고용 서비스, 정부 공식 통계 아님)"
+
+# 도구 정의에 붙이는 동작 표시와 입력값 설명(TDQS·클라이언트가 읽음, 2026-11-16).
+# 이 서비스 도구는 report_issue만 바깥(운영자)으로 보내고, 나머지는 모두 읽기만 한다.
+READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
+SENDS = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True)
+Sido = Annotated[str, Field(description="시도 이름. list_regions로 확인한 표기(예: '경상북도', '서울특별시')")]
+Sigungu = Annotated[str, Field(description="시군구 이름. list_regions로 확인한 표기(예: '경주시', '수원시 장안구')")]
+Week = Annotated[str, Field(description="주차 'YYYY.MM.N주차'(월~일 한 주, 그 주 목요일이 속한 달로 셈. 예: '2025.10.2주차')")]
+YearMonth = Annotated[str, Field(description="달 'YYYY-MM'(예: '2026-09')")]
 INSTRUCTIONS = (
     f"{SERVICE_FULL}. 국가데이터처 KOBIGS 나우캐스트 '통신 모바일 인구이동량'(시군구·주별 하루 평균 이동 건수)을 조회하고, "
     "한 지역·한 주가 평소와 다른지 판정하며, 생활인구 참고 추정과 축제 주 참고 예측을 낸다. "
@@ -222,7 +233,7 @@ def _answer(r, kind, source, calc=False):
     return {**head, **r, "서비스 도구": TOOL_NOTICE}
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 def get_metadata() -> dict:
     """통신 모바일 인구이동량 통계의 정의와 이용 시 주의사항을 돌려준다.
     다른 도구를 쓰기 전에 반드시 먼저 한 번 호출해서 읽을 것."""
@@ -285,7 +296,7 @@ def get_metadata() -> dict:
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 def list_regions(keyword: str = "") -> list:
     """시도·시군구 이름을 검색한다. 시군구 이름은 여러 시도에 겹친다(예: 중구, 동구, 서구).
     지역 값을 조회하기 전에 이 도구로 정확한 '시도'와 '시군구' 짝을 먼저 확인할 것.
@@ -305,14 +316,14 @@ def _order(week: str) -> int:
     return int(y) * 1000 + int(m) * 10 + int(w)
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 def get_movement(
     direction: Literal["유입", "유출"],
     category: Literal["전국", "성별", "연령", "입지유형", "시도", "시군구"],
     item: str,
-    start_week: str,
-    end_week: str,
-    sido: str = "",
+    start_week: Week,
+    end_week: Week,
+    sido: Sido = "",
 ) -> dict:
     """한 대상의 주차별 인구이동량(일평균 건수)을 기간으로 조회한다.
 
@@ -379,15 +390,17 @@ def get_movement(
     return _answer(out, "nowcast", SOURCE)
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 def get_breakdown(
     direction: Literal["유입", "유출"],
     category: Literal["성별", "연령", "입지유형", "시도"],
-    week: str,
+    week: Week,
 ) -> dict:
-    """특정 주차의 전국 이동량을 성별·연령·입지유형·시도 중 하나의 기준으로 나눠 돌려준다.
-    한 번에 한 기준만 쓸 것. 기준끼리 섞어 더하면 중복 집계가 된다.
-    week 형식: 'YYYY.MM.N주차'."""
+    """한 주의 전국 이동량을 한 기준(성별·연령·입지유형·시도)으로 나눠 항목별 건수와 비중(share_pct)을 돌려준다.
+    - '이번 주 이동은 어느 연령·어느 시도가 많았나'처럼 한 주의 구성을 볼 때 쓴다.
+    - 전국 기준만 있다. 한 시군구의 값·여러 주 흐름은 get_movement, 평소와 다른지는 analyze_region_week로.
+    - 한 번에 한 기준만. 기준끼리 더하면 같은 이동이 두 번 세어진다.
+    - 단위는 일평균 이동 건수(사람 수 아님). 유출은 2023년부터. 결과가 없으면 get_data_status로 기간을 확인할 것."""
     rows = db.execute(
         "SELECT item, within, outside, total FROM moves WHERE direction=? AND category=? AND week=? ORDER BY total DESC",
         (direction, category, week)).fetchall()
@@ -401,8 +414,8 @@ def get_breakdown(
     }, "nowcast", SOURCE)
 
 
-@mcp.tool()
-def get_weather(sigungu: str, sido: str, start_week: str, end_week: str) -> dict:
+@mcp.tool(annotations=READ_ONLY)
+def get_weather(sigungu: Sigungu, sido: Sido, start_week: Week, end_week: Week) -> dict:
     """시군구의 주차별 날씨를 돌려준다. 나우캐스트 이동량과 같은 주차(월~일, 'YYYY.MM.N주차')로 묶여 있다.
     - 값: ta_avg 주 평균기온(°C), ta_max 주 최고기온, ta_min 주 최저기온, rn_sum 주 강수량 합계(mm),
       rain_days 1mm 이상 비 온 날 수, sd_max 주중 최심 적설(cm), days 관측된 날 수.
@@ -471,8 +484,8 @@ def _addons(r, sido, sigungu, wo, mon, hd):
         r["공연 자료 안내"] = perf.NOTE
 
 
-@mcp.tool()
-def analyze_region_week(sido: str, sigungu: str, week: str) -> dict:
+@mcp.tool(annotations=READ_ONLY)
+def analyze_region_week(sido: Sido, sigungu: Sigungu, week: Week) -> dict:
     """한 시군구의 한 주 관외 유입이 '평소와 다른가, 얼마나 다른가'를 판정한다.
 
     - 평소 값: 직전 8주(연휴 주 제외) 중앙값. 비교군 대비: 같은 주 비슷한 지역 10곳의 변화를 뺀 값.
@@ -481,6 +494,7 @@ def analyze_region_week(sido: str, sigungu: str, week: str) -> dict:
       '신뢰구간'·'유의하다'는 말은 쓰지 말 것.
     - 원인(축제·날씨·행사)은 이 도구가 정하지 않는다. get_weather 등으로 판단 재료를 함께 보여 주되 단정하지 말 것.
     - 판정·비교군은 이 서비스(빅데이터 Insight: 지역별 유입인구)의 비공식 계산이다. 국가데이터처 값처럼 말하지 말 것.
+    - 한 지역을 판정할 때 쓴다. 전국에서 어디가 튀었는지는 find_unusual_regions, 여러 주 흐름은 get_movement로.
     - sido·sigungu는 list_regions로 확인한 이름, week는 'YYYY.MM.N주차'."""
     try:
         wo = _order(week)
@@ -527,14 +541,15 @@ def analyze_region_week(sido: str, sigungu: str, week: str) -> dict:
     return _answer(r, "judge", SOURCE, calc=True)
 
 
-@mcp.tool()
-def find_unusual_regions(week: str = "", top: int = 15) -> dict:
+@mcp.tool(annotations=READ_ONLY)
+def find_unusual_regions(week: Week = "", top: int = 15) -> dict:
     """한 주에 전국 시군구 중 관외 유입이 평소와 가장 크게 달랐던 곳을 '평소 출렁임의 몇 배' 순으로 돌려준다.
     '이번 주 어디가 튀었나', '전국에서 사람이 갑자기 몰린 곳' 같은 질문에 쓸 것. 직접 여러 지역을 조회해 순위를 만들지 말 것.
 
     - week를 비우면 가장 최근 주차. 형식 'YYYY.MM.N주차'. top은 늘어난 곳·줄어든 곳 각각 몇 곳(최대 30).
     - 순위는 퍼센트가 아니라 평소 출렁임의 배수다. 원인은 정하지 않는다.
-    - 연휴 주에는 전국이 함께 움직여 판정이 흔들린다(결과의 '주의')."""
+    - 연휴 주에는 전국이 함께 움직여 판정이 흔들린다(결과의 '주의').
+    - 지역이 정해진 질문은 analyze_region_week로(이 도구는 전국 순위만)."""
     try:
         if week:
             wo = _order(week)
@@ -565,8 +580,8 @@ def find_unusual_regions(week: str = "", top: int = 15) -> dict:
     }, "rank", SOURCE, calc=True)
 
 
-@mcp.tool()
-def estimate_life_pop(sido: str, sigungu: str, year_month: str) -> dict:
+@mcp.tool(annotations=READ_ONLY)
+def estimate_life_pop(sido: Sido, sigungu: Sigungu, year_month: YearMonth) -> dict:
     """생활인구가 아직 공표되지 않은 달의 생활인구를 나우캐스트로 가늠한 '참고 추정치'를 돌려준다.
     생활인구 추정 질문에는 반드시 이 도구를 쓸 것. KOSIS 표 등을 조합해 직접 계산하지 말 것.
 
@@ -587,8 +602,8 @@ def estimate_life_pop(sido: str, sigungu: str, year_month: str) -> dict:
     return r
 
 
-@mcp.tool()
-def forecast_festival(sido: str, sigungu: str, festival_name: str = "", start_date: str = "", end_date: str = "") -> dict:
+@mcp.tool(annotations=READ_ONLY)
+def forecast_festival(sido: Sido, sigungu: Sigungu, festival_name: str = "", start_date: str = "", end_date: str = "") -> dict:
     """지역 축제가 열리는 주의 관외 유입이 평소보다 얼마나 늘지 '비공식 참고 예측'을 범위로 돌려준다.
 
     - 축제 방문객 수(명)를 예측하지 않는다. 관외 유입 이동 건수의 상승률(%)이다. '명'으로 바꿔 말하지 말 것.
@@ -647,8 +662,8 @@ def _rhythm(sido, sigungu):
     return out
 
 
-@mcp.tool()
-def get_datalab_daily(sido: str, sigungu: str, start_date: str, end_date: str,
+@mcp.tool(annotations=READ_ONLY)
+def get_datalab_daily(sido: Sido, sigungu: Sigungu, start_date: str, end_date: str,
                       kind: Literal["외지인", "현지인", "외국인"] = "외지인") -> dict:
     """한국관광 데이터랩 시군구별 '일별' 방문자 수(사람 수 추정, 단위 '명')와 그 지역의 요일·장날 리듬을 돌려준다.
 
@@ -695,7 +710,7 @@ def get_datalab_daily(sido: str, sigungu: str, start_date: str, end_date: str,
     }, "datalab", "한국관광공사 한국관광 데이터랩 지역별 방문자 수(통신자료 기반 추정)")
 
 
-@mcp.tool()
+@mcp.tool(annotations=SENDS)
 def report_issue(message: str,
                  kind: Literal["값이 이상함", "설명이 틀림", "작동 오류", "자료 추가 요청", "제안", "기타"] = "기타",
                  region: str = "", period: str = "", tool: str = "", link: str = "") -> dict:
@@ -711,8 +726,8 @@ def report_issue(message: str,
     return feedback.submit(message, kind, region, period, tool, link)
 
 
-@mcp.tool()
-def get_region_calendar(sido: str, sigungu: str, start: str, end: str = "") -> dict:
+@mcp.tool(annotations=READ_ONLY)
+def get_region_calendar(sido: Sido, sigungu: Sigungu, start: str, end: str = "") -> dict:
     """한 시군구의 한 기간에 있었던 일(공휴일·축제·대형 행사·프로야구 홈경기·벚꽃 만발·단풍 절정·큰 공연·큰 눈비)을
     주별로 모아, 주마다 그 주의 관외 유입 판정을 함께 돌려준다.
     - '이번 달 경주에 무슨 행사 있었어?', '10월 대구 포스트시즌 경기랑 관중은?', '그때 사람 많이 왔어?'에 쓴다.
@@ -727,7 +742,7 @@ def get_region_calendar(sido: str, sigungu: str, start: str, end: str = "") -> d
                    calc=True)
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 def get_bloom_foliage(year: int, kind: str) -> dict:
     """그해 전국 벚꽃(개화·만발) 또는 단풍(유명산 첫 단풍·절정, 단풍나무 표준목) 관측일(기상청 계절관측)을 돌려준다.
     유입 효과가 확인된 명소(단풍 17곳, 벚꽃 12곳)는 그 주 관외 유입 판정과 이 지역 지난 기록을 함께 준다.
@@ -738,7 +753,7 @@ def get_bloom_foliage(year: int, kind: str) -> dict:
     return _answer(r, "calendar", "기상청 기상자료개방포털 계절관측 / " + SOURCE.removeprefix("출처: "), calc=True)
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 def get_data_status() -> dict:
     """이 서비스가 가진 자료별 최신 시점과 마지막으로 받아 온 날을 돌려준다.
     '언제 자료까지 있나', '최신 주차가 뭐냐'는 질문이나, 다른 도구 결과가 비어 있을 때 기간을 확인하는 데 쓴다.
