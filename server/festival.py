@@ -208,11 +208,22 @@ def forecast(db, sido, sigungu, name="", start_date="", end_date=""):
         c = common(wo)
         rec.append({"y": r["y"], "name": r["name"], "기간": f"{r['s']}~{r['e']}", "주차": me[wo][0],
                     "wo": wo, "raw": raw, "comp": None if c is None else raw - c,
-                    "long_hol": A.is_long_holiday(hol.get(wo))})
+                    "long_hol": A.is_long_holiday(hol.get(wo)), "sus": A.is_suspect(sido, sigungu, wo)})
     use = [x for x in rec if not x["long_hol"] and x["comp"] is not None]
     shown = [{"연도": x["y"], "주된 주": x["주차"], "기간(계획)": x["기간"],
               "평소 대비(%)": A._pct(x["raw"]), "비교군 대비(%)": A._pct(x["comp"]),
-              "연휴 주": x["long_hol"]} for x in rec]
+              "연휴 주": x["long_hol"], **({"원자료 확인 필요 구간": A.SUSPECT_FLAG} if x["sus"] else {})} for x in rec]
+    sus_notes = []
+    if any(x["sus"] for x in rec):
+        used = [str(x["y"]) for x in use if x["sus"]]
+        unused = [str(x["y"]) for x in rec if x["sus"] and x not in use]
+        sus_notes = A.suspect(sido, sigungu, min(x["wo"] for x in rec if x["sus"]), max(x["wo"] for x in rec if x["sus"]))
+        if used:
+            sus_notes.append(f"지난 회차 중 {'·'.join(used)}년 주된 주가 원자료 확인 필요 구간이다. 그 값도 예측 계산(또는 '예측 하지 않음' 판단)에 "
+                             "들어갔으니, 결과를 말할 때 이 점을 먼저 밝히고 그해 값을 '작년엔 줄었다·늘었다'의 근거로 쓰지 말 것.")
+        if unused:
+            sus_notes.append(f"지난 회차 중 {'·'.join(unused)}년 주된 주{'도' if used else '가'} 원자료 확인 필요 구간이다(연휴 주 등이라 계산에는 들어가지 않았다). "
+                             "그해 값을 '작년엔 줄었다·늘었다'의 근거로 쓰지 말 것.")
     base = {"축제": past[-1]["name"], "지역": f"{sido} {sigungu}", "지난 회차": shown,
             "평소 출렁임(%)": A._pct(s)}
     common_notes = [
@@ -224,7 +235,7 @@ def forecast(db, sido, sigungu, name="", start_date="", end_date=""):
     if not use or s is None:
         base["예측"] = "하지 않음"
         base["이유"] = "지난 회차 중 비교할 수 있는 주가 없다(자료 기간 밖이거나 연휴 주)."
-        base["주의"] = common_notes
+        base["주의"] = sus_notes + common_notes
         return base
     ratio = mean(x["raw"] for x in use) / s
     base["지난 회차 평균의 평소 출렁임 대비 몇 배"] = round(ratio, 1)
@@ -232,7 +243,7 @@ def forecast(db, sido, sigungu, name="", start_date="", end_date=""):
         base["예측"] = "하지 않음"
         base["이유"] = ("지난 회차에도 시군구·주 단위에서 평소 출렁임의 2배를 넘지 않았다. "
                       "이 자료로는 축제 효과가 잡히지 않아 예측할 것이 없다(전국 축제의 약 83%가 이렇다).")
-        base["주의"] = common_notes
+        base["주의"] = sus_notes + common_notes
         return base
     group = "3.5배 초과" if ratio > 3.5 else "2~3.5배"
     (a1, b1), (a2, b2) = BANDS[group]
@@ -275,7 +286,7 @@ def forecast(db, sido, sigungu, name="", start_date="", end_date=""):
         notes.append("지난 회차 중 연휴와 겹친 해는 예측 기준에서 뺐다.")
     if n_far < 5:
         notes.append("비교군(100km 밖 비슷한 지역)이 모자라 비교군 대비 값이 불안정하다.")
-    base["주의"] = notes + [
+    base["주의"] = sus_notes + notes + [
         "과거 채점에서 예측 대상 축제도 셋 중 하나는 그해 크게 늘지 않았다.",
         "날씨·개화·프로그램 변화처럼 과거에 없던 사정은 반영되지 않는다.",
     ] + common_notes

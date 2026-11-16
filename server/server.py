@@ -432,7 +432,7 @@ def get_movement(
                              "이어 보려면 새 구들을 같은 기간으로 조회해 관내+관외 합계를 더할 것(관외만은 개편 때문에 계단처럼 뜀).")
         sus = analysis.suspect(sido, item, _order(start_week), _order(end_week))
         if sus:
-            out["주의"] = [out["주의"]] + sus
+            out["주의"] = sus + [out["주의"]]
         prof = _profile(sido, item)
         if prof:
             out["지역 성격"] = prof
@@ -655,6 +655,8 @@ def compare_same_week(sido: Sido, sigungu: Sigungu, week: Week,
     keep = ("기간(월~일)", "판정", "평소 대비 변화(%)", "비교군 대비 변화(%)", "공휴일 보정(%)", "최종 변화(%)",
             "평소 출렁임의 몇 배", "관외 유입(일평균 건수)", "프로야구 홈경기 몫 추정(%)")
 
+    sus_lines = []
+
     def one(w, how):
         r = analyze_region_week(sido, sigungu, _label(w))
         row = {"주차": _label(w), "견준 방식": how}
@@ -662,6 +664,9 @@ def compare_same_week(sido: Sido, sigungu: Sigungu, week: Week,
             row["없음"] = r["error"]
             return row
         row.update({k: r[k] for k in keep if k in r})
+        if analysis.is_suspect(sido, sigungu, w):
+            row["원자료 확인 필요 구간"] = analysis.SUSPECT_FLAG
+            sus_lines.extend(x for x in r.get("주의", []) if x.startswith("원자료 확인 필요 구간") and x not in sus_lines)
         ev = {k: v for k, v in r.items() if k.startswith("그 주 ") and v and "개점 안내" not in k}
         if ev:
             row["그 주에 있었던 일"] = ev
@@ -693,6 +698,8 @@ def compare_same_week(sido: Sido, sigungu: Sigungu, week: Week,
         out["주의"].insert(0, "'개점 뒤 안내'가 붙은 해는 판정이 부풀려졌을 수 있으니, 그 해와 견줘 '더 왔다·덜 왔다'고 말하지 말 것.")
     if tag:
         out["주의"].insert(0, f"{tag} 주라서 지난 해도 그 해 {tag} 주와 견줬다(날짜가 달라도).")
+    if sus_lines:
+        out["주의"] = sus_lines + ["원자료 확인 필요 구간인 해와 견줘 '더 왔다·덜 왔다'고 말하지 말 것."] + out["주의"]
     return _answer(out, "judge", SOURCE, calc=True)
 
 
@@ -719,11 +726,15 @@ def find_unusual_regions(week: Week = "", top: int = 15) -> dict:
     up = [dict(x) for x in rows if x["배수"] > 0][:top]
     down = [dict(x) for x in rows if x["배수"] < 0][:top]
     mon = dt.date.fromisoformat(analysis.week_dates(wo)[:10])
+    sus_lines = []
     for x in up + down:
         sd, _, sg = x["지역"].partition(" ")
         ao = safe.call("개점 뒤 안내(순위)", facility.after_open_short, sd, sg, mon)
         if ao:
             x["개점 뒤 안내"] = ao
+        if analysis.is_suspect(sd, sg, wo):
+            x["원자료 확인 필요 구간"] = analysis.SUSPECT_FLAG
+            sus_lines.extend(f"{x['지역']} — {t}" for t in analysis.suspect(sd, sg, wo))
     h = analysis.holidays(db).get(wo)
     notes = []
     if analysis.is_long_holiday(h):
@@ -734,7 +745,7 @@ def find_unusual_regions(week: Week = "", top: int = 15) -> dict:
         "판정한 지역 수": len(rows), "평소 출렁임 2배 넘게 달라진 지역 수": n_strong,
         "평소보다 늘어난 곳": up, "평소보다 줄어든 곳": down,
         "판정 기준": analysis.JUDGE_RULE,
-        "주의": notes + [
+        "주의": sus_lines + notes + [
             "평소 출렁임 2배를 넘는 지역은 평범한 주에도 전국에서 몇 곳씩 나온다(공휴일 없는 주에 위로 약 5%, 아래로 약 3%).",
             "한 지역에서만 크게 튀고 이웃 지역이 반대로 움직였으면 원자료 처리 오류일 수도 있다. 이용자가 원하면 report_issue로 알릴 수 있다.",
         ],
