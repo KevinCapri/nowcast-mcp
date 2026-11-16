@@ -66,7 +66,7 @@ db = _ThreadDB(DB)
 SERVICE = "빅데이터 Insight: 지역별 유입인구"
 # 도구 목록이 바뀌면(추가·삭제·입력값·설명) 세 값을 같이 고친다. 회귀 시험이 TOOLS와 실제 도구가 다르면 잡는다.
 # 결과마다 붙여서, 예전에 연결한 이용자에게도 AI가 '새 도구가 생겼으니 다시 연결'을 알려 주게 한다(claude/변경_관리_원칙.md).
-VERSION = "0.4.5"
+VERSION = "0.4.6"
 TOOLS_CHANGED = "2026-11-16"
 TOOLS = ["get_metadata", "list_regions", "get_movement", "get_breakdown", "get_weather", "analyze_region_week",
          "find_unusual_regions", "estimate_life_pop", "forecast_festival", "get_datalab_daily", "report_issue",
@@ -115,7 +115,7 @@ INSTRUCTIONS = (
     "모든 답의 맨 끝에는 도구 결과의 '답 끝에 적을 출처'를 줄마다 그대로 붙일 것. 문장 속 설명으로 대신하지 말고, "
     "웹 검색에서 가져온 내용(경기 점수·기사 등)은 그 출처를 따로 한 줄 더 붙일 것. "
     "결과의 '서비스 도구' 목록에 지금 쓸 수 없는 도구가 있으면, 이용자에게 한 번만 커넥터를 다시 연결하면 쓸 수 있다고 알릴 것. "
-    "이용자가 'Hello Insight'(또는 '안녕 인사이트')라고 하거나 이 서비스로 무엇을 할 수 있는지 물으면 get_metadata를 불러 '할 수 있는 일'을 그대로 보여 줄 것. "
+    "이용자가 'Hello Insight'(또는 '헬로 인사이트'·'안녕 인사이트')라고 하거나 이 서비스로 무엇을 할 수 있는지 물으면 get_metadata를 불러 '할 수 있는 일'을 그대로 보여 줄 것. "
     "'Hello Insight'에는 다른 '빅데이터 Insight' 서비스가 함께 연결돼 있으면 각각 불러 함께 소개하고, 'Hello Insight 유입인구'처럼 서비스 이름을 붙이면 그 서비스만 소개할 것."
 )
 mcp = MCPServer("nowcast-mobility", title=SERVICE, instructions=INSTRUCTIONS, version=VERSION,
@@ -256,7 +256,7 @@ def _answer(r, kind, source, calc=False):
 def get_metadata() -> dict:
     """통신 모바일 인구이동량 통계의 정의와 이용 시 주의사항을 돌려준다.
     다른 도구를 쓰기 전에 반드시 먼저 한 번 호출해서 읽을 것.
-    이용자가 'Hello Insight'(또는 '안녕 인사이트')라고 하거나 이 서비스로 무엇을 할 수 있는지 물으면 이 도구를 불러 결과의 '할 수 있는 일'을 그대로 보여 줄 것.
+    이용자가 'Hello Insight'(또는 '헬로 인사이트'·'안녕 인사이트')라고 하거나 이 서비스로 무엇을 할 수 있는지 물으면 이 도구를 불러 결과의 '할 수 있는 일'을 그대로 보여 줄 것.
     'Hello Insight 유입인구'처럼 이 서비스 이름을 붙여 불러도 이 도구다. 다른 '빅데이터 Insight' 서비스가 함께 연결돼 있으면 'Hello Insight'에는 그쪽 안내도 함께 보여 줄 것.
     결과에는 용어 정의, 값의 단위, 주의사항, 도구 사용 규칙, 판정 방식 변경 이력, 검토했지만 쓰지 않는 자료 등이 들어 있다.
     자료별 최신 시점은 get_data_status로."""
@@ -281,7 +281,7 @@ def get_metadata() -> dict:
                 "여러 해에 걸친 추세 판단",
             ],
             "의견": "틀린 값이나 추가했으면 하는 자료는 \"의견 보낼게\"라고 말하면 운영자에게 전달",
-            "보여 줄 때": "이용자가 'Hello Insight'(또는 'Hello Insight 유입인구')라고 하거나 할 수 있는 일을 물으면 이 칸을 문구 그대로, 위 순서대로 보여 줄 것. 예시 질문의 ○○은 그대로 둘 것. 다른 '빅데이터 Insight' 서비스도 연결돼 있으면 서비스마다 나눠 보여 줄 것.",
+            "보여 줄 때": "이용자가 'Hello Insight'·'헬로 인사이트'·'안녕 인사이트'(또는 'Hello Insight 유입인구')라고 하거나 할 수 있는 일을 물으면 이 칸을 문구 그대로, 위 순서대로 보여 줄 것. 예시 질문의 ○○은 그대로 둘 것. 다른 '빅데이터 Insight' 서비스도 연결돼 있으면 서비스마다 나눠 보여 줄 것.",
         },
         "정의": {
             "인구이동": "행정동 경계를 넘어 거주지가 아닌 행정동으로 이동한 뒤 30분 이상 머문 경우를 1건으로 센다.",
