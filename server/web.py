@@ -828,6 +828,7 @@ app = Starlette(routes=[
     Route("/og.png", og_image),
     Route("/admin", ADM.admin, methods=["GET", "POST"]),
     Route("/admin/trend-check", ADM.trend_check),
+    Route("/admin/site-check", ADM.site_check),
     Route("/admin/ktx-check", ADM.ktx_check),
     Route("/api/regions", api_regions),
     Route("/api/weeks", api_weeks),
@@ -842,4 +843,4 @@ app = Starlette(routes=[
 
 
 def handles(path: str) -> bool:
-    return path in ("/", "/robots.txt", "/sitemap.xml", "/og.png", "/admin", "/admin/trend-check", "/admin/ktx-check") or path.startswith("/api/")
+    return path in ("/", "/robots.txt", "/sitemap.xml", "/og.png", "/admin", "/admin/trend-check", "/admin/ktx-check", "/admin/site-check") or path.startswith("/api/")
