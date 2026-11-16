@@ -68,7 +68,7 @@ textarea{padding:10px 12px;min-height:96px;resize:vertical}
 .legend{display:flex;flex-wrap:wrap;gap:8px 14px;font-size:12px;color:#4B5159}
 .legend span{display:flex;align-items:center;gap:6px}
 .sw{width:12px;height:12px;border-radius:3px;display:inline-block}
-.chart{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
+.chart{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch;padding-bottom:10px}   /* 휴대폰 가로 스크롤바가 주 글자(1주·2주)를 가리지 않게 */
 .grid{display:grid;gap:0 2px}
 .mon{font-size:13px;font-weight:600;color:var(--ink);padding:0 0 6px 6px;white-space:nowrap;overflow:hidden}
 .col{display:flex;flex-direction:column;align-items:center;min-width:0;cursor:pointer;border-radius:6px;outline:none}
@@ -346,19 +346,18 @@ footer p{margin:0 0 6px}
     <li><b>커스텀 커넥터 추가</b> → 아래 입력 → <b>계속</b><ul class="fields"><li>이름: 원하는 이름(예: 빅데이터 Insight)</li><li>MCP 서버 URL: <code>https://nowcast-mcp.azurewebsites.net/mcp</code></li></ul></li>
     <li>대화창 입력칸 <b>+</b> 버튼에서 커넥터 켜기 → 질문</li>
   </ol>
-  <div class="reconn"><span class="rl">🔌 도구가 바뀌면</span><b>설정 → 커넥터</b>에서 <b>연결 해제</b> → 다시 <b>연결</b></div>
+  <div class="reconn"><span class="rl">🔄 업데이트 반영하기('주요 업데이트'에 🔄 표시가 있을 때)</span><b>설정 → 커넥터</b>에서 <b>연결 해제</b> → 다시 <b>연결</b></div>
 </div>
 
 <div class="card">
   <h2>ChatGPT에 연결하기</h2>
   <ol>
-    <li>ChatGPT <b>설정 → 통합 → 플러그인</b> → 오른쪽 위 <b>디렉터리 둘러보기</b></li>
+    <li>ChatGPT <b>설정 → 플러그인</b> → 오른쪽 위 <b>디렉터리 둘러보기</b></li>
     <li>오른쪽 위 <b>추가 → 사용자 지정 MCP 서버 추가</b> → 아래 입력<ul class="fields"><li>이름: 원하는 이름(예: 빅데이터 Insight)</li><li>연결(서버 URL): <code>https://nowcast-mcp.azurewebsites.net/mcp</code></li><li>인증: <b>OAuth</b> → <b>인증 없음</b></li></ul></li>
     <li><b>이해했으며 계속 진행하겠습니다</b> 체크 → <b>플러그인으로 생성</b></li>
     <li>대화창 입력칸 <b>+</b> 버튼에서 플러그인 켜기 → 질문(확인 버튼이 뜨면 누르기)</li>
   </ol>
-  <div class="reconn"><span class="rl">🔌 도구가 바뀌면</span><b>설정 → 통합 → 플러그인 → 설치됨</b> → 이 플러그인 → <b>도구 새로고침</b></div>
-  <p class="note">웹 검색 결과가 섞일 수 있음</p>
+  <div class="reconn"><span class="rl">🔄 업데이트 반영하기('주요 업데이트'에 🔄 표시가 있을 때)</span><b>설정 → 플러그인</b> → 플러그인 이름 → <b>도구 새로고침</b></div>
 </div>
 </div>
 <p class="note pairnote">연결을 확인한 AI만 적음. 다른 AI는 확인되는 대로 추가</p>
@@ -493,8 +492,8 @@ footer p{margin:0 0 6px}
   // ---------- 주요 업데이트 (새 항목은 맨 앞에 추가, 사소한 변경은 넣지 않음) ----------
   var UPDATES = [
     { d: "2026년 11월 16일", ver: "0.3.0 → 0.4.4", reconnect: true, items: [
-      "새 AI 도구 3개: 지역 일정과 그 주 유입 함께 보기(get_region_calendar), 해마다 전국 벚꽃·단풍 관측일(get_bloom_foliage), 지난 몇 해의 같은 주와 비교(compare_same_week) (다시 연결하면 보입니다)",
-      "AI가 질문에 맞는 도구를 고르기 쉽도록 도구 설명을 다듬음 (다시 연결하면 반영됩니다)",
+      "새 AI 도구 3개: 지역 일정과 그 주 유입 함께 보기(get_region_calendar), 해마다 전국 벚꽃·단풍 관측일(get_bloom_foliage), 지난 몇 해의 같은 주와 비교(compare_same_week) (업데이트를 반영하면 보입니다)",
+      "AI가 질문에 맞는 도구를 고르기 쉽도록 도구 설명을 다듬음 (업데이트를 반영하면 적용됩니다)",
       "'그 주에 있었던 일'에 프로야구 홈경기(2021년부터), 벚꽃 만발·단풍 절정(기상청 관측), 전국체전·국제행사 같은 대형 행사, 큰 공연장 공연 추가",
       "지역 일정에 주요 유료관광지 월별 방문객(한국문화관광연구원)과 대형 시설 개점·폐점 날짜 추가",
       "빠져 있던 큰 축제 추가, 빈 개최 연도 채움 (고양국제꽃박람회, 계룡軍문화축제, 함안낙화놀이, 영광불갑산상사화축제, 황매산철쭉제 등)",
@@ -524,7 +523,7 @@ footer p{margin:0 0 6px}
     function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
     function ul(u) { return "<ul>" + u.items.map(function (t) { return "<li>" + esc(t) + "</li>"; }).join("") + "</ul>"; }
     // 새 도구·도구 빠짐·합침·입력값 변경이 있는 날만 다시 연결 상자(설명만 바뀐 날은 줄 끝 표시만)
-    var RECON = '<div class="recon"><b>🔌 다시 연결해야 쓸 수 있는 새 도구가 있습니다</b>' +
+    var RECON = '<div class="recon"><b>🔄 업데이트를 반영해야 쓸 수 있는 새 도구가 있습니다</b>' +
       '<span>이미 연결해 쓰는 경우 — Claude: 커넥터 연결 해제 → 다시 연결 / ChatGPT: 플러그인 → 도구 새로고침</span></div>';
     function body(u) { return (u.reconnect ? RECON : "") + ul(u); }
     function ver(u) { return u.ver ? '<span class="uver">버전 ' + esc(u.ver) + "</span>" : ""; }
@@ -534,11 +533,11 @@ footer p{margin:0 0 6px}
       ct.innerHTML = '<h3>' + esc(UPDATES[i].d) + ver(UPDATES[i]) + "</h3>" + body(UPDATES[i]);
     }
     UPDATES.forEach(function (u, i) {
-      var b = document.createElement("button"); b.type = "button"; b.textContent = u.d + (u.reconnect ? " 🔌" : "");
+      var b = document.createElement("button"); b.type = "button"; b.textContent = u.d + (u.reconnect ? " 🔄" : "");
       if (u.reconnect) b.title = "다시 연결이 필요한 변경이 있는 날";
       b.onclick = function () { pick(i); }; dl.appendChild(b);
       var r = document.createElement("div"); r.className = "row" + (u.first ? " first" : "") + (i === 0 ? " on" : "");
-      r.innerHTML = '<button type="button" aria-expanded="' + (i === 0) + '"><span>' + esc(u.d) + (u.reconnect ? " 🔌" : "") + '</span><span>' + (i === 0 ? "▴" : "▾") + "</span></button>" + '<div class="ub">' + ver(u) + body(u) + "</div>";
+      r.innerHTML = '<button type="button" aria-expanded="' + (i === 0) + '"><span>' + esc(u.d) + (u.reconnect ? " 🔄" : "") + '</span><span>' + (i === 0 ? "▴" : "▾") + "</span></button>" + '<div class="ub">' + ver(u) + body(u) + "</div>";
       r.lastChild.hidden = i !== 0;
       r.firstChild.onclick = function () {
         var open = r.lastChild.hidden; r.lastChild.hidden = !open;
@@ -614,16 +613,25 @@ footer p{margin:0 0 6px}
       MONTHS.forEach(function (m) { opt(s, m, Math.floor(m / 100) + "년 " + (m % 100) + "월"); });
       s.disabled = false;
     });
-    $("end").selectedIndex = 0;
+    // 끝월 목록에는 시작월부터 12개월(MAX_MONTHS) 안의 달만 둠. MONTHS는 최근 달이 앞(내림차순).
+    // 원하는 달(want)이 목록 밖이면 가장 가까운 끝(12개월째 또는 시작월)으로 맞춤
+    function fillEnd(want) {
+      var i = $("start").selectedIndex, e = $("end"), lo = Math.max(0, i - (MAX_MONTHS - 1));
+      var vals = MONTHS.slice(lo, i + 1); e.textContent = "";
+      vals.forEach(function (m) { opt(e, m, Math.floor(m / 100) + "년 " + (m % 100) + "월"); });
+      want = +want;
+      e.value = vals.indexOf(want) >= 0 ? want : (want > vals[0] ? vals[0] : vals[vals.length - 1]);
+    }
     $("start").selectedIndex = Math.min(5, MONTHS.length - 1);       // 처음엔 최근 6개월
-    // 시작월을 고르면 끝월을 6개월치(시작월 포함)로 맞춤. 자료가 아직 없으면 가장 최근 달. 끝월은 그 뒤 따로 바꿀 수 있음
-    $("start").onchange = function () { $("end").selectedIndex = Math.max(0, $("start").selectedIndex - 5); };
+    fillEnd(MONTHS[0]);
+    // 시작월을 고르면 끝월을 6개월치(시작월 포함)로 맞춤. 자료가 아직 없으면 가장 최근 달. 끝월은 그 뒤 12개월 안에서 바꿀 수 있음
+    $("start").onchange = function () { fillEnd(MONTHS[Math.max(0, $("start").selectedIndex - 5)]); };
     // 공유 주소로 들어오면 그 지역·기간을 골라 바로 조회(예전 주 단위 주소도 그 달로 바꿔 엶)
     var sd = P.get("sido"), sg = P.get("sigungu");
     var toMonth = function (v) { v = String(v || ""); return v.length === 7 ? String(Math.floor(+v / 10)) : v; };
     var from = toMonth(P.get("from") || P.get("start")), to = toMonth(P.get("to") || P.get("end"));
     if (from && MONTHS.some(function (m) { return String(m) === from; })) $("start").value = from;
-    if (to && MONTHS.some(function (m) { return String(m) === to; })) $("end").value = to;
+    if (from || to) fillEnd(to || $("end").value);   // 공유 주소 기간이 12개월을 넘으면 시작월은 두고 끝월을 12개월째로 맞춤
     if (sd && REG[sd]) {
       sido.value = sd; fillSigungu();
       if (sg && REG[sd].indexOf(sg) >= 0) { $("sigungu").value = sg; ready(); run(); }
