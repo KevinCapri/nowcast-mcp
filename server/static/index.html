@@ -53,6 +53,7 @@ textarea{padding:10px 12px;min-height:96px;resize:vertical}
 .adj .btn[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
 .adj .note{margin:0}
 .btn.light{background:#fff;color:var(--ink);border:1px solid #C9CED6}
+.fields{margin:4px 0 0;padding-left:18px;list-style:"· "}.fields li{margin:2px 0}.fields code{font-size:13px;word-break:break-all}
 .pair{display:grid;grid-template-columns:1fr 1fr;gap:22px}.pairnote{margin:-10px 4px 0}
 @media (max-width:800px){.pair{grid-template-columns:1fr}}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
@@ -338,7 +339,7 @@ footer p{margin:0 0 6px}
   <h2>Claude에 연결하기</h2>
   <ol>
     <li>Claude(웹·데스크톱)에서 <b>설정 → 커넥터</b>로 갑니다.</li>
-    <li><b>커스텀 커넥터 추가</b>를 누르고, 이름(예: 빅데이터 Insight)과 위의 연결 주소를 넣습니다.</li>
+    <li><b>커스텀 커넥터 추가</b>를 누르고 아래처럼 넣습니다.<ul class="fields"><li>이름: 원하는 이름(예: 빅데이터 Insight)</li><li>URL: <code>https://nowcast-mcp.azurewebsites.net/mcp</code></li></ul></li>
     <li>대화창의 도구 목록에서 이 커넥터를 켜고 질문합니다.</li>
   </ol>
   <p class="note">서버에 도구가 새로 생기면 커넥터를 한 번 끊었다 다시 연결해야 보입니다.</p>
@@ -348,7 +349,7 @@ footer p{margin:0 0 6px}
   <h2>ChatGPT에 연결하기</h2>
   <ol>
     <li>ChatGPT <b>설정 → 통합 → 플러그인</b>에서 오른쪽 위 <b>디렉터리 둘러보기</b>로 갑니다.</li>
-    <li>오른쪽 위 <b>추가 → 사용자 지정 MCP 서버 추가</b>를 누르고, 이름(예: 빅데이터 Insight)과 위의 연결 주소를 넣습니다. 인증은 <b>인증 없음</b>을 고릅니다.</li>
+    <li>오른쪽 위 <b>추가 → 사용자 지정 MCP 서버 추가</b>를 누르고 아래처럼 넣습니다.<ul class="fields"><li>이름: 원하는 이름(예: 빅데이터 Insight)</li><li>URL: <code>https://nowcast-mcp.azurewebsites.net/mcp</code></li><li>인증: <b>인증 없음</b></li></ul></li>
     <li>대화창 입력칸의 <b>+</b> 버튼에서 이 플러그인을 켜고 질문합니다. 도구를 부를 때 확인 버튼이 뜨면 눌러 주세요.</li>
   </ol>
   <p class="note">서버의 도구가 바뀌면 플러그인을 지웠다가 다시 추가해야 반영됩니다. ChatGPT는 웹 검색 결과를 함께 섞어 답하는 경우가 있으니, 이 사이트의 결과는 답 끝의 출처·계산 줄로 구분해 보세요.</p>
