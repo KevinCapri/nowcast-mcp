@@ -132,9 +132,19 @@ def suspect(sido, sigungu, wo_from, wo_to=None):
     wo_to = wo_to or wo_from
     c = canon(sido, sigungu)
     return [f"원자료 확인 필요 구간: {why}. 자료 처리 과정의 오류나 행정구역 배정 착오일 가능성이 있다(확인되지 않음). "
+            "답할 때 이 점을 먼저 말하고, 이용자에게는 '이 기간은 행정구역 배정이나 집계 방식에 바뀐 점이 있는지 확인이 필요한 구간'이라는 뜻으로 전할 것. "
             "오류라고 단정하지도 말고, 이 기간 값을 방문 증가·감소의 근거로 쓰지도 말 것. 행사 후보를 억지로 대지 말 것. "
             "이용자가 원하면 report_issue로 운영자에게 알릴 수 있다."
             for k, a, b, why in SUSPECT if k == c and a <= wo_to and wo_from <= b]
+
+
+SUSPECT_FLAG = "이 값을 방문 증가·감소의 근거로 쓰지 말 것('주의' 참고)"   # 결과의 줄마다 붙이는 짧은 칸 '원자료 확인 필요 구간'
+
+
+def is_suspect(sido, sigungu, wo):
+    """그 지역·그 주가 원자료 확인 필요 구간인가."""
+    c = canon(sido, sigungu)
+    return any(k == c and a <= wo <= b for k, a, b, _ in SUSPECT)
 
 
 def week_dates(wo):

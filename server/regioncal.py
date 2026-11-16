@@ -95,7 +95,7 @@ def region_calendar(db, sido, sigungu, start, end=""):
                                            (mons[0].isoformat(), (mons[-1] + dt.timedelta(days=6)).isoformat()))}
     except Exception:
         hd_all = set()
-    weeks, n_ev = [], 0
+    weeks, n_ev, sus_wos = [], 0, []
     for mon in mons:
         sun = mon + dt.timedelta(days=6)
         wo = mon_wo.get(mon)
@@ -128,6 +128,9 @@ def region_calendar(db, sido, sigungu, start, end=""):
             ao = safe.call("개점 뒤 안내(일정)", facility.after_open_short, sido, sigungu, mon)
             if ao:
                 inflow["개점 뒤 안내"] = ao
+            if A.is_suspect(sido, sigungu, wo):
+                inflow["원자료 확인 필요 구간"] = A.SUSPECT_FLAG
+                sus_wos.append(wo)
         weeks.append({"주차": P["me"][wo][0] if wo else _label(mon), "기간(월~일)": f"{mon}~{sun}", "일정": ev,
                       "그 주 유입": inflow})
     hist = safe.call("벚꽃·단풍 지난 기록(일정)", season.history, P, sido, sigungu,
@@ -143,6 +146,8 @@ def region_calendar(db, sido, sigungu, start, end=""):
                   "'그 주 유입'은 analyze_region_week와 같은 계산이다. 더 자세한 판정(비교군·평소 값)은 그 도구로 볼 것.",
                   "축제 일정은 주로 문체부 연초 계획이라 실제와 다를 수 있다(일부는 언론 보도로 확인). 공연은 큰 공연장(3천 석 이상)만, 날씨는 큰 눈·비만 있다.",
                   "자료 기준 뒤의 일정·유입은 없다. 그 뒤를 물으면 '이 서비스에는 ○○까지 있다'고 말하고 원출처를 안내할 것."]}
+    if sus_wos:
+        out["주의"] = A.suspect(sido, sigungu, min(sus_wos), max(sus_wos))
     if hist:
         out["이 지역 지난 기록(벚꽃·단풍)"] = hist
     tm = safe.call("관광지 방문객(일정)", tourism.months, db, sido, sigungu, a, z)
