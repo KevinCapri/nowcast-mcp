@@ -8,6 +8,7 @@
 - 특정성: 같은 역 몫 변화와 전국 모든 시군구 몫 변화의 상관을 구해, 역 시군구·목적지 시군구가 몇 위인지
 - 원값(몫 아님) 전월 대비 상관도 참고로(코로나 때문에 어디나 높게 나옴)
 자료: server/ktx_monthly.csv(공공데이터포털 '한국철도공사_KTX 월별 역별 승하차', 2019~2022만, 평균 1만 명 이상 역)
+     server/srt_monthly.csv(공공데이터포털 '(주)에스알_SRT 월별 역별 승하차', 2019.01~2025.09, 명, 승차+하차)
 """
 import csv
 import datetime as dt
@@ -52,7 +53,12 @@ STATIONS = {
     "수원": (("경기", "수원시 팔달구"), []),
     "광명": (("경기", "광명시"), []),
     "행신": (("경기", "고양시 덕양구"), []),
+    "수서": (("서울", "강남구"), []),
+    "동탄": (("경기", "화성시"), []),
+    "평택지제": (("경기", "평택시"), []),
 }
+SOURCES = {"KTX(한국철도공사, 2019.01~2022.12, 천 명)": ("ktx_monthly.csv", "2022-12"),
+           "SRT(에스알, 2019.01~2025.09, 명)": ("srt_monthly.csv", "2025-09")}
 # 시도 앞 두 글자 묶음(전라·경상·충청은 남북 모두)
 _SIDO = {"충청": ("충청",), "경상": ("경상",), "전라": ("전라", "전남"), "전북": ("전북", "전라북")}
 
@@ -69,8 +75,8 @@ def _corr(xs, ys):
     return round(sxy / (sx * sy), 3) if sx and sy else None
 
 
-def _months():
-    return [f"{y}-{m:02d}" for y in range(2019, 2023) for m in range(1, 13)]
+def _months(last):
+    return [f"{y}-{m:02d}" for y in range(2019, int(last[:4]) + 1) for m in range(1, 13) if f"{y}-{m:02d}" <= last]
 
 
 def _mom(s):
@@ -88,29 +94,38 @@ def _match(want, key):
 
 
 def run(db):
-    M = _months()
+    # 나우캐스트 달별 관외 유입(2019.01~2025.09)을 한 번 읽어 두고 자료마다 기간을 잘라 쓴다
+    allm = _months("2025-09")
+    aidx = {m: i for i, m in enumerate(allm)}
+    acc_all = defaultdict(lambda: defaultdict(list))
+    for sd, sg, wo, v in db.execute("SELECT sido, item, week_order, outside FROM moves WHERE direction='유입' "
+                                    "AND category='시군구' AND outside IS NOT NULL AND week_order BETWEEN 2018120 AND 2025110"):
+        thu = dt.date.fromisoformat(analysis.week_dates(wo)[:10]) + dt.timedelta(days=3)
+        m = f"{thu.year}-{thu.month:02d}"
+        if m in aidx:
+            acc_all[analysis.canon(sd, sg)][aidx[m]].append(v)
+    return {"설명": __doc__.strip().splitlines()[0],
+            **{name: _one(fn, last, acc_all) for name, (fn, last) in SOURCES.items()}}
+
+
+def _one(fn, last, acc_all):
+    M = _months(last)
+    N = len(M)
     idx = {m: i for i, m in enumerate(M)}
-    # KTX
-    with open(HERE / "ktx_monthly.csv", encoding="utf-8") as f:
+    with open(HERE / fn, encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
-    ktx = {c: [0.0] * 48 for c in rows[0] if c != "년월"}
+    ktx = {c: [0.0] * N for c in rows[0] if c != "년월"}
     for r in rows:
         if r["년월"] in idx:
             for c in ktx:
                 ktx[c][idx[r["년월"]]] = float(r[c] or 0)
-    tot = [sum(ktx[c][i] for c in ktx) for i in range(48)]
-    # 나우캐스트 월 평균 관외 유입
-    acc = defaultdict(lambda: defaultdict(list))
-    for sd, sg, wo, v in db.execute("SELECT sido, item, week_order, outside FROM moves WHERE direction='유입' "
-                                    "AND category='시군구' AND outside IS NOT NULL AND week_order BETWEEN 2018120 AND 2023020"):
-        thu = dt.date.fromisoformat(analysis.week_dates(wo)[:10]) + dt.timedelta(days=3)
-        m = f"{thu.year}-{thu.month:02d}"
-        if m in idx:
-            acc[analysis.canon(sd, sg)][idx[m]].append(v)
-    reg = {k: [sum(d[i]) / len(d[i]) if d.get(i) else None for i in range(48)] for k, d in acc.items()}
+    ktx = {c: s for c, s in ktx.items() if all(s)}   # 기간 내내 운행한 역만(새 노선 역은 빼고, 합계도 이 역들끼리)
+    tot = [sum(ktx[c][i] for c in ktx) for i in range(N)]
+    acc = {k: {i: v for i, v in d.items() if i < N} for k, d in acc_all.items()}
+    reg = {k: [sum(d[i]) / len(d[i]) if d.get(i) else None for i in range(N)] for k, d in acc.items()}
     full = {k: s for k, s in reg.items() if all(s)}
-    nat = [sum(s[i] for s in full.values()) for i in range(48)]
-    rsh = {k: [s[i] / nat[i] for i in range(48)] for k, s in full.items()}
+    nat = [sum(s[i] for s in full.values()) for i in range(N)]
+    rsh = {k: [s[i] / nat[i] for i in range(N)] for k, s in full.items()}
     rmom = {k: _mom(s) for k, s in rsh.items()}
 
     def find(want):
@@ -120,15 +135,14 @@ def run(db):
     out, summ = {}, []
     for st, (home, dests) in STATIONS.items():
         s = ktx.get(st)
-        if not s or not all(s):
-            out[st] = "역 자료가 48개월 다 있지 않음"
+        if not s:
             continue
-        ssh = [s[i] / tot[i] for i in range(48)]
+        ssh = [s[i] / tot[i] for i in range(N)]
         smom, syoy = _mom(ssh), _yoy(ssh)
         allc = sorted(((c, k) for k, v in rmom.items() if (c := _corr(smom, v)) is not None), reverse=True)
         rank = {k: i + 1 for i, (_, k) in enumerate(allc)}
         med = allc[len(allc) // 2][0] if allc else None
-        res = {"역 하루 평균(천 명, 2019~2022 월 평균)": round(sum(s) / 48, 1),
+        res = {"역 월 평균 이용(승하차)": round(sum(s) / N, 1),
                "전국 시군구와의 몫 변화 상관 중앙값": med, "견준 시군구 수": len(allc)}
         for role, want in [("역 시군구", home)] + [("목적지", d) for d in dests]:
             k = find(want)
@@ -145,7 +159,7 @@ def run(db):
         out[st] = res
     top10 = [x for x in summ if x[1] == "역 시군구" and x[4] and x[4] <= 10]
     return {
-        "설명": __doc__.strip().splitlines()[0],
+        "달 수": N, "견준 역 수": len([x for x in summ if x[1] == "역 시군구"]),
         "요약": {"역 시군구가 전국 10위 안": f"{len(top10)}/{sum(1 for x in summ if x[1] == '역 시군구')}",
                "역별(역, 구분, 시군구, 몫 전월 대비 상관, 전국 순위)": [list(x) for x in summ]},
         "역별": out,
