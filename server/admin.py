@@ -141,7 +141,7 @@ def _page(days):
         ha, hb = int(120 * a / mx), int(120 * b / mx)
         if unit == "일":
             # 30일 보기는 1일·5일 간격만 숫자를 적어 겹치지 않게
-            lab = f"{k.day}" if days <= 7 or k.day == 1 or k.day % 5 == 0 else ""
+            lab = f"{k.day}" if days <= 7 or k.day == 1 or (k.day % 5 == 0 and k.day < 30) else ""   # 30일은 다음 달 1일과 붙어 겹쳐서 뺌
             tip = k.isoformat()
         elif unit == "주":
             lab, tip = f"{k.month}/{k.day}", f"{k.isoformat()} 주"
@@ -231,7 +231,7 @@ h2{{font-size:16px;margin:0 0 12px}} .sub{{color:#6b7280;font-size:13px}}
 .card{{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px;margin:12px 0;overflow-x:auto}}
 .two{{display:grid;grid-template-columns:1fr 1fr;gap:12px}} @media(max-width:760px){{.two{{grid-template-columns:1fr}}}}
 .two .card{{margin:0}}
-.days{{display:flex;gap:2px;align-items:flex-end;min-height:140px}} .d{{flex:1;min-width:0;text-align:center;font-size:10px;color:#9ca3af;white-space:nowrap;overflow:hidden}}
+.days{{display:flex;gap:2px;align-items:flex-end;min-height:140px}} .d{{flex:1;min-width:0;text-align:center;font-size:10px;color:#9ca3af;white-space:nowrap;overflow:visible}} .d span{{display:block;height:14px;line-height:14px;margin-top:2px}}
 .d .col{{display:flex;flex-direction:column;justify-content:flex-end;height:122px}} .d i{{display:block;width:100%}}
 .d .m{{background:#2563eb}} .d .w{{background:#93c5fd}}
 .lg i{{display:inline-block;width:10px;height:10px;margin:0 4px 0 10px;vertical-align:-1px}}
