@@ -65,8 +65,8 @@ input{{width:100%;box-sizing:border-box;height:42px;border:1px solid #d1d5db;bor
 button{{margin-top:12px;width:100%;height:42px;border:0;border-radius:8px;background:#1e3a8a;color:#fff;font:inherit;cursor:pointer}}
 .err{{color:#c2410c;font-size:14px;margin:10px 0 0}}
 </style></head><body><form method="post" action="/admin">
-<input type="password" name="pw" placeholder="비밀번호" autocomplete="current-password" autofocus required>
-<button type="submit">들어가기</button>{m}</form></body></html>"""
+<input type="password" name="pw" autocomplete="current-password" autofocus required>
+<button type="submit"></button>{m}</form></body></html>"""
 
 
 def _e(x):
@@ -167,11 +167,18 @@ def _page(days):
     regions = Counter(_region(r[2]) for r in rows if _region(r[2]))
     reg_rows = [(k, v, 0) for k, v in regions.most_common(15)]
 
+    def _args(raw):   # {"top": 3, "week": "2025.11.3주차"} → top 3 · week 2025.11.3주차 (휴대폰에서 읽기 쉽게)
+        try:
+            d = json.loads(raw or "{}")
+            return " · ".join(f"{k} {v}" for k, v in d.items()) if isinstance(d, dict) else str(raw)
+        except Exception:
+            return raw or ""
+
     def rec_table(rs, n):
         out = ['<table class="list"><tr><th>시각</th><th>어디서</th><th>도구</th><th>입력</th><th>결과</th><th>걸린 시간</th></tr>']
         for at, tool, args, ok, ms, client in rs[-n:][::-1]:
             out.append(f"<tr><td>{_e(at[5:16].replace('T', ' '))}</td><td>{_e(client or '–')}</td>"
-                       f"<td>{_e(TOOL_KO.get(tool, tool))}</td><td class='a'>{_e((args or '')[:120])}</td>"
+                       f"<td>{_e(TOOL_KO.get(tool, tool))}</td><td class='a'>{_e(_args(args)[:120])}</td>"
                        f"<td>{'성공' if ok else '<b class=bad>실패</b>'}</td><td>{ms:,}ms</td></tr>")
         out.append("</table>" if rs else '</table><p class="none">기록 없음</p>')
         return "".join(out)
@@ -231,7 +238,7 @@ h2{{font-size:16px;margin:0 0 12px}} .sub{{color:#6b7280;font-size:13px}}
 table.bars td{{padding:3px 6px;font-size:14px;white-space:nowrap}} table.bars td.k{{max-width:11em;overflow:hidden;text-overflow:ellipsis}} table.bars td.k{{color:#374151}}
 table.bars i{{display:inline-block;height:10px;background:#2563eb;border-radius:2px;vertical-align:0}}
 table.list{{border-collapse:collapse;width:100%;font-size:13px}} table.list th,table.list td{{border-bottom:1px solid #eef0f3;padding:6px;text-align:left;vertical-align:top;white-space:nowrap}} table.list td.a{{white-space:normal}}
-table.list th{{color:#6b7280;font-weight:500}} td.a{{color:#4b5563;word-break:break-all}} .bad{{color:#c2410c}} .none{{color:#9ca3af;font-size:14px}}
+table.list th{{color:#6b7280;font-weight:500}} td.a{{color:#4b5563;min-width:14em;overflow-wrap:anywhere}} .bad{{color:#c2410c}} .none{{color:#9ca3af;font-size:14px}}
 </style></head><body><div class="wrap">
 <form method="post" action="/admin" style="float:right;margin:0"><input type="hidden" name="logout" value="1">
 <button style="height:34px;padding:0 14px;border:1px solid #d1d5db;border-radius:8px;background:#fff;font:inherit;font-size:14px;cursor:pointer">로그아웃</button></form>

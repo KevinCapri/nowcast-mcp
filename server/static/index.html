@@ -140,7 +140,7 @@ footer p{margin:0 0 6px}
 /* 결과 맨 위 조회 대상 */
 .rhead{font-size:20px;font-weight:700;margin:4px 0 2px}.rhead .sub{font-weight:400;color:var(--sub);font-size:15px;margin-left:8px}
 /* 주요 업데이트 */
-.upd{display:flex;flex-direction:row;gap:18px;align-items:stretch;height:420px;box-sizing:border-box}   /* 날짜를 바꿔도 칸 크기 고정 */
+.upd{display:flex;flex-direction:row;gap:18px;align-items:stretch;height:min(640px, 80vh);box-sizing:border-box}   /* 날짜를 바꿔도 칸 크기 고정 */
 .upd .dl{flex:0 0 200px;border-right:1px solid var(--line);padding-right:12px;overflow-y:auto}
 .upd .dl button{display:block;width:100%;text-align:left;padding:10px 12px;margin:2px 0;border:0;background:none;border-radius:8px;font:inherit;font-size:15px;color:var(--ink);cursor:pointer}
 .upd .dl button.on{background:#eef2ff;color:#1e3a8a;font-weight:700}
@@ -453,7 +453,8 @@ footer p{margin:0 0 6px}
 <footer>
   <p>공식 공표 통계 칸의 숫자만 정부가 공표한 값입니다. '공식 통계 아님'으로 표시한 흐름과 '많음·적음' 같은 결과는 이 사이트가 나우캐스트 공표 자료로 계산한 비공식 참고 정보이며, 방문객 수가 아니라 외부에서 들어온 이동 건수의 변화입니다.</p>
   <p>출처: 국가데이터처 KOBIGS 나우캐스트, 통신 모바일 인구이동량(SK텔레콤 통신자료 기반 추정)<br>
-  계산: 「빅데이터 Insight: 지역별 유입인구」(개인이 개발한 참고용 서비스, 정부 공식 통계 아님)</p>
+  계산: 「빅데이터 Insight: 지역별 유입인구」(개인이 개발한 참고용 서비스, 정부 공식 통계 아님)<br>
+  개발: Kevin Capri · 소스 코드(<a href="https://github.com/KevinCapri/nowcast-mcp" target="_blank" rel="noopener">GitHub</a>)</p>
   <p id="asof"></p>
 </footer>
 </div>
