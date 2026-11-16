@@ -7,6 +7,7 @@
 - 결과는 /home/data/update_status.json(단계별 마지막 시도·성공·오류)에 남고, 출력은 update.log에 쌓인다.
 - 여러 개가 동시에 돌지 않게 잠금 파일을 쓴다.
 - 실패한 단계가 있으면 운영자에게 메일(notify.py).
+- 나우캐스트를 그날 새로 받았으면 원자료 이상 자동 검사(check_raw.py, 운영자 메일만)를 이어서 돌린다.
 
 쓰는 법:
   python pipeline/update.py            # 때가 된 단계만
@@ -172,7 +173,7 @@ def main():
             return 0
         if LOG.exists() and LOG.stat().st_size > 5_000_000:      # 로그가 너무 커지면 하나만 남기고 새로
             LOG.replace(LOG.with_suffix(".log.1"))
-        st, failed = load_status(), []
+        st, failed, ran_ok = load_status(), [], []
         if "--status" in sys.argv:
             write_source_status(st)
             print("source_status 다시 계산함")
@@ -193,8 +194,22 @@ def main():
                 else:
                     s["last_ok"] = s["last_try"]
                     s.pop("last_error", None)
+                    ran_ok.append(name)
                 save_status(st)
                 print(name, "실패: " + err if err else "성공", flush=True)
+            # 이번에 나우캐스트 단계가 성공했으면 원자료 이상 자동 검사(운영자 메일만, check_raw.py)
+            if "nowcast" in ran_ok:
+                err = run_step("check_raw", ["check_raw.py"], 1800, log)
+                c = st.setdefault("check_raw", {})
+                c["last_try"] = now().isoformat(timespec="seconds")
+                if err:
+                    log.flush()
+                    c["last_error"] = f"{err}\n{tail(LOG)}"
+                    failed.append("check_raw")
+                else:
+                    c["last_ok"] = c["last_try"]
+                    c.pop("last_error", None)
+                save_status(st)
         try:
             write_source_status(st)
         except Exception as e:
