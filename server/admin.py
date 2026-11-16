@@ -303,6 +303,21 @@ async def trend_check(request: Request):
                              headers={"X-Robots-Tag": "noindex", "Cache-Control": "no-store"})
 
 
+async def site_check(request: Request):
+    """큰 관광지 방문객과 관외 유입 견주기(관리자 로그인 필요, JSON). sitecheck.py 참고."""
+    if not os.environ.get("ADMIN_PW") or not _authorized(request):
+        return PlainTextResponse("Not Found", status_code=404)
+    import json
+    import sitecheck
+    from server import db
+    try:
+        r = sitecheck.run(db)
+    except Exception as e:  # noqa: BLE001
+        r = {"오류": f"{type(e).__name__}: {e}"}
+    return PlainTextResponse(json.dumps(r, ensure_ascii=False, indent=1),
+                             headers={"X-Robots-Tag": "noindex", "Cache-Control": "no-store"})
+
+
 async def ktx_check(request: Request):
     """KTX 역별 이용객과 관외 유입 견주기(관리자 로그인 필요, JSON). ktxcheck.py 참고."""
     if not os.environ.get("ADMIN_PW") or not _authorized(request):
