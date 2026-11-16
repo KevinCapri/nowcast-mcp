@@ -614,16 +614,25 @@ footer p{margin:0 0 6px}
       MONTHS.forEach(function (m) { opt(s, m, Math.floor(m / 100) + "년 " + (m % 100) + "월"); });
       s.disabled = false;
     });
-    $("end").selectedIndex = 0;
+    // 끝월 목록에는 시작월부터 12개월(MAX_MONTHS) 안의 달만 둠. MONTHS는 최근 달이 앞(내림차순).
+    // 원하는 달(want)이 목록 밖이면 가장 가까운 끝(12개월째 또는 시작월)으로 맞춤
+    function fillEnd(want) {
+      var i = $("start").selectedIndex, e = $("end"), lo = Math.max(0, i - (MAX_MONTHS - 1));
+      var vals = MONTHS.slice(lo, i + 1); e.textContent = "";
+      vals.forEach(function (m) { opt(e, m, Math.floor(m / 100) + "년 " + (m % 100) + "월"); });
+      want = +want;
+      e.value = vals.indexOf(want) >= 0 ? want : (want > vals[0] ? vals[0] : vals[vals.length - 1]);
+    }
     $("start").selectedIndex = Math.min(5, MONTHS.length - 1);       // 처음엔 최근 6개월
-    // 시작월을 고르면 끝월을 6개월치(시작월 포함)로 맞춤. 자료가 아직 없으면 가장 최근 달. 끝월은 그 뒤 따로 바꿀 수 있음
-    $("start").onchange = function () { $("end").selectedIndex = Math.max(0, $("start").selectedIndex - 5); };
+    fillEnd(MONTHS[0]);
+    // 시작월을 고르면 끝월을 6개월치(시작월 포함)로 맞춤. 자료가 아직 없으면 가장 최근 달. 끝월은 그 뒤 12개월 안에서 바꿀 수 있음
+    $("start").onchange = function () { fillEnd(MONTHS[Math.max(0, $("start").selectedIndex - 5)]); };
     // 공유 주소로 들어오면 그 지역·기간을 골라 바로 조회(예전 주 단위 주소도 그 달로 바꿔 엶)
     var sd = P.get("sido"), sg = P.get("sigungu");
     var toMonth = function (v) { v = String(v || ""); return v.length === 7 ? String(Math.floor(+v / 10)) : v; };
     var from = toMonth(P.get("from") || P.get("start")), to = toMonth(P.get("to") || P.get("end"));
     if (from && MONTHS.some(function (m) { return String(m) === from; })) $("start").value = from;
-    if (to && MONTHS.some(function (m) { return String(m) === to; })) $("end").value = to;
+    if (from || to) fillEnd(to || $("end").value);   // 공유 주소 기간이 12개월을 넘으면 시작월은 두고 끝월을 12개월째로 맞춤
     if (sd && REG[sd]) {
       sido.value = sd; fillSigungu();
       if (sg && REG[sd].indexOf(sg) >= 0) { $("sigungu").value = sg; ready(); run(); }
