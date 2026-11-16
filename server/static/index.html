@@ -81,6 +81,10 @@ textarea{padding:10px 12px;min-height:96px;resize:vertical}
 .ev.none{color:#9AA0A8}
 .col.nd .axis{background:repeating-linear-gradient(90deg,#C9CED6 0 4px,transparent 4px 8px)}
 .col.nd .wk{color:#9AA0A8}
+.sus{height:6px;width:100%;margin-top:3px;border-radius:2px;background:repeating-linear-gradient(135deg,#B5651D 0 2px,transparent 2px 5px)}
+.sus.none{background:none}
+.suswarn{display:flex;flex-direction:column;gap:6px}
+#tip .tsus{display:block;margin-top:4px;color:#F6C99A}
 @media (max-width:639px){.ev{display:none}.mon{font-size:12px;padding-left:3px}.ftag{font-size:0;padding:0;border:0;height:4px;width:100%;background:#E9B65C;border-radius:2px;margin-top:6px}}
 .hold{font-size:10px;line-height:1.25;color:var(--muted);text-align:center;word-break:keep-all}
 #tip{position:fixed;z-index:10;background:var(--ink);color:#fff;font-size:13px;line-height:1.45;padding:8px 12px;border-radius:8px;pointer-events:none;white-space:nowrap;transform:translate(-50%,-100%)}
@@ -214,6 +218,7 @@ footer p{margin:0 0 6px}
         <span><i class="sw" style="background:var(--up3)"></i>아주 많음</span>
       </div>
     </div>
+    <div class="warnbox suswarn" id="sus" hidden></div>
     <p class="note">가운데 선이 평소 수준입니다. 막대 높이는 많고 적은 정도를 단계로만 나타냅니다. 막대를 누르거나 마우스를 올리면 자세한 내용이 보입니다.</p>
     <div class="adj"><button class="btn light" type="button" id="adjbtn" aria-pressed="false">이 지역만의 변화 보기</button><span class="note" id="adjnote" hidden>계절·날씨처럼 어디서나 생기는 변화는 비슷한 지역과 비교해 뺐습니다.</span></div>
     <div class="chart" id="chart"><div class="grid" id="bars"></div></div>
@@ -278,6 +283,7 @@ footer p{margin:0 0 6px}
         <span><i class="sw" style="background:var(--up3)"></i>아주 많음</span>
       </div>
     </div>
+    <div class="warnbox suswarn" id="fsus" hidden></div>
     <p class="scope" id="fscope"></p>
     <div class="fdate"><span id="fperiod"></span><button class="btn light" type="button" id="fedit" style="height:36px;padding:0 14px;font-size:14px" title="실제 날짜가 다르면 고쳐서 다시 볼 수 있습니다.">날짜 고치기</button><span class="note">실제 날짜가 다르면 고쳐서 다시 볼 수 있습니다.</span></div>
     <div class="fedit" id="feditbox" hidden>
@@ -489,7 +495,10 @@ footer p{margin:0 0 6px}
       "유입 규모에 비해 관광지 방문객이 많은 지역은 AI 결과의 '지역 성격'에 관광지 방문객 정보를 함께 표시",
       "'몇 년 사이 얼마나 늘었나' 같은 여러 해 추세는 이 서비스로 답하지 않고 국내인구이동통계(KOSIS)·한국관광 데이터랩을 안내하도록 바꿈 (해마다 원래 값은 바탕이 달라 서로 비교할 수 없어서)",
       "시험해 봤지만 유입 변화를 설명하는 데 맞지 않았던 자료와 그 결과를 AI 안내(get_metadata)에 추가 (유가·환율, 폭염, KTX 역 이용객 등)",
-      "여러 요청이 한꺼번에 들어올 때 일부 조회가 실패하던 문제 고침"] },
+      "원자료 확인이 필요한 구간(행정구역 배정이나 집계 방식에 바뀐 점이 있는지 확인이 필요한 지역·기간)의 안내를 AI 결과의 전국 순위, 지난 몇 해 같은 주 비교, 지역 일정, 축제 참고 예측에도 표시",
+      "지역 흐름·축제 기간 그래프에 원자료 확인이 필요한 주를 막대 아래 빗금 줄로 표시하고, '한 줄씩 보면' 요약에서 그 주를 뺌",
+      "여러 요청이 한꺼번에 들어올 때 일부 조회가 실패하던 문제 고침",
+      "자료를 새로 받은 직후 평소와 다른 지역을 찾는 AI 조회(find_unusual_regions)가 처음 한 번 몇 초 걸리던 문제 고침"] },
     { d: "2026년 11월 15일", ver: "0.2.1 → 0.2.2", items: [
       "이름을 「빅데이터 Insight: 지역별 유입인구」로 바꿈",
       "지역 흐름 보기 탭 개편, 축제 기간 보기 탭 추가 (지역으로 좁혀 고르는 축제 목록, 연도 버튼)",
@@ -657,6 +666,12 @@ footer p{margin:0 0 6px}
     if (w.hol_tip) { tip.appendChild(el("br")); tip.appendChild(document.createTextNode(w.hol_tip)); evs = w.ev_other || []; }
     evs.forEach(function (t) { tip.appendChild(el("br")); tip.appendChild(document.createTextNode(t)); });   // 한 줄에 하나씩 전부
     (w.games || []).forEach(function (t) { tip.appendChild(el("br")); tip.appendChild(document.createTextNode(t)); });   // 프로야구 홈경기(설명창에만)
+    if (w.suspect) {   // 원자료 확인이 필요한 주: 설명창이 너무 넓어지지 않게 세 줄로
+      var ts = el("span", { cls: "tsus" });
+      ["행정구역 배정이나 집계 방식에 바뀐 점이 있는지", "확인이 필요한 주입니다.", "이 주의 증가·감소는 근거로 사용하지 마세요."].forEach(function (t, i) {
+        if (i) ts.appendChild(el("br")); ts.appendChild(document.createTextNode(t)); });
+      tip.appendChild(ts);
+    }
     tip.hidden = false;
     var x = Math.min(Math.max(r.left + r.width / 2, tip.offsetWidth / 2 + 6), window.innerWidth - tip.offsetWidth / 2 - 6);
     tip.style.left = x + "px"; tip.style.top = Math.max(r.top - 6, tip.offsetHeight + 6) + "px";
@@ -674,6 +689,7 @@ footer p{margin:0 0 6px}
     var UNIT = 24, upN = 1, dnN = 1;
     W.forEach(function (w) { var n = STEP[w.level] || 0; if (w.dir > 0) upN = Math.max(upN, n); if (w.dir < 0) dnN = Math.max(dnN, n); });
     var upH = upN * UNIT + 6, dnH = dnN * UNIT + 6;
+    var anySus = W.some(function (w) { return w.suspect; });
     bars.style.gridTemplateColumns = "repeat(" + W.length + ", minmax(" + (fit ? 0 : 36) + "px, 1fr))";
     bars.style.minWidth = fit ? "0" : (W.length * 38) + "px";
     var mo = function (w) { return Math.floor(w.wo / 10) % 100; };
@@ -687,7 +703,7 @@ footer p{margin:0 0 6px}
     }
     W.forEach(function (w, k) {
       var ms = k > 0 && mo(W[k - 1]) !== mo(w);
-      var c = el("div", { cls: "col" + (w.fest ? " fest" : "") + (ms ? " ms" : "") + (w.level === "nodata" ? " nd" : ""), tabindex: "0", role: "button", "aria-label": w.full + " (" + w.dates + "): " + WORD[w.level] + (w.fest ? ", 축제 기간" : "") });
+      var c = el("div", { cls: "col" + (w.fest ? " fest" : "") + (ms ? " ms" : "") + (w.level === "nodata" ? " nd" : ""), tabindex: "0", role: "button", "aria-label": w.full + " (" + w.dates + "): " + WORD[w.level] + (w.fest ? ", 축제 기간" : "") + (w.suspect ? ", 원자료 확인이 필요한 주" : "") });
       var up = el("div", { cls: "up-area", style: "height:" + upH + "px" }), dn = el("div", { cls: "dn-area", style: "height:" + dnH + "px" });
       var color = COLOR[w.level], n = STEP[w.level] || 0;
       if (w.level === "hold" || w.level === "na") {
@@ -698,6 +714,7 @@ footer p{margin:0 0 6px}
         dn.appendChild(el("div", { cls: "bar", style: "height:" + (n * UNIT) + "px;background:" + color + ";border-radius:0 0 4px 4px" }));
       }
       c.appendChild(up); c.appendChild(el("div", { cls: "axis" })); c.appendChild(dn);
+      if (anySus) c.appendChild(el("div", { cls: "sus" + (w.suspect ? "" : " none") }));   // 원자료 확인이 필요한 주는 막대 아래 빗금 줄
       c.appendChild(el("span", { cls: "wk" }, (w.wo % 10) + "주"));
       if (w.fest) c.appendChild(el("span", { cls: "ftag" }, "축제"));
       // 좁은 칸에는 첫 번째 것만, 나머지는 개수로. 전부는 설명창에
@@ -759,6 +776,12 @@ footer p{margin:0 0 6px}
     var n = $("notes"); n.textContent = "";
     notes.forEach(function (s) { n.appendChild(el("div", null, s)); });
     n.hidden = !notes.length;
+    susBox($("sus"), r);
+  }
+  function susBox(b, r) {   // 원자료 확인 문장은 그래프 카드 맨 위에
+    var t = r["원자료 확인"] || []; b.textContent = "";
+    t.forEach(function (x) { var d = el("div", null, x[0] + " "); d.appendChild(el("b", null, x[1])); b.appendChild(d); });
+    b.hidden = !t.length;
   }
   $("adjbtn").onclick = function () { setAdj("adjbtn", "adjnote", !adjOn("adjbtn")); if (LAST) paint(); };
 
@@ -909,13 +932,15 @@ footer p{margin:0 0 6px}
     }
     drawChart($("fbars"), $("fchart"), FW, true);
     var ul = $("flines"); ul.textContent = "";
-    var strong = all.some(function (w) { return w.fest && /^(up|down)[23]$/.test(w.level); });
-    if (!strong) ul.appendChild(el("li", null, "축제 기간에도 평소와 큰 차이가 없었습니다. 시군구 전체로 보면 축제 효과가 드러나지 않을 수 있습니다."));
+    var fw = all.filter(function (w) { return w.fest && !w.suspect; });   // 원자료 확인이 필요한 주는 빼고 봄
+    var strong = fw.some(function (w) { return /^(up|down)[23]$/.test(w.level); });
+    if (!strong && fw.length) ul.appendChild(el("li", null, "축제 기간에도 평소와 큰 차이가 없었습니다. 시군구 전체로 보면 축제 효과가 드러나지 않을 수 있습니다."));
     (j[on ? "문장_비교" : "문장"] || []).forEach(function (t) { if (!(strong === false && /많이 늘어나거나 줄어든 주는 없었습니다/.test(t))) ul.appendChild(el("li", null, t)); });
     var notes = (j["주의"] || []).concat(on ? (j["주의_비교"] || []) : []);
     var n = $("fnotes"); n.textContent = "";
     notes.forEach(function (t) { n.appendChild(el("div", null, t)); });
     n.hidden = !notes.length;
+    susBox($("fsus"), j);
   }
   $("fadjbtn").onclick = function () { setAdj("fadjbtn", "fadjnote", !adjOn("fadjbtn")); if (FJ) fpaint(); };
   $("fedit").onclick = function () { $("feditbox").hidden = !$("feditbox").hidden; };

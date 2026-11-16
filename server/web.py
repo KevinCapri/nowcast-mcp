@@ -444,7 +444,11 @@ def _span(a, b):
 
 
 def _sentences(weeks, fest_weeks, inside_flat, area_word, key="level"):
-    weeks = [dict(w, level=w[key]) for w in weeks]
+    # 원자료 확인이 필요한 주는 요약에서 뺌(많고 적음을 말하지 않음). 앞뒤 주가 이어 붙지 않게 자리는 남김
+    sus = [w for w in weeks if w.get("suspect")]
+    if weeks and len(sus) == len(weeks):
+        return ["이 기간은 모두 원자료 확인이 필요한 구간이라 요약하지 않습니다."]
+    weeks = [dict(w, level="sus" if w.get("suspect") else w[key]) for w in weeks]
     out = []
     i = 0
     strong = lambda w: w["level"] in ("up2", "up3", "down2", "down3")
@@ -484,13 +488,44 @@ def _sentences(weeks, fest_weeks, inside_flat, area_word, key="level"):
         i = j + 1
     if not out:
         out.append("조회한 기간에 평소보다 많이 늘어나거나 줄어든 주는 없었습니다.")
+    if sus:
+        out.append("원자료 확인이 필요한 주는 빼고 보았습니다.")
     for w in weeks:
-        if w["long_holiday"] and not strong(w):
+        if w["long_holiday"] and not strong(w) and w["level"] != "sus":
             d = w.get("holiday_detail")
             out.append(f"{w['label']}는 연휴가 있는 주{'(' + d + ')' if d else ''}라 평소와 비교하기 어렵습니다.")
     if inside_flat:
         out.append(f"{area_word} 안 이동은 기간 내내 거의 그대로였습니다.")
     out.append("증가 또는 감소 이유는 이 자료만으로 알 수 없습니다. 그래프 아래 적힌 공휴일·축제·날씨를 함께 참고하세요.")
+    return out
+
+
+def _suspect_notes(sido, sigungu, weeks):
+    """원자료 확인이 필요한 주를 이어진 묶음마다 한 문장으로(그래프 카드 맨 위에 보임)."""
+    runs, cur = [], []
+    for w in weeks:
+        if w.get("suspect"):
+            cur.append(w)
+        elif cur:
+            runs.append(cur); cur = []
+    if cur:
+        runs.append(cur)
+    out = []
+    tail = "행정구역 배정이나 집계 방식에 바뀐 점이 있는지 확인이 필요한 구간입니다. 막대 아래 빗금 줄로 표시했습니다."
+    act = "이 기간의 증가·감소는 근거로 사용하지 마세요."
+    for run in runs:
+        a, b = run[0], run[-1]
+        if len(run) == len(weeks):
+            head = "조회한 기간 전체가"
+        elif len(run) == 1:
+            head = f"{a['full']}는"
+        elif b is weeks[-1] and A.is_suspect(sido, sigungu, 2099125):
+            head = f"{a['full']}부터는"
+        elif a["wo"] // 10 == b["wo"] // 10:
+            head = f"{a['full']}~{b['wo'] % 10}주는"
+        else:
+            head = f"{a['full']}~{b['full'] if a['wo'] // 1000 != b['wo'] // 1000 else b['label']}는"
+        out.append([f"{head} {tail}", act])   # 둘째 문장은 사이트에서 굵게
     return out
 
 
@@ -535,7 +570,8 @@ def view(sido, sigungu, start_wo, end_wo):
                       "events": ev[wo],
                       "games": safe.call("프로야구(사이트)", BB.week, sido, sigungu, mon, default=([], 0))[0],
                       "hol_tip": _holiday_tip(wo) if nhol[wo] else "",
-                      "ev_other": ev[wo][nhol[wo]:]})
+                      "ev_other": ev[wo][nhol[wo]:],
+                      "suspect": A.is_suspect(sido, sigungu, wo)})
 
     # 관내(지역 안 이동)가 거의 그대로였나: 기간 중앙값에서 ±10% 안
     inside_flat = False
@@ -586,6 +622,7 @@ def view(sido, sigungu, start_wo, end_wo):
         "문장_비교": _sentences(weeks, fest_weeks, inside_flat, _area_word(sigungu), "level_adj"),
         "비교 가능": bool(P["peers"]),
         "주의": notes, "주의_비교": notes_adj, "일정 출처": srcs, "자료 기준": as_of,
+        "원자료 확인": _suspect_notes(sido, sigungu, weeks),
     }
 
 
@@ -725,7 +762,8 @@ def fest_view(sido, sigungu, fid, year, s=None, e=None):
             sun = mon + dt.timedelta(days=6)
             w = {"wo": wo, "label": _short(wo), "full": _label(wo), "level": "nodata",
                  "dates": f"{mon.month}.{mon.day}~{sun.month}.{sun.day}", "dir": 0, "dir_adj": 0,
-                 "level_adj": "nodata", "long_holiday": False, "holiday_detail": "", "events": [], "hol_tip": "", "ev_other": []}
+                 "level_adj": "nodata", "long_holiday": False, "holiday_detail": "", "events": [], "hol_tip": "", "ev_other": [],
+                 "suspect": False}
         w["fest"] = fs <= wo <= fe
         out.append(w)
     r["weeks"] = out
