@@ -194,6 +194,20 @@ def _page(days):
                        + f"</td><td>{_e(status)}</td></tr>")
     fb_html.append("</table>" if fb else '</table><p class="none">들어온 의견 없음</p>')
 
+    # 원자료 이상 자동 검사(pipeline/check_raw.py) 기록. 운영자 메일만 보내고 이용자 화면에는 붙이지 않음
+    rc_html = ['<table class="list"><tr><th>처음 잡힌 날</th><th>지역</th><th>기간</th><th>방향</th><th>최대 차이</th></tr>']
+    try:
+        import web as _web
+        rc = _web._conn().execute("SELECT sido, sigungu, start, last, sign, peak, first_seen FROM raw_check "
+                                 "ORDER BY first_seen DESC LIMIT 30").fetchall()
+    except Exception:
+        rc = []
+    lab = lambda wo: f"{wo // 1000}.{(wo // 10) % 100:02d}.{wo % 10}주차"
+    for sd, sg, a_, b_, sgn, pk, fs in rc:
+        rc_html.append(f"<tr><td>{_e((fs or '')[:10])}</td><td>{_e(sd)} {_e(sg)}</td><td>{_e(lab(a_))}~{_e(lab(b_))}</td>"
+                       f"<td>{'많음' if sgn == '+' else '적음'}</td><td>{_e(pk)}%</td></tr>")
+    rc_html.append("</table>" if rc else '</table><p class="none">잡힌 건 없음</p>')
+
     ok_rate = (sum(r[3] for r in mcp) / len(mcp) * 100) if mcp else 0
     avg_ms = int(sum(r[4] for r in mcp) / len(mcp)) if mcp else 0
     sel = "".join(f'<a href="?days={d}"{" class=on" if d == days else ""}>{d}일</a>' for d in (7, 30, 90, 365))
@@ -240,6 +254,7 @@ table.list th{{color:#6b7280;font-weight:500}} td.a{{color:#4b5563;word-break:br
 <div class="card"><h2>최근 MCP 호출 50건</h2>{''.join(rec_html)}</div>
 <div class="card"><h2>최근 사이트 조회 20건</h2>{rec_web}</div>
 <div class="card"><h2>들어온 의견 (최근 50건)</h2>{''.join(fb_html)}</div>
+<div class="card"><h2>원자료 자동 검사 (최근 30건)</h2><p class="sub">한 지역만 몇 주째 크게 튀면 메일로 알림. 이용자 화면에는 붙지 않음. 원자료 문제로 확인되면 analysis.py SUSPECT에 넣어 PR.</p>{''.join(rc_html)}</div>
 </div></body></html>"""
 
 
