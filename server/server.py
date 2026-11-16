@@ -66,7 +66,7 @@ db = _ThreadDB(DB)
 SERVICE = "빅데이터 Insight: 지역별 유입인구"
 # 도구 목록이 바뀌면(추가·삭제·입력값·설명) 세 값을 같이 고친다. 회귀 시험이 TOOLS와 실제 도구가 다르면 잡는다.
 # 결과마다 붙여서, 예전에 연결한 이용자에게도 AI가 '새 도구가 생겼으니 다시 연결'을 알려 주게 한다(claude/변경_관리_원칙.md).
-VERSION = "0.4.3"
+VERSION = "0.4.4"
 TOOLS_CHANGED = "2026-11-16"
 TOOLS = ["get_metadata", "list_regions", "get_movement", "get_breakdown", "get_weather", "analyze_region_week",
          "find_unusual_regions", "estimate_life_pop", "forecast_festival", "get_datalab_daily", "report_issue",
@@ -253,7 +253,9 @@ def _answer(r, kind, source, calc=False):
 @mcp.tool(annotations=READ_ONLY)
 def get_metadata() -> dict:
     """통신 모바일 인구이동량 통계의 정의와 이용 시 주의사항을 돌려준다.
-    다른 도구를 쓰기 전에 반드시 먼저 한 번 호출해서 읽을 것."""
+    다른 도구를 쓰기 전에 반드시 먼저 한 번 호출해서 읽을 것.
+    결과에는 용어 정의, 값의 단위, 주의사항, 도구 사용 규칙, 판정 방식 변경 이력, 검토했지만 쓰지 않는 자료 등이 들어 있다.
+    자료별 최신 시점은 get_data_status로."""
     return {
         "안내": NOTICE,
         "정의": {
@@ -378,6 +380,7 @@ def get_movement(
     - 성별·연령·입지유형은 전국 기준만 있다. 지역별 성별·연령은 없다.
     - 몇 주~몇 달 흐름을 보는 데 쓴다. 여러 해에 걸친 증가·감소 판단에는 쓰지 말 것(해마다 원값은 바탕이 달라 견줄 수 없음). 해마다 비교는 compare_same_week, 한 주 판정은 analyze_region_week로.
     - start_week, end_week 형식: 'YYYY.MM.N주차' (예: '2026.10.5주차').
+    - 하루 단위 방문자(사람 수)는 get_datalab_daily로(출처·단위가 달라 서로 섞지 말 것).
     결과의 within=관내, outside=관외, total=합계. 단위는 일평균 이동 건수다."""
     q = ("SELECT week, within, outside, total FROM moves WHERE direction=? AND category=? AND item=? "
          "AND week_order BETWEEN ? AND ?")
@@ -465,7 +468,8 @@ def get_weather(sigungu: Sigungu, sido: Sido, start_week: Week, end_week: Week) 
     - 날씨는 시군구가 아니라 관측소 값이다. 관측소가 없는 시군구는 인근 관측소 값을 빌려 쓰므로
       결과의 '관측소'와 '짝지은 방식'을 답에 함께 밝힐 것. 산간·해안처럼 관측소와 환경이 다른 곳은 오차가 있다.
     - 날씨와 이동량을 함께 볼 때, 같은 시기에 명절·연휴·행사가 겹쳤는지 먼저 확인할 것.
-      비 온 주에 이동이 줄었다고 해서 비가 원인이라고 단정하지 말고 가설로 표현할 것."""
+      비 온 주에 이동이 줄었다고 해서 비가 원인이라고 단정하지 말고 가설로 표현할 것.
+    - 기온·강수 숫자가 필요할 때 쓴다. 그 기간의 큰 눈·비를 다른 일정과 함께 보려면 get_region_calendar로."""
     row = db.execute("SELECT stn, stn_name, how FROM station_map WHERE sigungu=? AND sido=?", (sigungu, sido)).fetchone()
     if not row:
         return {"error": "시군구를 찾지 못함. list_regions로 정확한 시도·시군구 이름을 확인할 것."}
@@ -540,7 +544,8 @@ def analyze_region_week(sido: Sido, sigungu: Sigungu, week: Week) -> dict:
       '신뢰구간'·'유의하다'는 말은 쓰지 말 것.
     - 원인(축제·날씨·행사)은 이 도구가 정하지 않는다. get_weather 등으로 판단 재료를 함께 보여 주되 단정하지 말 것.
     - 판정·비교군은 이 서비스(빅데이터 Insight: 지역별 유입인구)의 비공식 계산이다. 국가데이터처 값처럼 말하지 말 것.
-    - 한 지역을 판정할 때 쓴다. 전국에서 어디가 튀었는지는 find_unusual_regions, 여러 주 흐름은 get_movement로.
+    - 한 지역의 한 주를 평소와 비교할 때 쓴다. 전국에서 어디가 튀었는지는 find_unusual_regions, 여러 주 흐름은 get_movement,
+      지난 해 같은 주와 비교는 compare_same_week, 그 기간에 있었던 일 목록은 get_region_calendar로.
     - sido·sigungu는 list_regions로 확인한 이름, week는 'YYYY.MM.N주차'."""
     try:
         wo = _order(week)
@@ -822,7 +827,8 @@ def get_datalab_daily(sido: Sido, sigungu: Sigungu, start_date: str, end_date: s
     - 방문 지표로는 외지인을 쓸 것. 현지인은 그 지역 상주자(거주·근무·통학)라 방문 지표가 아니다.
     - 외지인에는 근무자가 빠져 있어 출퇴근이 많은 지역(업무지구)은 이 자료로 가릴 수 없다.
     - 일 단위라 하루짜리 행사(야구 경기, 불꽃축제, 태풍)를 확인하는 데 쓸 것. 최소 단위는 시군구(읍면동 없음).
-    - start_date·end_date: YYYY-MM-DD, 최대 400일. 자료는 약 한 달 늦게 나오고 최근 값은 소급 수정될 수 있다."""
+    - start_date·end_date: YYYY-MM-DD, 최대 400일. 자료는 약 한 달 늦게 나오고 최근 값은 소급 수정될 수 있다.
+    - 주 단위 이동 흐름은 get_movement, 한 주가 평소와 다른지는 analyze_region_week로."""
     try:
         a, b = dt.date.fromisoformat(start_date), dt.date.fromisoformat(end_date)
     except Exception:
@@ -881,7 +887,10 @@ def report_issue(message: str,
 def get_region_calendar(sido: Sido, sigungu: Sigungu, start: str, end: str = "") -> dict:
     """한 시군구의 한 기간에 있었던 일(공휴일·축제·대형 행사·프로야구 홈경기·벚꽃 만발·단풍 절정·큰 공연·큰 눈비·대형 시설 개점·폐점)을
     주별로 모아, 주마다 그 주의 관외 유입 판정을 함께 돌려준다.
-    - '이번 달 경주에 무슨 행사 있었어?', '10월 대구 포스트시즌 경기랑 관중은?', '그때 사람 많이 왔어?'에 쓴다.
+    - '이번 달 경주에 무슨 행사 있었어?', '10월 대구 포스트시즌 경기랑 관중은?'처럼 일정을 묻거나,
+      일정과 유입을 함께 묻는 질문('그 행사 때 사람 많이 왔어?')에 쓴다.
+    - 일정 없이 한 주가 평소와 다른지만 물으면 analyze_region_week, 벚꽃·단풍 날짜만 물으면 get_bloom_foliage,
+      기온·강수 숫자는 get_weather로.
     - start·end는 'YYYY-MM-DD' 또는 'YYYY-MM'. start만 'YYYY-MM'이면 그 달 전체, 날짜 하나면 그 주. 한 번에 1년까지.
     - '그 주 유입'은 analyze_region_week와 같은 계산(판정 문구·배수를 그대로 전할 것). 자세한 판정은 그 도구로.
     - 일정은 '같은 시기에 있었던 일'로만 말하고 유입 변화의 원인으로 단정하지 말 것.
@@ -900,7 +909,8 @@ def get_bloom_foliage(year: int, kind: str) -> dict:
     유입 효과가 확인된 명소(단풍 17곳, 벚꽃 12곳)는 그 주 관외 유입 판정과 이 지역 지난 기록을 함께 준다.
     - '올해 내장산 단풍 절정 언제였어?', '작년 진해 벚꽃 만발은?'과 이어지는 '그때 사람 많이 왔어?'에 쓴다.
     - kind는 '벚꽃' 또는 '단풍'. 관측이 끝난 날짜만 있다(예보 없음). 없는 해는 기상청 날씨누리 '봄꽃·단풍'을 안내할 것.
-    - 유입 변화를 벚꽃·단풍 때문이라고 단정하지 말 것."""
+    - 유입 변화를 벚꽃·단풍 때문이라고 단정하지 말 것.
+    - 한 지역의 그 달 일정 전체는 get_region_calendar로."""
     r = regioncal.bloom_foliage(db, year, kind)
     return _answer(r, "calendar", "기상청 기상자료개방포털 계절관측 / " + SOURCE.removeprefix("출처: "), calc=True)
 
@@ -912,7 +922,8 @@ def get_data_status() -> dict:
     - latest: 자료가 담고 있는 가장 최근 시점(주차·날짜·월·반기·연).
     - fetched_ok: 이 서비스가 원천에서 마지막으로 받아 오는 데 성공한 시각(한국 시간).
     - last_failed=1이면 가장 최근 받기 시도가 실패한 상태다. 답할 때 '최신이 아닐 수 있음'을 밝힐 것.
-    - 원자료는 소급 수정될 수 있으므로, 수치를 인용할 때 자료 시점과 받아 온 날을 함께 밝힐 것."""
+    - 원자료는 소급 수정될 수 있으므로, 수치를 인용할 때 자료 시점과 받아 온 날을 함께 밝힐 것.
+    - 자료의 정의와 해석 주의는 get_metadata로."""
     try:
         rows = db.execute("SELECT name, unit, latest, fetched_ok, last_failed FROM source_status").fetchall()
     except sqlite3.OperationalError:
