@@ -751,7 +751,7 @@ def forecast_festival(sido: Sido, sigungu: Sigungu, festival_name: str = "", sta
     r = festival.forecast(db, sido, sigungu, festival_name, start_date, end_date)
     if "error" not in r:
         r["자료 기준"] = _as_of()
-        return _answer(r, "festival", "축제 일정: 문화체육관광부 연도별 지역축제 개최 계획 / "
+        return _answer(r, "festival", "축제 일정: 문화체육관광부 지역축제 개최 계획, 언론 보도 / "
                        + SOURCE.removeprefix("출처: "), calc=True)
     return r
 
@@ -870,7 +870,7 @@ def get_region_calendar(sido: Sido, sigungu: Sigungu, start: str, end: str = "")
     - '자료 기준' 뒤의 일은 없다. 그 뒤를 물으면 이 서비스에 어디까지 있는지 말하고 원출처를 안내할 것.
     - sido·sigungu는 list_regions로 확인한 이름."""
     r = regioncal.region_calendar(db, sido, sigungu, start, end)
-    return _answer(r, "calendar", "일정: 한국천문연구원 특일 정보, 문화체육관광부 지역축제 개최 계획, 한국야구위원회(KBO) 경기 기록, 한국문화관광연구원 관광자원통계, "
+    return _answer(r, "calendar", "일정: 한국천문연구원 특일 정보, 문화체육관광부 지역축제 개최 계획, 언론 보도, 한국야구위원회(KBO) 경기 기록, 한국문화관광연구원 관광자원통계, "
                    "기상청 계절관측·종관기상관측, 공연예술통합전산망(KOPIS), 정부·주최 측 발표 / " + SOURCE.removeprefix("출처: "),
                    calc=True)
 

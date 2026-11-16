@@ -557,7 +557,7 @@ def view(sido, sigungu, start_wo, end_wo):
     srcs = ["공휴일(한국천문연구원 특일 정보)"]
     if stn:
         srcs.append(f"날씨(기상청 {stn} 관측소, 눈 5cm·비 80mm 이상만 표시)")
-    srcs.append("축제(문화체육관광부 지역축제 개최 계획, 연초 계획 일정)")
+    srcs.append("축제(문화체육관광부 지역축제 개최 계획, 언론 보도)")
     srcs.append(BE.SOURCE)
     if has_perf:
         srcs.append(PF.SOURCE)
