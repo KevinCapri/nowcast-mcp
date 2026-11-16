@@ -216,6 +216,16 @@ def refresh_lists():
         _hol_days.clear()
         _hol_days.update(_load_hol_days())
         print(f"[web] 지역별 시계열 {n}곳 메모리에 올림 ({time.time() - t:.1f}초)", flush=True)
+        # find_unusual_regions의 가장 최근 주 전국 순위를 미리 계산해 둠(처음 부를 때 약 3.7초 걸리던 것).
+        # rank_week는 (주차, 최신 주차)로 캐시하므로 새 자료가 들어오면 저절로 다시 계산된다.
+        try:
+            t = time.time()
+            wo = _conn().execute("SELECT MAX(week_order) FROM moves WHERE direction='유입' AND category='시군구'").fetchone()[0]
+            if wo:
+                A.rank_week(_conn(), wo)
+                print(f"[web] 최근 주 전국 순위 미리 계산 ({time.time() - t:.1f}초)", flush=True)
+        except Exception as e:
+            print("[web] 최근 주 전국 순위 미리 계산 실패", repr(e), flush=True)
     except Exception as e:
         print("[web] 목록 만들기 실패", repr(e), flush=True)
     finally:
