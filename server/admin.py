@@ -65,8 +65,8 @@ input{{width:100%;box-sizing:border-box;height:42px;border:1px solid #d1d5db;bor
 button{{margin-top:12px;width:100%;height:42px;border:0;border-radius:8px;background:#1e3a8a;color:#fff;font:inherit;cursor:pointer}}
 .err{{color:#c2410c;font-size:14px;margin:10px 0 0}}
 </style></head><body><form method="post" action="/admin">
-<input type="password" name="pw" placeholder="비밀번호" autocomplete="current-password" autofocus required>
-<button type="submit">들어가기</button>{m}</form></body></html>"""
+<input type="password" name="pw" autocomplete="current-password" autofocus required>
+<button type="submit"></button>{m}</form></body></html>"""
 
 
 def _e(x):
