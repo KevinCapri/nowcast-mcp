@@ -345,17 +345,6 @@ footer p{margin:0 0 6px}
 
 <div class="pair">
 <div class="card">
-  <h2>Claude에 연결하기</h2>
-  <ol>
-    <li>Claude(웹·데스크톱) <b>설정 → 커넥터</b></li>
-    <li><b>커스텀 커넥터 추가</b> → 아래 입력 → <b>계속</b><ul class="fields"><li>이름: 빅데이터 Insight</li><li>MCP 서버 URL: <code>https://nowcast-mcp.azurewebsites.net/mcp</code></li></ul></li>
-    <li>인증: <b>로그인 없음</b>(자동으로 선택됨) → <b>추가</b> → <b>연결</b></li>
-    <li>대화창 입력칸 왼쪽 <span class="key" aria-label="더하기">+</span> 버튼에서 커넥터 켜기 → 질문</li>
-  </ol>
-  <div class="reconn"><span class="rl">🔄 업데이트 반영하기('주요 업데이트'에 🔄 표시가 있을 때)</span><b>설정 → 커넥터</b>에서 <b>연결 해제</b> → 다시 <b>연결</b></div>
-</div>
-
-<div class="card">
   <h2>ChatGPT에 연결하기</h2>
   <ol>
     <li>ChatGPT <b>설정 → 플러그인</b> → 오른쪽 위 <b>디렉터리 둘러보기</b></li>
@@ -364,6 +353,17 @@ footer p{margin:0 0 6px}
     <li>대화창 입력칸 왼쪽 <span class="key" aria-label="더하기">+</span> 버튼에서 플러그인 켜기 → 질문</li>
   </ol>
   <div class="reconn"><span class="rl">🔄 업데이트 반영하기('주요 업데이트'에 🔄 표시가 있을 때)</span><b>설정 → 플러그인</b> → 플러그인 이름 → <b>도구 새로고침</b></div>
+</div>
+
+<div class="card">
+  <h2>Claude에 연결하기</h2>
+  <ol>
+    <li>Claude(웹·데스크톱) <b>설정 → 커넥터</b></li>
+    <li><b>커스텀 커넥터 추가</b> → 아래 입력 → <b>계속</b><ul class="fields"><li>이름: 빅데이터 Insight</li><li>MCP 서버 URL: <code>https://nowcast-mcp.azurewebsites.net/mcp</code></li></ul></li>
+    <li>인증: <b>로그인 없음</b>(자동으로 선택됨) → <b>추가</b> → <b>연결</b></li>
+    <li>대화창 입력칸 왼쪽 <span class="key" aria-label="더하기">+</span> 버튼에서 커넥터 켜기 → 질문</li>
+  </ol>
+  <div class="reconn"><span class="rl">🔄 업데이트 반영하기('주요 업데이트'에 🔄 표시가 있을 때)</span><b>설정 → 커넥터</b>에서 <b>연결 해제</b> → 다시 <b>연결</b></div>
 </div>
 </div>
 <div class="hello"><b>연결 확인</b> — 채팅창에 <b>"○○군 지난주 외부 유입이 평소보다 많았어?"</b>처럼 물어보세요</div>
@@ -548,8 +548,7 @@ footer p{margin:0 0 6px}
     function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
     function ul(u) { return "<ul>" + u.items.map(function (t) { return "<li>" + esc(t) + "</li>"; }).join("") + "</ul>"; }
     // 새 도구·도구 빠짐·합침·입력값 변경이 있는 날만 다시 연결 상자(설명만 바뀐 날은 줄 끝 표시만)
-    var RECON = '<div class="recon"><b>🔄 업데이트를 반영해야 쓸 수 있는 새 도구가 있습니다</b>' +
-      '<span>이미 연결해 쓰는 경우 — Claude: 커넥터 연결 해제 → 다시 연결 / ChatGPT: 플러그인 → 도구 새로고침</span></div>';
+    var RECON = '<div class="recon"><b>🔄 업데이트가 필요한 새 도구 추가</b></div>';
     function body(u) { return (u.reconnect ? RECON : "") + ul(u); }
     function ver(u) { return u.ver ? '<span class="uver">버전 ' + esc(u.ver) + "</span>" : ""; }
     var dl = $("upd-dl"), ct = $("upd-ct"), m = $("upd-m");
@@ -674,7 +673,7 @@ footer p{margin:0 0 6px}
   getJSON("/api/version").then(function (r) {
     var v = r.j || {}, m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v["날짜"] || "");
     if (!v["버전"]) return;
-    $("mcpver").textContent = "최신 버전 " + v["버전"] + (m ? " (" + (+m[1]) + "년 " + (+m[2]) + "월 " + (+m[3]) + "일)" : "");
+    $("mcpver").textContent = "버전 " + v["버전"] + (m ? " (" + (+m[1]) + "년 " + (+m[2]) + "월 " + (+m[3]) + "일)" : "");
     $("mcpver").hidden = false;
   }).catch(function () {});
   getJSON("/api/status").then(function (r) {
