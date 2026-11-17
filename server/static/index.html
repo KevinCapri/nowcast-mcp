@@ -340,6 +340,7 @@ footer p{margin:0 0 6px}
     <code class="url" id="mcpurl">https://nowcast-mcp.azurewebsites.net/mcp</code>
     <button class="btn light" type="button" id="copy">주소 복사</button>
   </div>
+  <p class="note" id="mcpver" style="margin-top:8px" hidden></p>
 </div>
 
 <div class="pair">
@@ -487,7 +488,7 @@ footer p{margin:0 0 6px}
   <p>공식 공표 통계 칸의 숫자만 정부가 공표한 값입니다. '공식 통계 아님'으로 표시한 흐름과 '많음·적음' 같은 결과는 이 사이트가 나우캐스트 공표 자료로 계산한 비공식 참고 정보이며, 방문객 수가 아니라 외부에서 들어온 이동 건수의 변화입니다.</p>
   <p>출처: 국가데이터처 KOBIGS 나우캐스트, 통신 모바일 인구이동량(SK텔레콤 통신자료 기반 추정)<br>
   계산: 「빅데이터 Insight: 지역별 유입인구」(개인이 개발한 참고용 서비스, 정부 공식 통계 아님)<br>
-  개발: Kevin Capri · 소스 코드(<a href="https://github.com/KevinCapri/nowcast-mcp" target="_blank" rel="noopener">GitHub</a>)</p>
+  개발: Kevin Capri (<a href="https://github.com/KevinCapri/nowcast-mcp" target="_blank" rel="noopener">GitHub</a>)</p>
   <p id="asof"></p>
 </footer>
 </div>
@@ -540,8 +541,7 @@ footer p{margin:0 0 6px}
       "김제지평선축제·거창 봄축제(2025년), 우이천 벚꽃축제(2023년) 날짜와 대전 0시 축제(2025년) 개최 지역 바로잡음",
       "결과를 일곱 단계로 표시, '이 지역만의 변화 보기'·'축제 효과 가늠해 보기' 버튼, 연휴·징검다리 표시",
       "달 단위 기간 고르기 (시작월을 고르면 6개월치로 맞춰짐), 그래프·조회 속도 개선"] },
-    { d: "최초 공개", ver: "0.2.0", first: true, items: [
-      "2026년 11월 14일",
+    { d: "2026년 11월 14일", ver: "0.2.0", items: [
       "안내 페이지와 AI 연결 주소 공개, 공식 MCP 레지스트리 등록"] }
   ];
   (function () {
@@ -671,6 +671,12 @@ footer p{margin:0 0 6px}
     var m = /^(\d{4})\.(\d{2})\.(\d)주차$/.exec(s || "");
     return m ? (+m[1]) + "년 " + (+m[2]) + "월 " + m[3] + "주" : (s || "");
   }
+  getJSON("/api/version").then(function (r) {
+    var v = r.j || {}, m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v["날짜"] || "");
+    if (!v["버전"]) return;
+    $("mcpver").textContent = "최신 버전 " + v["버전"] + (m ? " (" + (+m[1]) + "년 " + (+m[2]) + "월 " + (+m[3]) + "일)" : "");
+    $("mcpver").hidden = false;
+  }).catch(function () {});
   getJSON("/api/status").then(function (r) {
     var nc = (r.j || []).filter(function (x) { return x["자료"].indexOf("나우캐스트") >= 0; })[0];
     if (nc) $("asof").textContent = "자료 기준: 나우캐스트 " + fmtWeek(nc["최신"]) + "까지 (받아 온 날 " + fmtTime(nc["받아 온 날"]) + ")" + (nc["최근 실패"] ? " · 최근 받기에 실패해 최신이 아닐 수 있음" : "");
