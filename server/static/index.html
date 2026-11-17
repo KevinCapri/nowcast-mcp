@@ -53,7 +53,7 @@ textarea{padding:10px 12px;min-height:96px;resize:vertical}
 .adj .btn[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
 .adj .note{margin:0}
 .btn.light{background:#fff;color:var(--ink);border:1px solid #C9CED6}
-.fields{margin:4px 0 0;padding-left:18px;list-style:"· "}.fields li{margin:2px 0}.fields code{font-family:inherit;font-size:14px;white-space:nowrap;background:#f1f3f6;border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+.fields{margin:4px 0 0;padding-left:18px;list-style:"· "}.fields li{margin:2px 0}.key{display:inline-block;min-width:1.3em;line-height:1.3em;text-align:center;font-weight:700;background:#f1f3f6;border:1px solid #b9c0ca;border-radius:6px;padding:0 3px;margin:0 1px}.fields code{font-family:inherit;font-size:14px;white-space:nowrap;background:#f1f3f6;border:1px solid var(--line);border-radius:5px;padding:1px 6px}
 @media (max-width:640px){.fields code{display:block;width:fit-content;max-width:100%;box-sizing:border-box;margin:3px 0 2px;font-size:12px;white-space:normal;word-break:break-all}.card code.url{font-size:13px}}
 .reconn{margin-top:auto;background:#f4f6fa;border:1px solid var(--line);border-radius:8px;padding:10px 14px;line-height:1.6}.reconn .rl{display:block;font-size:13px;font-weight:700;color:var(--sub);margin-bottom:2px}
 .pair{display:grid;grid-template-columns:1fr 1fr;gap:22px}.pairnote{margin:-10px 4px 0}
@@ -349,7 +349,7 @@ footer p{margin:0 0 6px}
     <li>Claude(웹·데스크톱) <b>설정 → 커넥터</b></li>
     <li><b>커스텀 커넥터 추가</b> → 아래 입력 → <b>계속</b><ul class="fields"><li>이름: 빅데이터 Insight</li><li>MCP 서버 URL: <code>https://nowcast-mcp.azurewebsites.net/mcp</code></li></ul></li>
     <li>인증: <b>로그인 없음</b>(자동으로 선택됨) → <b>추가</b> → <b>연결</b></li>
-    <li>대화창 입력칸 <b>+</b> 버튼에서 커넥터 켜기 → 질문</li>
+    <li>대화창 입력칸 왼쪽 <span class="key" aria-label="더하기">+</span> 버튼에서 커넥터 켜기 → 질문</li>
   </ol>
   <div class="reconn"><span class="rl">🔄 업데이트 반영하기('주요 업데이트'에 🔄 표시가 있을 때)</span><b>설정 → 커넥터</b>에서 <b>연결 해제</b> → 다시 <b>연결</b></div>
 </div>
@@ -360,12 +360,12 @@ footer p{margin:0 0 6px}
     <li>ChatGPT <b>설정 → 플러그인</b> → 오른쪽 위 <b>디렉터리 둘러보기</b></li>
     <li>오른쪽 위 <b>추가 → 사용자 지정 MCP 서버 추가</b> → 아래 입력<ul class="fields"><li>이름: 빅데이터 Insight</li><li>연결(서버 URL): <code>https://nowcast-mcp.azurewebsites.net/mcp</code></li><li>인증: <b>OAuth</b> → <b>인증 없음</b></li></ul></li>
     <li><b>이해했으며 계속 진행하겠습니다</b> 체크 → <b>플러그인으로 생성</b></li>
-    <li>대화창 입력칸 <b>+</b> 버튼에서 플러그인 켜기 → 질문</li>
+    <li>대화창 입력칸 왼쪽 <span class="key" aria-label="더하기">+</span> 버튼에서 플러그인 켜기 → 질문</li>
   </ol>
   <div class="reconn"><span class="rl">🔄 업데이트 반영하기('주요 업데이트'에 🔄 표시가 있을 때)</span><b>설정 → 플러그인</b> → 플러그인 이름 → <b>도구 새로고침</b></div>
 </div>
 </div>
-<div class="hello"><b>연결 확인</b> — 채팅창에 <b>"Hello Insight"</b>라고 입력해 보세요</div>
+<div class="hello"><b>연결 확인</b> — 채팅창에 <b>"○○군 지난주 외부 유입이 평소보다 많았어?"</b>처럼 물어보세요</div>
 <p class="note pairnote">연결을 확인한 AI만 적음. 다른 AI는 확인되는 대로 추가</p>
 
 <div class="card">
@@ -516,9 +516,6 @@ footer p{margin:0 0 6px}
 
   // ---------- 주요 업데이트 (새 항목은 맨 앞에 추가, 사소한 변경은 넣지 않음) ----------
   var UPDATES = [
-    { d: "2026년 11월 17일", ver: "0.4.4 → 0.4.7", items: [
-      "AI에게 \"Hello Insight\"라고 하면 이 서비스로 할 수 있는 일과 할 수 없는 일을 안내 (업데이트를 반영하면 적용됩니다)"
-    ] },
     { d: "2026년 11월 16일", ver: "0.3.0 → 0.4.4", reconnect: true, items: [
       "새 AI 도구 3개: 지역 일정과 그 주 유입 함께 보기(get_region_calendar), 해마다 전국 벚꽃·단풍 관측일(get_bloom_foliage), 지난 몇 해의 같은 주와 비교(compare_same_week) (업데이트를 반영하면 보입니다)",
       "AI가 질문에 맞는 도구를 고르기 쉽도록 도구 설명을 다듬음 (업데이트를 반영하면 적용됩니다)",
