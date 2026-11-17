@@ -66,7 +66,7 @@ db = _ThreadDB(DB)
 SERVICE = "빅데이터 Insight: 지역별 유입인구"
 # 도구 목록이 바뀌면(추가·삭제·입력값·설명) 세 값을 같이 고친다. 회귀 시험이 TOOLS와 실제 도구가 다르면 잡는다.
 # 결과마다 붙여서, 예전에 연결한 이용자에게도 AI가 '새 도구가 생겼으니 다시 연결'을 알려 주게 한다(claude/변경_관리_원칙.md).
-VERSION = "0.4.7"
+VERSION = "0.4.8"
 TOOLS_CHANGED = "2026-11-17"
 TOOLS = ["get_metadata", "list_regions", "get_movement", "get_breakdown", "get_weather", "analyze_region_week",
          "find_unusual_regions", "estimate_life_pop", "forecast_festival", "get_datalab_daily", "report_issue",
@@ -114,7 +114,7 @@ INSTRUCTIONS = (
     "'나우캐스트 MCP'처럼 이 서비스를 나우캐스트 이름으로 부르지 말 것. "
     "모든 답의 맨 끝에는 도구 결과의 '답 끝에 적을 출처'를 줄마다 그대로 붙일 것. 문장 속 설명으로 대신하지 말고, "
     "웹 검색에서 가져온 내용(경기 점수·기사 등)은 그 출처를 따로 한 줄 더 붙일 것. "
-    "결과의 '서비스 도구' 목록에 지금 쓸 수 없는 도구가 있으면, 이용자에게 한 번만 커넥터를 다시 연결하면 쓸 수 있다고 알릴 것. "
+    "업데이트 반영 안내는 결과의 '서비스 도구' 안내를 따를 것. "
     "이용자가 'Hello Insight'(또는 '헬로 인사이트'·'안녕 인사이트')라고 하거나 이 서비스로 무엇을 할 수 있는지 물으면, 도구 목록이나 도구 이름을 보고 직접 요약하지 말고 반드시 get_metadata를 먼저 불러 '할 수 있는 일'을 그대로 보여 줄 것. "
     "'Hello Insight'에는 다른 '빅데이터 Insight' 서비스가 함께 연결돼 있으면 각각 불러 함께 소개하고, 'Hello Insight 유입인구'처럼 서비스 이름을 붙이면 그 서비스만 소개할 것."
 )
@@ -252,16 +252,9 @@ def _answer(r, kind, source, calc=False):
     return {**head, **r, "서비스 도구": TOOL_NOTICE}
 
 
-def _ver_doc(f):
-    """도구 설명 첫 줄의 {VERSION}을 VERSION으로 채운다(버전을 올릴 때 설명을 따로 고치지 않게, 2026-11-17)."""
-    f.__doc__ = f.__doc__.replace("{VERSION}", VERSION)
-    return f
-
-
 @mcp.tool(annotations=READ_ONLY)
-@_ver_doc
 def get_metadata() -> dict:
-    """[도구 설명 버전 {VERSION}] 'Hello Insight'·'헬로 인사이트'·'안녕 인사이트'라고 하거나 이 서비스로 무엇을 할 수 있는지 물으면, 도구 목록이나 도구 이름을 보고 직접 요약하지 말고 반드시 이 도구를 먼저 불러 결과의 '할 수 있는 일'을 그대로 보여 줄 것(이름만 보고 요약하면 방문객 수 예측처럼 할 수 없는 일을 안내하게 된다).
+    """'Hello Insight'·'헬로 인사이트'·'안녕 인사이트'라고 하거나 이 서비스로 무엇을 할 수 있는지 물으면, 도구 목록이나 도구 이름을 보고 직접 요약하지 말고 반드시 이 도구를 먼저 불러 결과의 '할 수 있는 일'을 그대로 보여 줄 것(이름만 보고 요약하면 방문객 수 예측처럼 할 수 없는 일을 안내하게 된다).
     통신 모바일 인구이동량 통계의 정의와 이용 시 주의사항을 돌려준다.
     다른 도구를 쓰기 전에 반드시 먼저 한 번 호출해서 읽을 것.
     'Hello Insight 유입인구'처럼 이 서비스 이름을 붙여 불러도 이 도구다. 다른 '빅데이터 Insight' 서비스가 함께 연결돼 있으면 'Hello Insight'에는 그쪽 안내도 함께 보여 줄 것.
@@ -288,10 +281,7 @@ def get_metadata() -> dict:
                 "여러 해에 걸친 추세 판단",
             ],
             "의견": "틀린 값이나 추가했으면 하는 자료는 \"의견 보낼게\"라고 말하면 운영자에게 전달",
-            "버전": VERSION,
-            "보여 줄 때": "이용자가 'Hello Insight'·'헬로 인사이트'·'안녕 인사이트'(또는 'Hello Insight 유입인구')라고 하거나 할 수 있는 일을 물으면 이 칸을 문구 그대로, 위 순서대로 보여 줄 것. 예시 질문의 ○○은 그대로 둘 것. 다른 '빅데이터 Insight' 서비스도 연결돼 있으면 서비스마다 나눠 보여 줄 것. "
-                         f"맨 아래에는 이 도구 설명 첫 줄의 [도구 설명 버전]과 이 칸의 '버전'을 비교해, 같으면 '버전: {VERSION} (최신)', "
-                         f"다르면 '버전: 연결된 도구 (설명의 버전) · 최신 {VERSION} → 커넥터에서 업데이트를 반영하세요'로 보여 줄 것.",
+            "보여 줄 때": "이용자가 'Hello Insight'·'헬로 인사이트'·'안녕 인사이트'(또는 'Hello Insight 유입인구')라고 하거나 할 수 있는 일을 물으면 이 칸을 문구 그대로, 위 순서대로 보여 줄 것. 예시 질문의 ○○은 그대로 둘 것. 다른 '빅데이터 Insight' 서비스도 연결돼 있으면 서비스마다 나눠 보여 줄 것.",
         },
         "정의": {
             "인구이동": "행정동 경계를 넘어 거주지가 아닌 행정동으로 이동한 뒤 30분 이상 머문 경우를 1건으로 센다.",
@@ -959,7 +949,7 @@ def report_issue(message: str,
 
 @mcp.tool(annotations=READ_ONLY)
 def get_region_calendar(sido: Sido, sigungu: Sigungu, start: str, end: str = "") -> dict:
-    """한 시군구의 한 기간에 있었던 일(공휴일·축제·대형 행사·프로야구 홈경기·벚꽃 만발·단풍 절정·큰 공연·큰 눈비·대형 시설 개점·폐점)을
+    """한 시군구의 한 기간에 있었던 일(공휴일·축제·대형 행사·프로야구 홈경기 등)을
     주별로 모아, 주마다 그 주의 관외 유입 판정을 함께 돌려준다.
     - '이번 달 경주에 무슨 행사 있었어?', '10월 대구 포스트시즌 경기랑 관중은?'처럼 일정을 묻거나,
       일정과 유입을 함께 묻는 질문('그 행사 때 사람 많이 왔어?')에 쓴다.
@@ -980,7 +970,7 @@ def get_region_calendar(sido: Sido, sigungu: Sigungu, start: str, end: str = "")
 @mcp.tool(annotations=READ_ONLY)
 def get_bloom_foliage(year: int, kind: str) -> dict:
     """그해 전국 벚꽃(개화·만발) 또는 단풍(유명산 첫 단풍·절정, 단풍나무 표준목) 관측일(기상청 계절관측)을 돌려준다.
-    유입 효과가 확인된 명소(단풍 17곳, 벚꽃 12곳)는 그 주 관외 유입 판정과 이 지역 지난 기록을 함께 준다.
+    유입 효과가 확인된 명소는 그 주 관외 유입 판정과 이 지역 지난 기록을 함께 준다.
     - '올해 내장산 단풍 절정 언제였어?', '작년 진해 벚꽃 만발은?'과 이어지는 '그때 사람 많이 왔어?'에 쓴다.
     - kind는 '벚꽃' 또는 '단풍'. 관측이 끝난 날짜만 있다(예보 없음). 없는 해는 기상청 날씨누리 '봄꽃·단풍'을 안내할 것.
     - 유입 변화를 벚꽃·단풍 때문이라고 단정하지 말 것.
@@ -1011,6 +1001,51 @@ def get_data_status() -> dict:
         "손으로 넣는 자료 안내": "자동으로 받지 않고 시즌·관측이 끝난 뒤 운영자가 넣는 자료다. '자료 기준' 뒤의 일은 아직 없다. "
                          "그 뒤 일을 물으면 '이 서비스에는 ○○까지 있다'고 말하고 원출처(KBO·기상청 날씨누리 등)를 안내할 것.",
     }
+
+
+# ---------- 업데이트 확인(2026-11-17) ----------
+# 이용자의 커넥터는 연결(업데이트 반영) 때 받은 도구 설명을 그대로 쓰고, 결과는 늘 최신 서버에서 온다.
+# 도구 설명·입력값으로 만든 짧은 코드를 설명 첫 줄과 결과의 '서비스 도구'에 함께 넣어,
+# 둘이 다르면(또는 설명에 줄이 없으면) AI가 이용자에게 업데이트 반영을 한 번 알리게 한다.
+# 비교는 AI만 하고 이용자에게는 알림 문장만 간다. 설명이 바뀌면 코드도 저절로 바뀐다.
+def _stamp_update_code():
+    import hashlib
+    tools = mcp._tool_manager._tools
+    # 입력값은 이름·종류·설명·고를 수 있는 값만 쓴다(pydantic 버전에 따라 바뀌는 모양은 빼서, 코드를 안 고쳤는데 알림이 가지 않게)
+    def _params(schema):
+        props = (schema or {}).get("properties", {})
+        keep = ("type", "description", "enum", "const", "default")
+        req = sorted((schema or {}).get("required", []))
+        return [req, {k: {kk: v.get(kk) for kk in keep if kk in v} for k, v in sorted(props.items())}]
+    src = json.dumps([[n, t.description, _params(t.parameters)] for n, t in sorted(tools.items())],
+                     ensure_ascii=False, sort_keys=True, default=str)
+    code = hashlib.sha1(src.encode()).hexdigest()[:6]
+    for t in tools.values():
+        t.description = f"[업데이트 확인 {code}] " + (t.description or "")
+    return code
+
+
+try:
+    UPDATE_CODE = _stamp_update_code()
+except Exception:
+    UPDATE_CODE = None   # 실패하면 옛 안내 그대로(코드 없이 비교하라고 하면 늘 '업데이트 필요'가 나감)
+if UPDATE_CODE:
+    _old = dict(TOOL_NOTICE)
+    TOOL_NOTICE.clear()
+    TOOL_NOTICE.update({
+        "버전": _old["버전"],
+        f"도구 목록({len(TOOLS)}개)": TOOLS,
+        "도구가 바뀐 날": TOOLS_CHANGED,
+        "업데이트 확인": UPDATE_CODE,
+        "안내": ("지금 쓰는 도구 설명 첫 줄의 [업데이트 확인] 값이 위 값과 다르거나 그 줄이 없으면, "
+               "대화에서 한 번만 아래 문장을 이용자에게 전할 것. 같으면 아무 말도 하지 말 것. "
+               "값이나 비교 과정은 이용자에게 말하지 말 것."),
+        "이용자에게 전할 문장(쓰고 있는 AI에 맞는 것 하나만)": {
+            "Claude": "빅데이터 Insight에 업데이트가 있습니다. 설정 → 커넥터에서 연결 해제 → 다시 연결해 주세요.",
+            "ChatGPT": "빅데이터 Insight에 업데이트가 있습니다. 설정 → 플러그인 → 빅데이터 Insight → 도구 새로고침을 해 주세요.",
+            "그 밖의 AI": "빅데이터 Insight에 업데이트가 있습니다. 설정 메뉴에 들어가셔서 다시 연결해 주세요.",
+        },
+    })
 
 
 if __name__ == "__main__":
