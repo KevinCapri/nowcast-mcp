@@ -265,6 +265,15 @@ async def api_status(request: Request):
     return _json([{"자료": n, "단위": u, "최신": l, "받아 온 날": f, "최근 실패": bool(x)} for n, u, l, f, x in rows])
 
 
+async def api_version(request: Request):
+    """사이트 '연결 주소' 아래 '최신 버전' 표시용(2026-11-17). 서버 VERSION·TOOLS_CHANGED를 그대로 줌."""
+    try:
+        import server as S
+        return _json({"버전": S.VERSION, "날짜": S.TOOLS_CHANGED})
+    except Exception:
+        return _json({}, 500)
+
+
 # ---------- 공식 공표 통계 ----------
 def _codes(sido, sigungu, col):
     out = []
@@ -881,6 +890,7 @@ app = Starlette(routes=[
     Route("/api/regions", api_regions),
     Route("/api/weeks", api_weeks),
     Route("/api/status", api_status),
+    Route("/api/version", api_version),
     Route("/api/view", api_view),
     Route("/api/fest_regions", api_fest_regions),
     Route("/api/fests", api_fests),

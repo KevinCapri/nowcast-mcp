@@ -340,6 +340,7 @@ footer p{margin:0 0 6px}
     <code class="url" id="mcpurl">https://nowcast-mcp.azurewebsites.net/mcp</code>
     <button class="btn light" type="button" id="copy">주소 복사</button>
   </div>
+  <p class="note" id="mcpver" style="margin-top:8px" hidden></p>
 </div>
 
 <div class="pair">
@@ -670,6 +671,12 @@ footer p{margin:0 0 6px}
     var m = /^(\d{4})\.(\d{2})\.(\d)주차$/.exec(s || "");
     return m ? (+m[1]) + "년 " + (+m[2]) + "월 " + m[3] + "주" : (s || "");
   }
+  getJSON("/api/version").then(function (r) {
+    var v = r.j || {}, m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v["날짜"] || "");
+    if (!v["버전"]) return;
+    $("mcpver").textContent = "최신 버전 " + v["버전"] + (m ? " (" + (+m[1]) + "년 " + (+m[2]) + "월 " + (+m[3]) + "일)" : "");
+    $("mcpver").hidden = false;
+  }).catch(function () {});
   getJSON("/api/status").then(function (r) {
     var nc = (r.j || []).filter(function (x) { return x["자료"].indexOf("나우캐스트") >= 0; })[0];
     if (nc) $("asof").textContent = "자료 기준: 나우캐스트 " + fmtWeek(nc["최신"]) + "까지 (받아 온 날 " + fmtTime(nc["받아 온 날"]) + ")" + (nc["최근 실패"] ? " · 최근 받기에 실패해 최신이 아닐 수 있음" : "");
