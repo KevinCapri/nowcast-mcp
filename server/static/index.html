@@ -673,7 +673,7 @@ footer p{margin:0 0 6px}
   getJSON("/api/version").then(function (r) {
     var v = r.j || {}, m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v["날짜"] || "");
     if (!v["버전"]) return;
-    $("mcpver").textContent = "최신 버전 " + v["버전"] + (m ? " (" + (+m[1]) + "년 " + (+m[2]) + "월 " + (+m[3]) + "일)" : "");
+    $("mcpver").textContent = "버전 " + v["버전"] + (m ? " (" + (+m[1]) + "년 " + (+m[2]) + "월 " + (+m[3]) + "일)" : "");
     $("mcpver").hidden = false;
   }).catch(function () {});
   getJSON("/api/status").then(function (r) {
