@@ -114,7 +114,7 @@ INSTRUCTIONS = (
     "'나우캐스트 MCP'처럼 이 서비스를 나우캐스트 이름으로 부르지 말 것. "
     "모든 답의 맨 끝에는 도구 결과의 '답 끝에 적을 출처'를 줄마다 그대로 붙일 것. 문장 속 설명으로 대신하지 말고, "
     "웹 검색에서 가져온 내용(경기 점수·기사 등)은 그 출처를 따로 한 줄 더 붙일 것. "
-    "결과의 '서비스 도구' 목록에 지금 쓸 수 없는 도구가 있으면, 이용자에게 한 번만 커넥터를 다시 연결하면 쓸 수 있다고 알릴 것. "
+    "업데이트 반영 안내는 결과의 '서비스 도구' 안내를 따를 것. "
     "이용자가 'Hello Insight'(또는 '헬로 인사이트'·'안녕 인사이트')라고 하거나 이 서비스로 무엇을 할 수 있는지 물으면, 도구 목록이나 도구 이름을 보고 직접 요약하지 말고 반드시 get_metadata를 먼저 불러 '할 수 있는 일'을 그대로 보여 줄 것. "
     "'Hello Insight'에는 다른 '빅데이터 Insight' 서비스가 함께 연결돼 있으면 각각 불러 함께 소개하고, 'Hello Insight 유입인구'처럼 서비스 이름을 붙이면 그 서비스만 소개할 것."
 )
@@ -949,7 +949,7 @@ def report_issue(message: str,
 
 @mcp.tool(annotations=READ_ONLY)
 def get_region_calendar(sido: Sido, sigungu: Sigungu, start: str, end: str = "") -> dict:
-    """한 시군구의 한 기간에 있었던 일(공휴일·축제·대형 행사·프로야구 홈경기·벚꽃 만발·단풍 절정·큰 공연·큰 눈비·대형 시설 개점·폐점)을
+    """한 시군구의 한 기간에 있었던 일(공휴일·축제·대형 행사·프로야구 홈경기 등)을
     주별로 모아, 주마다 그 주의 관외 유입 판정을 함께 돌려준다.
     - '이번 달 경주에 무슨 행사 있었어?', '10월 대구 포스트시즌 경기랑 관중은?'처럼 일정을 묻거나,
       일정과 유입을 함께 묻는 질문('그 행사 때 사람 많이 왔어?')에 쓴다.
@@ -970,7 +970,7 @@ def get_region_calendar(sido: Sido, sigungu: Sigungu, start: str, end: str = "")
 @mcp.tool(annotations=READ_ONLY)
 def get_bloom_foliage(year: int, kind: str) -> dict:
     """그해 전국 벚꽃(개화·만발) 또는 단풍(유명산 첫 단풍·절정, 단풍나무 표준목) 관측일(기상청 계절관측)을 돌려준다.
-    유입 효과가 확인된 명소(단풍 17곳, 벚꽃 12곳)는 그 주 관외 유입 판정과 이 지역 지난 기록을 함께 준다.
+    유입 효과가 확인된 명소는 그 주 관외 유입 판정과 이 지역 지난 기록을 함께 준다.
     - '올해 내장산 단풍 절정 언제였어?', '작년 진해 벚꽃 만발은?'과 이어지는 '그때 사람 많이 왔어?'에 쓴다.
     - kind는 '벚꽃' 또는 '단풍'. 관측이 끝난 날짜만 있다(예보 없음). 없는 해는 기상청 날씨누리 '봄꽃·단풍'을 안내할 것.
     - 유입 변화를 벚꽃·단풍 때문이라고 단정하지 말 것.
@@ -1011,7 +1011,13 @@ def get_data_status() -> dict:
 def _stamp_update_code():
     import hashlib
     tools = mcp._tool_manager._tools
-    src = json.dumps([[n, t.description, t.parameters] for n, t in sorted(tools.items())],
+    # 입력값은 이름·종류·설명·고를 수 있는 값만 쓴다(pydantic 버전에 따라 바뀌는 모양은 빼서, 코드를 안 고쳤는데 알림이 가지 않게)
+    def _params(schema):
+        props = (schema or {}).get("properties", {})
+        keep = ("type", "description", "enum", "const", "default")
+        req = sorted((schema or {}).get("required", []))
+        return [req, {k: {kk: v.get(kk) for kk in keep if kk in v} for k, v in sorted(props.items())}]
+    src = json.dumps([[n, t.description, _params(t.parameters)] for n, t in sorted(tools.items())],
                      ensure_ascii=False, sort_keys=True, default=str)
     code = hashlib.sha1(src.encode()).hexdigest()[:6]
     for t in tools.values():
@@ -1031,8 +1037,8 @@ if UPDATE_CODE:
         f"도구 목록({len(TOOLS)}개)": TOOLS,
         "도구가 바뀐 날": TOOLS_CHANGED,
         "업데이트 확인": UPDATE_CODE,
-        "안내": ("지금 쓰는 도구 설명 첫 줄의 [업데이트 확인] 값이 위 값과 다르거나 그 줄이 없으면, 또는 이 목록 중 지금 쓸 수 없는 "
-               "도구가 있으면, 대화에서 한 번만 아래 문장을 이용자에게 전할 것. 같으면 아무 말도 하지 말 것. "
+        "안내": ("지금 쓰는 도구 설명 첫 줄의 [업데이트 확인] 값이 위 값과 다르거나 그 줄이 없으면, "
+               "대화에서 한 번만 아래 문장을 이용자에게 전할 것. 같으면 아무 말도 하지 말 것. "
                "값이나 비교 과정은 이용자에게 말하지 말 것."),
         "이용자에게 전할 문장(쓰고 있는 AI에 맞는 것 하나만)": {
             "Claude": "빅데이터 Insight에 업데이트가 있습니다. 설정 → 커넥터에서 연결 해제 → 다시 연결해 주세요.",
