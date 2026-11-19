@@ -226,6 +226,14 @@ def refresh_lists():
                 print(f"[web] 최근 주 전국 순위 미리 계산 ({time.time() - t:.1f}초)", flush=True)
         except Exception as e:
             print("[web] 최근 주 전국 순위 미리 계산 실패", repr(e), flush=True)
+        # 기간 순위(find_unusual_regions의 start_week·end_week)에 쓰는 전국×전체 주 판정 표도 미리 계산해 둠.
+        # 최신 주차로 캐시하므로 새 자료가 들어오면 저절로 다시 계산된다.
+        try:
+            t = time.time()
+            A.period_table(_conn())
+            print(f"[web] 기간 순위 표 미리 계산 ({time.time() - t:.1f}초)", flush=True)
+        except Exception as e:
+            print("[web] 기간 순위 표 미리 계산 실패", repr(e), flush=True)
     except Exception as e:
         print("[web] 목록 만들기 실패", repr(e), flush=True)
     finally:

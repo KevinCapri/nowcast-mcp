@@ -12,6 +12,7 @@
 """
 import csv
 import math
+import threading
 from pathlib import Path
 from statistics import median
 
@@ -35,6 +36,30 @@ def reform_week(sido, sigungu):
     city = sigungu.split(" ")[0]
     return REFORM_CITY.get(city) if " " in sigungu else None      # 출렁임은 2023년 3월 이후로 계산(코로나 시기 제외)
 BASE_WEEKS = 8
+
+
+def new_start(sido, sigungu):
+    """경계가 바뀌어 판정을 새로 시작한 지역(인천 새 구, 부천·화성의 구)이면 개편 주차. 사라진 옛 이름·이어서 판정하는 곳은 None.
+    (군위군·전남광주통합특별시·특별자치도는 경계 그대로라 이어서 판정 — 전국순위_기간확장_작업.md 3번)"""
+    if (sido, sigungu) in REFORM:
+        return None
+    return reform_week(sido, sigungu)
+
+
+def start_note(first_wo, rw):
+    """새로 시작한 지역 줄에 붙이는 칸 문구."""
+    return f"이 지역은 {label(first_wo)}부터 판정({rw // 1000}년 {(rw // 10) % 100}월 행정구역 개편)"
+
+
+def first_judged(P, rw):
+    """개편 주차 rw 뒤 처음 판정이 나온 주(판정 보류 뺌)."""
+    for wo in sorted(P["me"]):
+        if wo < rw:
+            continue
+        J = judge_week(P, wo)
+        if J and J["ratio"] is not None and not J["verdict"].startswith("판정 보류"):
+            return wo
+    return None
 
 
 GWANGJU_GU = {"동구", "서구", "남구", "북구", "광산구"}
@@ -101,6 +126,59 @@ def judge(ratio):
 
 def _pct(logv):
     return None if logv is None else round((math.exp(logv) - 1) * 100, 1)
+
+
+# ── 판정을 말하는 방식(2026-11-19, 전국순위_기간확장_작업.md 6번) ───────────────────────────────
+# '평소 출렁임의 3.5배'는 '3.5배로 늘었다'로 오해하기 쉬워, % 먼저 말하고 배수는 판정 단계별 정해진 말로 푼다.
+# 순위 기준은 배수 그대로. 이용자가 배수를 직접 물으면 소수 한 자리 그대로 말해도 된다.
+STAGE_WORDS = {
+    "조금": "평소 오르내림 폭을 조금 넘는 정도입니다.",
+    "많음": "평소 오르내림 폭의 두 배가 넘어, 이 지역에서는 흔치 않은 일입니다.",
+    "아주": "평소 오르내림 폭의 세 배가 넘어, 이 지역에서는 아주 드문 일입니다.",
+    "평소": "평소 오르내림 폭 안이라 평소 수준입니다.",
+}
+STAGE_RULE = ("판정 단계별 말: 조금 많음·조금 적음 → '" + STAGE_WORDS["조금"] + "' / 많음·적음 → '" + STAGE_WORDS["많음"]
+              + "' / 아주 많음·아주 적음 → '" + STAGE_WORDS["아주"] + "' / 평소 수준 → '" + STAGE_WORDS["평소"] + "'")
+SAME_PCT = 3.0   # 평소 대비와 판정에 쓴 값의 차이가 이 %p 안이면 '거의 같음'(숫자 하나로만 말함)
+
+
+def _stage(verdict):
+    if verdict.startswith("아주"):
+        return STAGE_WORDS["아주"]
+    if verdict.startswith("조금"):
+        return STAGE_WORDS["조금"]
+    if verdict in ("많음", "적음"):
+        return STAGE_WORDS["많음"]
+    return STAGE_WORDS["평소"] if verdict == "평소 수준" else None
+
+
+def _topic(name):
+    """이름 뒤 '은/는'."""
+    c = name[-1]
+    return name + ("은" if "가" <= c <= "힣" and (ord(c) - 0xAC00) % 28 else "는")
+
+
+def speak(J, place, when):
+    """판정을 % 먼저, 배수는 단계별 말로 푼 문장들. 판정 못 한 주는 None."""
+    if not J or J.get("ratio") is None or J.get("dev") is None:
+        return None
+    stage = _stage(J["verdict"])
+    if not stage:
+        return None
+    p, f, s = _pct(J["dev"]), _pct(J["final"]), _pct(J["s"])
+    first = (f"{_topic(place)} {when} 외부 유입이 평소보다 {abs(round(p))}% {'늘었' if p > 0 else '줄었'}습니다."
+             if abs(p) >= 0.5 else f"{_topic(place)} {when} 외부 유입이 평소와 거의 같았습니다({p:+.1f}%).")
+    lines = [first]
+    if f is not None and abs(f - p) >= SAME_PCT:
+        if J.get("hol_adj") is not None:
+            h = _pct(J["hol_adj"])
+            who = f"공휴일 낀 주에 보통 {'늘어나는' if h > 0 else '줄어드는'} 몫을 빼면"
+        else:
+            c = p - f   # 비교 지역 몫(대략)
+            who = (f"비슷한 지역들{'도' if c * p > 0 else '이'} 함께 {'늘어난' if c > 0 else '줄어든'} 몫을 빼면")
+        lines.append(f"{who} {abs(round(f))}% {'많은' if f > 0 else '적은'} 셈인데,")
+    lines.append(f"이 지역은 평소 한 주에 {max(1, round(s))}% 안팎 오르내리니, {stage}")
+    return " ".join(lines)
 
 
 # 원자료 처리 문제가 의심되는 구간(2026-11-13 점검). 이 지역만 크게 튀고
@@ -228,7 +306,9 @@ def fest_weeks(region):
     return _FEST_WEEKS.get(region, set())
 
 
-def _pass(rows, hol, sig=None, skip=()):
+def _pass(rows, hol, sig_at=None):
+    """sig_at: 축제 주 → 그 주 전 자료로 낸 평소 출렁임. 이 값의 3배를 넘게 늘어난 축제 주는 평소 값에 넣지 않는다."""
+    sig_at = sig_at or {}
     out, normal = {}, []
     for wo, wk, v in rows:
         base = median(normal[-BASE_WEEKS:]) if len(normal) >= BASE_WEEKS else None
@@ -236,7 +316,8 @@ def _pass(rows, hol, sig=None, skip=()):
         out[wo] = (wk, v, base, dev)
         if is_long_holiday(hol.get(wo)) or not v:
             continue
-        if sig and wo in skip and dev is not None and dev > SPIKE_K * sig:
+        sig = sig_at.get(wo)
+        if sig and dev is not None and dev > SPIKE_K * sig:
             continue                                # 축제로 크게 늘어난 주는 평소 값에 넣지 않음
         normal.append(v)
     return out
@@ -246,14 +327,20 @@ def deviations(rows, hol, region=None):
     """week_order → (주차, 관외, 평소 값, ln 변화)
     2026-11-15: 축제 주가 직전 8주에 들어가 평소 값을 부풀려, 축제 직후 주가 '뚜렷이 적음'으로 잘못 나오던 문제를 고침.
     region(canon)을 주면, 그 지역 축제 계획 기간 중 평소 출렁임의 3배를 넘게 늘어난 주는 평소 값 계산에서 뺀다.
-    (학기 시작·새 시설처럼 축제가 아닌 변화는 그대로 평소 값에 들어가 새 수준을 따라간다.)"""
+    (학기 시작·새 시설처럼 축제가 아닌 변화는 그대로 평소 값에 들어가 새 수준을 따라간다.)
+    2026-11-19(전국순위_기간확장_작업.md 8번): 이 기준의 평소 출렁임을 2023년 3월 이후 전체 자료가 아니라 '그 주 전 자료만'으로
+    낸다(자료가 쌓여도 지난 판정이 바뀌지 않게, 판정 쪽 평소 출렁임과 같은 방식)."""
     first = _pass(rows, hol)
     skip = fest_weeks(region) if region else set()
     if not skip:
         return first
-    xs = [d for wo, (_, _, _, d) in first.items() if d is not None and wo >= START and not hol.get(wo)]
-    sig = _mad(xs) if len(xs) >= 20 else None
-    return _pass(rows, hol, sig, skip) if sig else first
+    plain = [(wo, d) for wo, (_, _, _, d) in sorted(first.items()) if d is not None and wo >= START and not hol.get(wo)]
+    sig_at = {}
+    for wo in skip:
+        xs = [d for w, d in plain if w < wo]
+        if len(xs) >= 20:
+            sig_at[wo] = _mad(xs)
+    return _pass(rows, hol, sig_at) if sig_at else first
 
 
 def prepare(db, sido, sigungu, memo=None):
@@ -356,6 +443,37 @@ def judge_week(P, week_order):
                 ratio_nobb=ratio_nobb, verdict_nobb=verdict_nobb)
 
 
+def _count_word(x):
+    """하루 건수를 읽기 쉬운 말로: 310,000 → '31만', 26,000 → '2.6만', 4,830 → '4,800'."""
+    if x >= 1e5:
+        return f"{round(x / 1e4)}만"
+    if x >= 1e4:
+        return f"{x / 1e4:.1f}".rstrip("0").rstrip(".") + "만"
+    return f"{round(x, -2):,.0f}"
+
+
+SCALE_NOTE = (
+    "이 기준은 지역마다 다르다. 평소 이동이 많은 큰 지역은 행사가 있어도 '평소 수준'으로 나오기 쉽고, 작은 지역은 조금만 늘어도 "
+    "'많음'이 나올 수 있다. '평소 수준'을 '효과가 없었다'로, '많음'을 '사람이 많이 왔다'로 바꿔 말하지 말고 이 기준과 함께 전할 것. "
+    "'건'은 이동 건수이고 사람 수가 아니다. 행사 효과가 궁금하다고 하면, get_region_calendar로 행사 날짜를 찾고 get_datalab_daily로 "
+    "그 날짜만 떼어 평소 같은 요일과 견줘 볼 수 있다고 안내할 것. 한 주 전체보다 하루 단위가 더 잘 보일 수 있지만, 큰 지역은 하루 "
+    "단위로도 묻힐 수 있다. 데이터랩은 외지인 방문자 수(사람 수)라 이 서비스의 이동 건수와 단위가 다르니, 두 숫자를 섞거나 더하지 말 것.")
+
+
+def scale(base, s):
+    """지역별 판정 기준(전국순위_기간확장_작업.md 7번): 평소 값 × 평소 출렁임 × 2('많음' 문턱).
+    비교군·공휴일 보정 전 기준이라 '약'."""
+    sp = _pct(s)
+    if not base or sp is None:
+        return None
+    return {"이 지역 판정 기준": f"평소보다 하루 약 {_count_word(base * sp / 100 * STRONG_X)} 건 넘게 더 유입돼야 '많음'으로 나옴",
+            "이 지역 평소 규모": f"이 지역은 평소 하루 약 {_count_word(base)} 건이 유입되고, 평범한 주에도 {max(1, round(sp))}% 안팎은 변동함",
+            "판정 기준 안내": SCALE_NOTE}
+
+
+STRONG_X = 2   # '많음' 문턱(평소 출렁임의 배수). 기간 순위의 STRONG과 같은 값
+
+
 def analyze(db, sido, sigungu, week_order):
     P = prepare(db, sido, sigungu)
     if not P:
@@ -403,9 +521,12 @@ def analyze(db, sido, sigungu, week_order):
         "평소 출렁임(%)": _pct(s),
         "평소 출렁임의 몇 배": ratio,
         "판정": verdict,
+        "판정 말하는 법": speak(J, f"{sido} {sigungu}" if (sigungu.endswith("구") and " " not in sigungu) else sigungu,
+                          f"{wk}({week_dates(week_order)})에"),
         "판정 기준": JUDGE_RULE,
+        **(scale(base, s) or {}),
         "그 주 공휴일": h[2],
-        "비교한 지역": [f"{a} {b}" for a, b in peers],
+        "비교한 지역": [" ".join(current_name(db, a, b)) for a, b in peers],
         "주의": notes + [
             "이 값은 서비스가 계산한 비공식 참고값이다. 공식 통계가 아니다.",
             "원인은 이 도구가 정하지 않는다. 축제·날씨·공휴일 등은 판단 재료로만 제시하고 단정하지 말 것.",
@@ -428,7 +549,66 @@ def all_regions(db):
     return sorted((a, b) for a, b, _ in best.values())
 
 
+_names = {"key": None, "map": {}}
+
+
+def current_name(db, sido, sigungu):
+    """지금 쓰는 시도·시군구 이름(시도 이름이 바뀐 곳은 가장 최근 이름). 보여 주기에만 쓰고 계산은 canon으로 한다.
+    region_peers.csv는 개편 전 이름이라 '비교한 지역'에 옛 시도 이름이 나오던 것을 고침(전국순위_기간확장_작업.md 5번)."""
+    key = db.execute("SELECT MAX(week_order) FROM moves").fetchone()[0]
+    if _names["key"] != key:
+        _names.update(key=key, map={canon(a, b): (a, b) for a, b in all_regions(db)})
+    return _names["map"].get(canon(sido, sigungu), (sido, sigungu))
+
+
 _rank_cache = {}
+
+# ── 같은 방향 규칙(2026-11-19, 전국순위_기간확장_작업.md 4번) ─────────────────────────────────
+# 비교 대상이 다 같이 크게 움직인 주에는 '평소보다 늘어난 곳'에 실제로는 줄어든 지역이 섞인다(계엄 주 함안 −11% 등).
+# '늘어난 곳'은 평소 대비 +1% 넘게 늘어난 곳만, '줄어든 곳'은 −1% 넘게 줄어든 곳만. 엇갈린 곳은 따로 짧은 목록으로.
+SAME_DIR_PCT = 1.0
+
+
+def real_dir(ratio, dev):
+    """판정 방향과 실제(평소 대비) 방향이 같은가."""
+    p = _pct(dev)
+    if p is None or ratio is None:
+        return False
+    return p > SAME_DIR_PCT if ratio > 0 else p < -SAME_DIR_PCT
+
+
+def _move(p, stem):
+    """+21.3 → '21% 늘어', −26 → '26% 줄어', 거의 0 → None. stem 뒤 말은 부르는 쪽이 붙인다."""
+    if p is None or abs(p) <= SAME_DIR_PCT:
+        return None
+    return f"{abs(round(p))}% {'늘' if p > 0 else '줄'}{stem}"
+
+
+def mixed_line(name, ratio, dev, com, hol_adj):
+    """판정 방향과 실제 방향이 엇갈린 곳의 한 줄. 판정 방식에 맞춰 비교 숫자를 붙인다."""
+    p = _pct(dev)
+    me = _move(p, "었지만") or f"거의 그대로({p:+.1f}%)였지만"
+    if ratio > 0:
+        tail = "그보다는 덜 줄었음" if p < -SAME_DIR_PCT else "그보다는 많았음"
+    else:
+        tail = "그보다는 덜 늘었음" if p > SAME_DIR_PCT else "그보다는 적었음"
+    if hol_adj is not None:
+        h = _pct(hol_adj)
+        hw = _move(h, "던") or None
+        cmp = (f"공휴일 낀 주에는 보통 {abs(round(h))}%씩 {'늘' if h > 0 else '줄'}던 곳이라" if hw
+               else "공휴일 낀 주에도 보통 거의 그대로이던 곳이라")
+    elif com is not None:
+        cw = _move(_pct(com), "어")
+        cmp = f"비슷한 지역들은 {cw}" if cw else "비슷한 지역들은 거의 그대로여서"
+    else:   # 비교군 없음: 평소 대비만으로 판정(드묾)
+        cmp = "이 지역은 평소 오르내림이 아주 작은 곳이라"
+        tail = "이 정도도 평소보다는 많은 편임" if ratio > 0 else "이 정도도 평소보다는 적은 편임"
+    return f"{name}: 이번 주 {me}, {cmp} {tail}"
+
+
+MIXED_NOTE = ["'사람이 몰렸다/빠졌다'고 말하지 말고 이 문장 그대로 전할 것.",
+              "비슷한 지역은 주민 수·30km 안 인구·100km 안 인구가 비슷한 10곳이다(지역 성격은 보지 않음).",
+              "어느 지역인지 물으면 analyze_region_week로 그 지역·그 주를 불러 '비교한 지역'을 보여 줄 것."]
 
 
 def rank_week(db, week_order):
@@ -444,11 +624,115 @@ def rank_week(db, week_order):
         J = judge_week(P, week_order)
         if not J or J["ratio"] is None:
             continue
-        out.append({"지역": f"{sd} {sg}", "배수": J["ratio"], "판정": J["verdict"],
-                    "평소 대비(%)": _pct(J["dev"]), "최종 변화(%)": _pct(J["final"]),
-                    "판정에 쓴 방식": J["method"], "관외 유입(일평균 건수)": round(J["v"])})
+        row = {"지역": f"{sd} {sg}", "배수": J["ratio"], "판정": J["verdict"],
+               "평소 대비(%)": _pct(J["dev"]), "최종 변화(%)": _pct(J["final"]), "평소 출렁임(%)": _pct(J["s"]),
+               "판정에 쓴 방식": J["method"], "관외 유입(일평균 건수)": round(J["v"])}
+        if J["hol_adj"] is not None:
+            row["공휴일 보정(%)"] = _pct(J["hol_adj"])
+        elif J["method"] == "비교군 대비" and P["com"].get(week_order) is not None:
+            row["비슷한 지역 같은 주 변화(%)"] = _pct(P["com"][week_order])
+        row["_dev"], row["_com"], row["_hol"] = J["dev"], P["com"].get(week_order), J["hol_adj"]
+        rw = new_start(sd, sg)
+        fj = first_judged(P, rw) if rw else None
+        if fj:
+            row["판정 시작"] = start_note(fj, rw)
+        out.append(row)
     out.sort(key=lambda x: -abs(x["배수"]))
     if len(_rank_cache) > 20:
         _rank_cache.clear()
     _rank_cache[key] = out
     return out
+
+
+# ── 기간 순위(2026-11-19, claude/전국순위_기간확장_작업.md 1·2·9번) ──────────────────────────────
+# 판정 방식은 한 주 순위와 같고 범위만 넓힌다. 판정할 수 있는 주(평소 출렁임을 낼 평범한 주가 10주 넘게 쌓인 뒤,
+# 대부분 2023년 6월부터)만 쓴다. 2019년부터로 계산 방식을 바꾸지 않는다(코로나 시기가 '평범한 때'에 섞임).
+STRONG = 2          # '많음·적음' 문턱(평소 출렁임의 배수)
+REPEAT_DAYS = 14    # '해마다 같은 때': 서로 다른 두 해 이상, 날짜가 앞뒤 2주 안
+_period = {"key": None, "table": None}
+_period_lock = threading.Lock()
+
+
+def label(wo):
+    return f"{wo // 1000}.{(wo // 10) % 100:02d}.{wo % 10}주차"
+
+
+def monday(wo):
+    import datetime as dt
+    return dt.date.fromisoformat(week_dates(wo)[:10])
+
+
+def period_table(db):
+    """전국 시군구 → 판정할 수 있는 모든 주의 판정 요약. 자료 최신 주차가 바뀔 때만 다시 계산
+    (전국 약 250곳 × 약 180주. 서버 시작·자동 갱신 뒤 web.refresh_lists가 미리 불러 둠).
+    반환: {canon: {"sido", "sigungu", "weeks": [{wo, ratio, verdict, dev, final, s, method, v, hol, suspect}]}}"""
+    key = db.execute("SELECT MAX(week_order) FROM moves").fetchone()[0]
+    if _period["key"] == key and _period["table"] is not None:
+        return _period["table"]
+    with _period_lock:
+        if _period["key"] == key and _period["table"] is not None:
+            return _period["table"]
+        memo, table = {}, {}
+        for sd, sg in all_regions(db):
+            P = prepare(db, sd, sg, memo)
+            if not P:
+                continue
+            weeks = []
+            for wo in sorted(P["me"]):
+                if wo < START:
+                    continue
+                J = judge_week(P, wo)
+                if not J or J["ratio"] is None or J["verdict"].startswith("판정 보류"):
+                    continue
+                weeks.append(dict(wo=wo, ratio=J["ratio"], verdict=J["verdict"], dev=J["dev"], final=J["final"],
+                                  s=J["s"], method=J["method"], v=J["v"], hol=P["hol"].get(wo),
+                                  com=P["com"].get(wo), hol_adj=J["hol_adj"],
+                                  suspect=is_suspect(sd, sg, wo)))
+            table[canon(sd, sg)] = dict(sido=sd, sigungu=sg, weeks=weeks)
+        _period.update(key=key, table=table)
+        return table
+
+
+def judged_range(table):
+    """실제로 판정한 첫 주·마지막 주(어느 지역이든). 글자로 박지 않고 자료에서 계산."""
+    ws = [w["wo"] for r in table.values() for w in r["weeks"]]
+    return (min(ws), max(ws)) if ws else (None, None)
+
+
+def repeats(wos):
+    """서로 다른 두 해 이상에서 같은 때(앞뒤 2주 안)에 되풀이됐나."""
+    ds = [monday(w) for w in wos]
+    for i, a in enumerate(ds):
+        for b in ds[i + 1:]:
+            if a.year == b.year:
+                continue
+            gap = abs(a.timetuple().tm_yday - b.timetuple().tm_yday)
+            if min(gap, 365 - gap) <= REPEAT_DAYS:
+                return True
+    return False
+
+
+def _strong(weeks, up):
+    """'많음' 이상(up) 또는 '적음' 이하 주. 실제 방향이 엇갈린 주(4번)와 원자료 확인 구간은 뺀다."""
+    return [w for w in weeks if not w["suspect"] and real_dir(w["ratio"], w["dev"])
+            and (w["ratio"] > STRONG if up else w["ratio"] < -STRONG)]
+
+
+def rank_period(table, a, b):
+    """기간 [a, b] 안에서 지역마다 가장 크게 튄 주 하나(늘어난 쪽·줄어든 쪽 따로)와 '많음' 이상 횟수.
+    원자료 확인 구간인 주와 실제 방향이 엇갈린 주(4번)는 고르지도 세지도 않는다."""
+    up, down = [], []
+    for r in table.values():
+        ws = [w for w in r["weeks"] if a <= w["wo"] <= b and not w["suspect"]]
+        if not ws:
+            continue
+        for side, pick, keep in ((up, max, lambda x: x > 0), (down, min, lambda x: x < 0)):
+            cand = [w for w in ws if keep(w["ratio"]) and real_dir(w["ratio"], w["dev"])]   # 같은 방향 규칙(4번)
+            if not cand:
+                continue
+            best = pick(cand, key=lambda w: w["ratio"])
+            strong = _strong(ws, side is up)
+            side.append(dict(r=r, best=best, n=len(strong), repeat=repeats([w["wo"] for w in strong])))
+    up.sort(key=lambda x: -x["best"]["ratio"])
+    down.sort(key=lambda x: x["best"]["ratio"])
+    return up, down
