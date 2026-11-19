@@ -430,7 +430,7 @@ def analyze(db, sido, sigungu, week_order):
         "판정": verdict,
         "판정 기준": JUDGE_RULE,
         "그 주 공휴일": h[2],
-        "비교한 지역": [f"{a} {b}" for a, b in peers],
+        "비교한 지역": [" ".join(current_name(db, a, b)) for a, b in peers],
         "주의": notes + [
             "이 값은 서비스가 계산한 비공식 참고값이다. 공식 통계가 아니다.",
             "원인은 이 도구가 정하지 않는다. 축제·날씨·공휴일 등은 판단 재료로만 제시하고 단정하지 말 것.",
@@ -451,6 +451,18 @@ def all_regions(db):
         if k not in best or last > best[k][2]:
             best[k] = (sd, sg, last)
     return sorted((a, b) for a, b, _ in best.values())
+
+
+_names = {"key": None, "map": {}}
+
+
+def current_name(db, sido, sigungu):
+    """지금 쓰는 시도·시군구 이름(시도 이름이 바뀐 곳은 가장 최근 이름). 보여 주기에만 쓰고 계산은 canon으로 한다.
+    region_peers.csv는 개편 전 이름이라 '비교한 지역'에 옛 시도 이름이 나오던 것을 고침(전국순위_기간확장_작업.md 5번)."""
+    key = db.execute("SELECT MAX(week_order) FROM moves").fetchone()[0]
+    if _names["key"] != key:
+        _names.update(key=key, map={canon(a, b): (a, b) for a, b in all_regions(db)})
+    return _names["map"].get(canon(sido, sigungu), (sido, sigungu))
 
 
 _rank_cache = {}
