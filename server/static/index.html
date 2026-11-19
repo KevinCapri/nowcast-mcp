@@ -518,7 +518,7 @@ footer p{margin:0 0 6px}
 
   // ---------- 주요 업데이트 (새 항목은 맨 앞에 추가, 사소한 변경은 넣지 않음) ----------
   var UPDATES = [
-    { d: "2026년 11월 19일", ver: "0.4.8 → 0.5.0", reconnect: true, items: [
+    { d: "2026년 11월 19일", ver: "0.4.8 → 0.5.0", reconnect: true, recon: "업데이트가 필요한 도구 변경", items: [
       "평소와 다른 지역 찾기(find_unusual_regions)에 기간·지역 입력 추가 (2023년 6월부터 순위, 지역을 정하면 크게 달랐던 주와 같은 시기 축제·행사) (업데이트를 반영하면 보입니다)",
       "평소와 다른 지역 순위의 '늘어난 곳'에는 실제로 늘어난 지역만 표시 (전국이 함께 줄어든 주에 덜 줄어든 곳 등은 따로 표시)",
       "한 지역·한 주 결과에 그 지역 기준 추가 (평소보다 하루 몇 건 넘게 늘어야 '많음'으로 나오는지)",
@@ -562,8 +562,8 @@ footer p{margin:0 0 6px}
     function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
     function ul(u) { return "<ul>" + u.items.map(function (t) { return "<li>" + esc(t) + "</li>"; }).join("") + "</ul>"; }
     // 새 도구·도구 빠짐·합침·입력값 변경이 있는 날만 다시 연결 상자(설명만 바뀐 날은 줄 끝 표시만)
-    var RECON = '<div class="recon"><b>🔄 업데이트가 필요한 새 도구 추가</b></div>';
-    function body(u) { return (u.reconnect ? RECON : "") + ul(u); }
+    // 상자 문구는 날짜마다 recon으로 바꿀 수 있음(없으면 '새 도구 추가'). 새 도구 없이 입력값만 바뀐 날 등
+    function body(u) { return (u.reconnect ? '<div class="recon"><b>🔄 ' + esc(u.recon || "업데이트가 필요한 새 도구 추가") + '</b></div>' : "") + ul(u); }
     function ver(u) { return u.ver ? '<span class="uver">버전 ' + esc(u.ver) + "</span>" : ""; }
     var dl = $("upd-dl"), ct = $("upd-ct"), m = $("upd-m");
     function pick(i) {
