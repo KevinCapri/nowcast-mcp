@@ -434,6 +434,37 @@ def judge_week(P, week_order):
                 ratio_nobb=ratio_nobb, verdict_nobb=verdict_nobb)
 
 
+def _count_word(x):
+    """하루 건수를 읽기 쉬운 말로: 310,000 → '31만', 26,000 → '2.6만', 4,830 → '4,800'."""
+    if x >= 1e5:
+        return f"{round(x / 1e4)}만"
+    if x >= 1e4:
+        return f"{x / 1e4:.1f}".rstrip("0").rstrip(".") + "만"
+    return f"{round(x, -2):,.0f}"
+
+
+SCALE_NOTE = (
+    "이 기준은 지역마다 다르다. 평소 이동이 많은 큰 지역은 행사가 있어도 '평소 수준'으로 나오기 쉽고, 작은 지역은 조금만 늘어도 "
+    "'많음'이 나올 수 있다. '평소 수준'을 '효과가 없었다'로, '많음'을 '사람이 많이 왔다'로 바꿔 말하지 말고 이 기준과 함께 전할 것. "
+    "'건'은 이동 건수이고 사람 수가 아니다. 행사 효과가 궁금하다고 하면, get_region_calendar로 행사 날짜를 찾고 get_datalab_daily로 "
+    "그 날짜만 떼어 평소 같은 요일과 견줘 볼 수 있다고 안내할 것. 한 주 전체보다 하루 단위가 더 잘 보일 수 있지만, 큰 지역은 하루 "
+    "단위로도 묻힐 수 있다. 데이터랩은 외지인 방문자 수(사람 수)라 이 서비스의 이동 건수와 단위가 다르니, 두 숫자를 섞거나 더하지 말 것.")
+
+
+def scale(base, s):
+    """지역별 판정 기준(전국순위_기간확장_작업.md 7번): 평소 값 × 평소 출렁임 × 2('많음' 문턱).
+    비교군·공휴일 보정 전 기준이라 '약'."""
+    sp = _pct(s)
+    if not base or sp is None:
+        return None
+    return {"이 지역 판정 기준": f"평소보다 하루 약 {_count_word(base * sp / 100 * STRONG_X)} 건 넘게 더 유입돼야 '많음'으로 나옴",
+            "이 지역 평소 규모": f"이 지역은 평소 하루 약 {_count_word(base)} 건이 유입되고, 평범한 주에도 {max(1, round(sp))}% 안팎은 변동함",
+            "판정 기준 안내": SCALE_NOTE}
+
+
+STRONG_X = 2   # '많음' 문턱(평소 출렁임의 배수). 기간 순위의 STRONG과 같은 값
+
+
 def analyze(db, sido, sigungu, week_order):
     P = prepare(db, sido, sigungu)
     if not P:
@@ -484,6 +515,7 @@ def analyze(db, sido, sigungu, week_order):
         "판정 말하는 법": speak(J, f"{sido} {sigungu}" if (sigungu.endswith("구") and " " not in sigungu) else sigungu,
                           f"{wk}({week_dates(week_order)})에"),
         "판정 기준": JUDGE_RULE,
+        **(scale(base, s) or {}),
         "그 주 공휴일": h[2],
         "비교한 지역": [" ".join(current_name(db, a, b)) for a, b in peers],
         "주의": notes + [
