@@ -66,8 +66,8 @@ db = _ThreadDB(DB)
 SERVICE = "빅데이터 Insight: 지역별 유입인구"
 # 도구 목록이 바뀌면(추가·삭제·입력값·설명) 세 값을 같이 고친다. 회귀 시험이 TOOLS와 실제 도구가 다르면 잡는다.
 # 결과마다 붙여서, 예전에 연결한 이용자에게도 AI가 '새 도구가 생겼으니 다시 연결'을 알려 주게 한다(claude/변경_관리_원칙.md).
-VERSION = "0.4.8"
-TOOLS_CHANGED = "2026-11-17"
+VERSION = "0.5.0"
+TOOLS_CHANGED = "2026-11-19"
 TOOLS = ["get_metadata", "list_regions", "get_movement", "get_breakdown", "get_weather", "analyze_region_week",
          "find_unusual_regions", "estimate_life_pop", "forecast_festival", "get_datalab_daily", "report_issue",
          "get_region_calendar", "get_bloom_foliage", "get_data_status", "compare_same_week"]
@@ -102,6 +102,8 @@ INSTRUCTIONS = (
     "'그 달 그 지역에 무슨 행사·경기가 있었나', '언제였나'는 get_region_calendar로, '올해(그해) 벚꽃·단풍 언제였나'는 "
     "get_bloom_foliage로 답하고, 결과에 함께 나오는 그 주 유입으로 '그래서 사람이 많이 왔나'까지 이어서 답할 것. "
     "'작년보다 많이 왔나', '올해 추석이 작년 추석보다' 같은 해 비교는 compare_same_week로 답할 것(원값끼리 견주지 말 것). "
+    "'2023년부터 가장 크게 튄 지역', '○○군은 언제 튀었나'처럼 여러 주에 걸친 순위나 튄 때를 물으면 find_unusual_regions에 "
+    "start_week·end_week(한 지역이면 sido·sigungu도)를 넣어 답할 것. analyze_region_week를 주마다 여러 번 불러 직접 찾지 말 것. "
     "'○○ 인구 유입 분석'처럼 이사인지 방문인지 모호한 포괄 질문은 KOSIS 이사 통계만으로 답하지 말고, 이 서비스의 방문·통근 유입"
     "(최근 흐름·평소와 다른 주·작년 같은 주)도 함께 보여 줄 것. 둘이 다른 자료라는 것을 한 줄로 밝힐 것. 이 서비스에는 지역별 "
     "출발지·연령·성별·시간대·체류 시간이 없으니, 분석 항목을 미리 약속할 때도 이런 항목을 넣지 말 것. "
@@ -331,6 +333,10 @@ def get_metadata() -> dict:
             "2026-11-15 비교 지역이 이 지역과 반대로 크게 움직인 주를 표시만 함(판정은 그대로).",
             "2026-11-15 프로야구 홈경기 몫 추정과 '야구 몫 뺀 판정(참고)'을 더함(판정은 그대로).",
             "2026-11-15 벚꽃 만발·단풍 절정과 지역별 지난 기록을 더함(판정은 그대로).",
+            "2026-11-19 축제 주를 평소 값에서 뺄지 정하는 기준의 평소 출렁임도 '그 주 전 자료만'으로 계산(자료가 쌓여도 지난 판정이 "
+            "바뀌지 않게, 판정 쪽과 같은 방식). 이 수정으로 지난 판정 일부가 조금 바뀜.",
+            "2026-11-19 전국 순위: '늘어난 곳'은 평소 대비 +1% 넘게 늘어난 곳만, '줄어든 곳'은 −1% 넘게 줄어든 곳만 넣고, 판정과 실제 "
+            "방향이 엇갈린 곳은 따로 짧은 목록으로 보여 줌(판정은 그대로). 기간 순위(2023년 6월쯤부터)와 한 지역의 기간 결과를 더함.",
             "판정 방식이 바뀌면 이 목록에 날짜와 함께 적는다. 예전에 인용된 판정과 지금 판정이 다르면 이 이력과 원자료 소급 수정을 먼저 의심할 것.",
         ],
         "함께 보여 주는 일정과 검증(2026-11)": {
@@ -601,7 +607,7 @@ def analyze_region_week(sido: Sido, sigungu: Sigungu, week: Week) -> dict:
       '신뢰구간'·'유의하다'는 말은 쓰지 말 것.
     - 원인(축제·날씨·행사)은 이 도구가 정하지 않는다. get_weather 등으로 판단 재료를 함께 보여 주되 단정하지 말 것.
     - 판정·비교군은 이 서비스(빅데이터 Insight: 지역별 유입인구)의 비공식 계산이다. 국가데이터처 값처럼 말하지 말 것.
-    - 한 지역의 한 주를 평소와 비교할 때 쓴다. 전국에서 어디가 튀었는지는 find_unusual_regions, 여러 주 흐름은 get_movement,
+    - 한 지역의 한 주를 평소와 비교할 때 쓴다. 전국에서 어디가 튀었는지, 한 지역이 여러 해 동안 언제 튀었는지는 find_unusual_regions, 여러 주 흐름은 get_movement,
       지난 해 같은 주와 비교는 compare_same_week, 그 기간에 있었던 일 목록은 get_region_calendar로.
     - sido·sigungu는 list_regions로 확인한 이름, week는 'YYYY.MM.N주차'."""
     try:
