@@ -128,6 +128,59 @@ def _pct(logv):
     return None if logv is None else round((math.exp(logv) - 1) * 100, 1)
 
 
+# ── 판정을 말하는 방식(2026-11-19, 전국순위_기간확장_작업.md 6번) ───────────────────────────────
+# '평소 출렁임의 3.5배'는 '3.5배로 늘었다'로 오해하기 쉬워, % 먼저 말하고 배수는 판정 단계별 정해진 말로 푼다.
+# 순위 기준은 배수 그대로. 이용자가 배수를 직접 물으면 소수 한 자리 그대로 말해도 된다.
+STAGE_WORDS = {
+    "조금": "평소 오르내림 폭을 조금 넘는 정도입니다.",
+    "많음": "평소 오르내림 폭의 두 배가 넘어, 이 지역에서는 흔치 않은 일입니다.",
+    "아주": "평소 오르내림 폭의 세 배가 넘어, 이 지역에서는 아주 드문 일입니다.",
+    "평소": "평소 오르내림 폭 안이라 평소 수준입니다.",
+}
+STAGE_RULE = ("판정 단계별 말: 조금 많음·조금 적음 → '" + STAGE_WORDS["조금"] + "' / 많음·적음 → '" + STAGE_WORDS["많음"]
+              + "' / 아주 많음·아주 적음 → '" + STAGE_WORDS["아주"] + "' / 평소 수준 → '" + STAGE_WORDS["평소"] + "'")
+SAME_PCT = 3.0   # 평소 대비와 판정에 쓴 값의 차이가 이 %p 안이면 '거의 같음'(숫자 하나로만 말함)
+
+
+def _stage(verdict):
+    if verdict.startswith("아주"):
+        return STAGE_WORDS["아주"]
+    if verdict.startswith("조금"):
+        return STAGE_WORDS["조금"]
+    if verdict in ("많음", "적음"):
+        return STAGE_WORDS["많음"]
+    return STAGE_WORDS["평소"] if verdict == "평소 수준" else None
+
+
+def _topic(name):
+    """이름 뒤 '은/는'."""
+    c = name[-1]
+    return name + ("은" if "가" <= c <= "힣" and (ord(c) - 0xAC00) % 28 else "는")
+
+
+def speak(J, place, when):
+    """판정을 % 먼저, 배수는 단계별 말로 푼 문장들. 판정 못 한 주는 None."""
+    if not J or J.get("ratio") is None or J.get("dev") is None:
+        return None
+    stage = _stage(J["verdict"])
+    if not stage:
+        return None
+    p, f, s = _pct(J["dev"]), _pct(J["final"]), _pct(J["s"])
+    first = (f"{_topic(place)} {when} 외부 유입이 평소보다 {abs(round(p))}% {'늘었' if p > 0 else '줄었'}습니다."
+             if abs(p) >= 0.5 else f"{_topic(place)} {when} 외부 유입이 평소와 거의 같았습니다({p:+.1f}%).")
+    lines = [first]
+    if f is not None and abs(f - p) >= SAME_PCT:
+        if J.get("hol_adj") is not None:
+            h = _pct(J["hol_adj"])
+            who = f"공휴일 낀 주에 보통 {'늘어나는' if h > 0 else '줄어드는'} 몫을 빼면"
+        else:
+            c = p - f   # 비교 지역 몫(대략)
+            who = (f"비슷한 지역들{'도' if c * p > 0 else '이'} 함께 {'늘어난' if c > 0 else '줄어든'} 몫을 빼면")
+        lines.append(f"{who} {abs(round(f))}% {'많은' if f > 0 else '적은'} 셈인데,")
+    lines.append(f"이 지역은 평소 한 주에 {max(1, round(s))}% 안팎 오르내리니, {stage}")
+    return " ".join(lines)
+
+
 # 원자료 처리 문제가 의심되는 구간(2026-11-13 점검). 이 지역만 크게 튀고
 # 같은 시도 합계는 그대로이거나 이웃 구가 반대로 움직였으며, 데이터랩 외지인에는 변화가 없었던 경우.
 SUSPECT = [
@@ -428,6 +481,8 @@ def analyze(db, sido, sigungu, week_order):
         "평소 출렁임(%)": _pct(s),
         "평소 출렁임의 몇 배": ratio,
         "판정": verdict,
+        "판정 말하는 법": speak(J, f"{sido} {sigungu}" if (sigungu.endswith("구") and " " not in sigungu) else sigungu,
+                          f"{wk}({week_dates(week_order)})에"),
         "판정 기준": JUDGE_RULE,
         "그 주 공휴일": h[2],
         "비교한 지역": [" ".join(current_name(db, a, b)) for a, b in peers],
@@ -529,7 +584,7 @@ def rank_week(db, week_order):
         if not J or J["ratio"] is None:
             continue
         row = {"지역": f"{sd} {sg}", "배수": J["ratio"], "판정": J["verdict"],
-               "평소 대비(%)": _pct(J["dev"]), "최종 변화(%)": _pct(J["final"]),
+               "평소 대비(%)": _pct(J["dev"]), "최종 변화(%)": _pct(J["final"]), "평소 출렁임(%)": _pct(J["s"]),
                "판정에 쓴 방식": J["method"], "관외 유입(일평균 건수)": round(J["v"])}
         if J["hol_adj"] is not None:
             row["공휴일 보정(%)"] = _pct(J["hol_adj"])
