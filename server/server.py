@@ -751,15 +751,190 @@ def compare_same_week(sido: Sido, sigungu: Sigungu, week: Week,
     return _answer(out, "judge", SOURCE, calc=True)
 
 
-@mcp.tool(annotations=READ_ONLY)
-def find_unusual_regions(week: Week = "", top: int = 15) -> dict:
-    """한 주에 전국 시군구 중 관외 유입이 평소와 가장 크게 달랐던 곳을 '평소 출렁임의 몇 배' 순으로 돌려준다.
-    '이번 주 어디가 튀었나', '전국에서 사람이 갑자기 몰린 곳' 같은 질문에 쓸 것. 직접 여러 지역을 조회해 순위를 만들지 말 것.
+def _hol_day_set():
+    try:
+        return {d for (d,) in db.execute("SELECT day FROM holidays")}
+    except sqlite3.OperationalError:
+        return set()
 
-    - week를 비우면 가장 최근 주차. 형식 'YYYY.MM.N주차'. top은 늘어난 곳·줄어든 곳 각각 몇 곳(최대 30).
-    - 순위는 퍼센트가 아니라 평소 출렁임의 배수다. 원인은 정하지 않는다.
+
+def _same_time(sido, sigungu, wo, h, hd):
+    """그 주에 있었던 일을 짧은 줄로(기간 결과의 지역별 주 목록용). 축제(문체부 계획)·대형 행사·프로야구·
+    대형 시설 개점·벚꽃/단풍·공휴일. 하나가 실패해도 그 항목만 빠진다."""
+    mon = analysis.monday(wo)
+    end = mon + dt.timedelta(days=6)
+    out = []
+    for f in safe.call("축제", festival.in_week, sido, sigungu, mon, hd, default=[]) or []:
+        out.append(f"축제: {f['축제']}(문체부 계획 {f['계획 기간']})")
+    for e in safe.call("대형 행사", bigevents.in_range, sido, sigungu, mon, end, default=[]) or []:
+        out.append(f"대형 행사: {e['이름']}({e['시작']}~{e['끝']})")
+    games, crowd = safe.call("프로야구", baseball.week, sido, sigungu, mon, default=([], 0))
+    if games:
+        out.append(f"프로야구 홈경기: {', '.join(games)}(관중 합계 {crowd:,}명)")
+    for x in safe.call("벚꽃·단풍", season.in_week, sido, sigungu, mon, default=[]) or []:
+        out.append(f"{x['종류']}: {x['명소']} {x['날짜']}({x['기준']})")
+    ao = safe.call("개점 뒤 안내(기간)", facility.after_open_short, sido, sigungu, mon)
+    if ao:
+        out.append("대형 시설 개점: " + ao)
+    if h and h[2]:
+        out.append(f"공휴일: {h[2]}" + (" (연휴 주)" if analysis.is_long_holiday(h) else ""))
+    return out
+
+
+def _week_row(w):
+    row = {"주차": analysis.label(w["wo"]), "기간(월~일)": analysis.week_dates(w["wo"]),
+           "평소 대비(%)": analysis._pct(w["dev"]), "최종 변화(%)": analysis._pct(w["final"]),
+           "평소 출렁임(%)": analysis._pct(w["s"]), "배수": w["ratio"], "판정": w["verdict"],
+           "판정에 쓴 방식": w["method"]}
+    if analysis.is_long_holiday(w["hol"]):
+        row["연휴 주"] = w["hol"][2]
+    return row
+
+
+def _period_answer(a, b, top, sido, sigungu, asked):
+    """기간 순위(지역 없음) 또는 한 지역의 기간 내 튄 주 목록(지역 있음). 전국순위_기간확장_작업.md 1·2·9번."""
+    table = analysis.period_table(db)
+    first, last = analysis.judged_range(table)
+    if first is None:
+        return {"error": "판정할 수 있는 자료가 없다. get_data_status로 자료 상태를 확인할 것."}
+    a0, b0 = a or first, b or last
+    if a0 > b0:
+        return {"error": "start_week가 end_week보다 늦다."}
+    lo, hi = max(a0, first), min(b0, last)
+    if lo > hi:
+        return {"error": f"물어본 기간({analysis.label(a0)} ~ {analysis.label(b0)})에는 판정한 주가 없다. "
+                         f"이 서비스는 {analysis.label(first)}부터 {analysis.label(last)}까지 판정한다."}
+    y, m = first // 1000, (first // 10) % 100
+    head = {
+        "판정한 기간": f"{analysis.label(lo)} ~ {analysis.label(hi)}",
+        "물어본 기간": asked,
+        "안내": (f"이 서비스는 {y}년 {m}월부터 판정한다(코로나 시기를 뺀 기준). "
+               "물어본 기간이 그보다 앞서면 앞부분은 빠졌다고 이용자에게 먼저 말할 것."),
+    }
+    span = (analysis.monday(hi) - analysis.monday(lo)).days / 365.25
+    repeat_word = f"해마다 같은 때 되풀이({int(span)}년 남짓한 자료 기준)" if span >= 1 else None
+    rule = ("'해마다 같은 때 되풀이'는 서로 다른 두 해 이상에서 같은 때(앞뒤 2주 안)에 '많음' 이상(줄어든 쪽은 '적음' 이하)이 "
+            "나왔다는 뜻이다. 원자료 확인 필요 구간인 주는 횟수에서 뺐다.")
+
+    if sigungu:
+        c = analysis.canon(sido, sigungu)
+        r = table.get(c)
+        if not r:
+            return {"error": "지역을 찾지 못했거나 판정한 주가 없다. list_regions로 시도·시군구 이름을 확인할 것."}
+        ws = [w for w in r["weeks"] if lo <= w["wo"] <= hi]
+        hd, hol = _hol_day_set(), analysis.holidays(db)
+        out = {**head, "지역": f"{r['sido']} {r['sigungu']}"}
+        if ws and (ws[0]["wo"] > lo or ws[-1]["wo"] < hi):
+            out["이 지역 판정한 기간"] = f"{analysis.label(ws[0]['wo'])} ~ {analysis.label(ws[-1]['wo'])}"
+        for up, name, cnt in ((True, "평소보다 많았던 주('많음' 이상)", "'많음' 이상 횟수"),
+                              (False, "평소보다 적었던 주('적음' 이하)", "'적음' 이하 횟수")):
+            hit = [w for w in ws if (w["ratio"] > analysis.STRONG if up else w["ratio"] < -analysis.STRONG)]
+            rows = []
+            for w in hit:
+                row = _week_row(w)
+                ev = _same_time(r["sido"], r["sigungu"], w["wo"], hol.get(w["wo"]), hd)
+                row["같은 시기에 있었던 일"] = ev or "이 서비스 자료에는 없음"
+                if w["suspect"]:
+                    row["원자료 확인 필요 구간"] = analysis.SUSPECT_FLAG
+                rows.append(row)
+            strong = analysis._strong(ws, up)
+            out[name] = rows or "없음"
+            out[cnt] = len(strong)
+            if repeat_word and analysis.repeats([w["wo"] for w in strong]):
+                out["되풀이" + ("('많음' 이상)" if up else "('적음' 이하)")] = repeat_word
+        sus = safe.call("원자료 의심 구간", analysis.suspect, r["sido"], r["sigungu"], lo, hi)
+        out["판정 기준"] = analysis.JUDGE_RULE
+        out["AI에게"] = [
+            "이용자가 물은 것만 답할 것(날짜를 물으면 날짜만, 그때 일을 물으면 그것만). 목록을 한꺼번에 다 펼치지 말 것.",
+            "'같은 시기에 있었던 일'은 원인이 아니다. '같은 시기에 ~가 있었다'로만 말할 것.",
+            "'이 서비스 자료에는 없음'인 주는 이 서비스가 모르는 일이 있었을 수 있다. 이용자가 원하면 웹 검색을 안내할 것.",
+            "해마다 되풀이되는 지역에서 '올해가 작년보다 많았나'를 물으면, 이동 건수를 직접 견주지 말고 compare_same_week로 "
+            "그 주를 불러 해마다 평소 대비 판정끼리 견줄 것.",
+            rule,
+        ]
+        out["주의"] = (sus or []) + [
+            "'건'은 사람 수가 아니다. '명'으로 바꿔 말하지 말 것.",
+            "판정은 주마다 그때까지의 평소 값·평소 출렁임으로 따로 낸 것이다.",
+        ]
+        out["자료 기준"] = _as_of()
+        return _answer(out, "rank", SOURCE, calc=True)
+
+    up, down = analysis.rank_period(table, lo, hi)
+
+    def rows(side):
+        out = []
+        for i, x in enumerate(side[:top], 1):
+            r, w = x["r"], x["best"]
+            row = {"순위": i, "지역": f"{r['sido']} {r['sigungu']}", **_week_row(w)}
+            row["'많음' 이상 횟수" if side is up else "'적음' 이하 횟수"] = x["n"]
+            if x["repeat"] and repeat_word:
+                row["되풀이"] = repeat_word
+            ao = safe.call("개점 뒤 안내(기간 순위)", facility.after_open_short, r["sido"], r["sigungu"],
+                           analysis.monday(w["wo"]))
+            if ao:
+                row["개점 뒤 안내"] = ao
+            out.append(row)
+        return out
+
+    return _answer({
+        **head,
+        "판정한 지역 수": sum(1 for r in table.values() if any(lo <= w["wo"] <= hi for w in r["weeks"])),
+        "평소보다 늘어난 곳": rows(up), "평소보다 줄어든 곳": rows(down),
+        "판정 기준": analysis.JUDGE_RULE,
+        "AI에게": [
+            "이 결과에는 지역마다 이 기간에 가장 크게 튄 주 하나만 있다('많음' 이상 횟수에는 그 주도 들어 있다).",
+            "이용자가 그 지역이 언제 또 튀었는지(날짜)나 그때 있었던 일을 물으면, sido·sigungu를 넣고 같은 기간으로 "
+            "이 도구를 다시 부를 것. 순위만 물었으면 순위만 답할 것.",
+            rule,
+        ],
+        "주의": [
+            "원자료 확인 필요 구간인 주는 순위에서 뺐다.",
+            "연휴 주('연휴 주' 칸)는 지역마다 연휴 반응이 달라 판정이 흔들린다. 그 줄은 참고만 할 것.",
+            "한 지역에서만 크게 튀고 이웃 지역이 반대로 움직였으면 원자료 처리 오류일 수도 있다. 이용자가 원하면 report_issue로 알릴 수 있다.",
+        ],
+        "자료 기준": _as_of(),
+    }, "rank", SOURCE, calc=True)
+
+
+Top = Annotated[int, Field(description="늘어난 곳·줄어든 곳 각각 몇 곳까지(1~30, 기본 15)", ge=1, le=30)]
+OneWeek = Annotated[str, Field(description="한 주 순위의 주차 'YYYY.MM.N주차'(예: '2026.10.5주차'). 비우면 가장 최근 주차. "
+                                           "start_week·end_week·sigungu와 함께 쓰지 않음")]
+StartWeek = Annotated[str, Field(description="기간 결과의 시작 주 'YYYY.MM.N주차'(예: '2023.06.1주차'). 비우면 판정할 수 있는 "
+                                             "첫 주(2023년 6월쯤). 그보다 앞을 넣어도 앞부분은 빠지고 결과 맨 위에 실제 기간이 나옴")]
+EndWeek = Annotated[str, Field(description="기간 결과의 끝 주 'YYYY.MM.N주차'(예: '2026.10.5주차'). 비우면 가장 최근 주차")]
+
+
+@mcp.tool(annotations=READ_ONLY)
+def find_unusual_regions(week: OneWeek = "", top: Top = 15, start_week: StartWeek = "", end_week: EndWeek = "",
+                         sido: Annotated[str, Field(description="기간 결과에서 한 지역만 볼 때 시도 이름(sigungu와 함께)")] = "",
+                         sigungu: Annotated[str, Field(description="기간 결과에서 한 지역만 볼 때 시군구 이름. 넣으면 "
+                                                                   "그 지역이 이 기간에 튄 주 전부와 같은 시기 일을 돌려줌")] = "") -> dict:
+    """전국 시군구 중 관외 유입이 평소와 가장 크게 달랐던 곳을 '평소 출렁임의 몇 배' 순으로 돌려준다.
+    '이번 주 어디가 튀었나', '2023년부터 사람이 가장 갑자기 몰린 지역' 같은 질문에 쓸 것. 직접 여러 지역·여러 주를 조회해 순위를 만들지 말 것.
+
+    - 한 주 순위: week(비우면 가장 최근 주차). 형식 'YYYY.MM.N주차'.
+    - 기간 순위: start_week·end_week(하나만 넣어도 됨, sigungu만 넣으면 판정한 전체 기간). 지역마다 가장 크게 튄 주 하나와
+      '많음' 이상 횟수, 해마다 같은 때 되풀이 여부. 판정은 2023년 6월쯤부터만 된다(결과 맨 위 '판정한 기간').
+    - 기간 순위에서 한 지역이 언제 튀었는지·그때 무슨 일이 있었는지는 sido·sigungu를 넣어 다시 부른다.
+    - top은 늘어난 곳·줄어든 곳 각각 몇 곳(최대 30). 순위는 퍼센트가 아니라 평소 출렁임의 배수다. 원인은 정하지 않는다.
     - 연휴 주에는 전국이 함께 움직여 판정이 흔들린다(결과의 '주의').
-    - 지역이 정해진 질문은 analyze_region_week로(이 도구는 전국 순위만)."""
+    - 한 지역의 한 주는 analyze_region_week로."""
+    try:
+        a = _order(start_week) if start_week else None
+        b = _order(end_week) if end_week else None
+        for x in (a, b):
+            if x:
+                analysis.week_dates(x)
+    except Exception:
+        return {"error": "start_week·end_week 형식은 'YYYY.MM.N주차'(예: '2023.06.1주차')."}
+    top = max(1, min(int(top or 15), 30))
+    if bool(sido) != bool(sigungu):
+        return {"error": "한 지역을 볼 때는 sido와 sigungu를 함께 넣을 것."}
+    if a or b or sigungu:
+        if week:
+            return {"error": "week(한 주 순위)와 start_week·end_week·sigungu(기간 결과)는 함께 쓰지 말 것."}
+        asked = f"{start_week or '처음'} ~ {end_week or '최신'}"
+        return _period_answer(a, b, top, sido, sigungu, asked)
     try:
         if week:
             wo = _order(week)
@@ -767,7 +942,6 @@ def find_unusual_regions(week: Week = "", top: int = 15) -> dict:
             wo = db.execute("SELECT MAX(week_order) FROM moves WHERE direction='유입' AND category='시군구'").fetchone()[0]
     except Exception:
         return {"error": "week 형식은 'YYYY.MM.N주차'(예: '2026.10.5주차')."}
-    top = max(1, min(int(top or 15), 30))
     rows = analysis.rank_week(db, wo)
     if not rows:
         return {"error": "그 주차 자료가 없거나 판정할 수 없다. get_data_status로 최신 주차를 확인할 것."}

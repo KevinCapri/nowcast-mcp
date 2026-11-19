@@ -12,6 +12,7 @@
 """
 import csv
 import math
+import threading
 from pathlib import Path
 from statistics import median
 
@@ -452,3 +453,93 @@ def rank_week(db, week_order):
         _rank_cache.clear()
     _rank_cache[key] = out
     return out
+
+
+# ── 기간 순위(2026-11-19, claude/전국순위_기간확장_작업.md 1·2·9번) ──────────────────────────────
+# 판정 방식은 한 주 순위와 같고 범위만 넓힌다. 판정할 수 있는 주(평소 출렁임을 낼 평범한 주가 10주 넘게 쌓인 뒤,
+# 대부분 2023년 6월부터)만 쓴다. 2019년부터로 계산 방식을 바꾸지 않는다(코로나 시기가 '평범한 때'에 섞임).
+STRONG = 2          # '많음·적음' 문턱(평소 출렁임의 배수)
+REPEAT_DAYS = 14    # '해마다 같은 때': 서로 다른 두 해 이상, 날짜가 앞뒤 2주 안
+_period = {"key": None, "table": None}
+_period_lock = threading.Lock()
+
+
+def label(wo):
+    return f"{wo // 1000}.{(wo // 10) % 100:02d}.{wo % 10}주차"
+
+
+def monday(wo):
+    import datetime as dt
+    return dt.date.fromisoformat(week_dates(wo)[:10])
+
+
+def period_table(db):
+    """전국 시군구 → 판정할 수 있는 모든 주의 판정 요약. 자료 최신 주차가 바뀔 때만 다시 계산
+    (전국 약 250곳 × 약 180주. 서버 시작·자동 갱신 뒤 web.refresh_lists가 미리 불러 둠).
+    반환: {canon: {"sido", "sigungu", "weeks": [{wo, ratio, verdict, dev, final, s, method, v, hol, suspect}]}}"""
+    key = db.execute("SELECT MAX(week_order) FROM moves").fetchone()[0]
+    if _period["key"] == key and _period["table"] is not None:
+        return _period["table"]
+    with _period_lock:
+        if _period["key"] == key and _period["table"] is not None:
+            return _period["table"]
+        memo, table = {}, {}
+        for sd, sg in all_regions(db):
+            P = prepare(db, sd, sg, memo)
+            if not P:
+                continue
+            weeks = []
+            for wo in sorted(P["me"]):
+                if wo < START:
+                    continue
+                J = judge_week(P, wo)
+                if not J or J["ratio"] is None or J["verdict"].startswith("판정 보류"):
+                    continue
+                weeks.append(dict(wo=wo, ratio=J["ratio"], verdict=J["verdict"], dev=J["dev"], final=J["final"],
+                                  s=J["s"], method=J["method"], v=J["v"], hol=P["hol"].get(wo),
+                                  suspect=is_suspect(sd, sg, wo)))
+            table[canon(sd, sg)] = dict(sido=sd, sigungu=sg, weeks=weeks)
+        _period.update(key=key, table=table)
+        return table
+
+
+def judged_range(table):
+    """실제로 판정한 첫 주·마지막 주(어느 지역이든). 글자로 박지 않고 자료에서 계산."""
+    ws = [w["wo"] for r in table.values() for w in r["weeks"]]
+    return (min(ws), max(ws)) if ws else (None, None)
+
+
+def repeats(wos):
+    """서로 다른 두 해 이상에서 같은 때(앞뒤 2주 안)에 되풀이됐나."""
+    ds = [monday(w) for w in wos]
+    for i, a in enumerate(ds):
+        for b in ds[i + 1:]:
+            if a.year == b.year:
+                continue
+            gap = abs(a.timetuple().tm_yday - b.timetuple().tm_yday)
+            if min(gap, 365 - gap) <= REPEAT_DAYS:
+                return True
+    return False
+
+
+def _strong(weeks, up):
+    return [w for w in weeks if not w["suspect"] and (w["ratio"] > STRONG if up else w["ratio"] < -STRONG)]
+
+
+def rank_period(table, a, b):
+    """기간 [a, b] 안에서 지역마다 가장 크게 튄 주 하나(늘어난 쪽·줄어든 쪽 따로)와 '많음' 이상 횟수.
+    원자료 확인 구간인 주는 고르지도 세지도 않는다."""
+    up, down = [], []
+    for r in table.values():
+        ws = [w for w in r["weeks"] if a <= w["wo"] <= b and not w["suspect"]]
+        if not ws:
+            continue
+        for side, pick, keep in ((up, max, lambda x: x > 0), (down, min, lambda x: x < 0)):
+            best = pick(ws, key=lambda w: w["ratio"])
+            if not keep(best["ratio"]):
+                continue
+            strong = _strong(ws, side is up)
+            side.append(dict(r=r, best=best, n=len(strong), repeat=repeats([w["wo"] for w in strong])))
+    up.sort(key=lambda x: -x["best"]["ratio"])
+    down.sort(key=lambda x: x["best"]["ratio"])
+    return up, down
