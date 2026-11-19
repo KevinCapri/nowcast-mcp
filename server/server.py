@@ -831,7 +831,8 @@ def _period_answer(a, b, top, sido, sigungu, asked):
             out["판정 시작"] = analysis.start_note(r["weeks"][0]["wo"], rw)
         for up, name, cnt in ((True, "평소보다 많았던 주('많음' 이상)", "'많음' 이상 횟수"),
                               (False, "평소보다 적었던 주('적음' 이하)", "'적음' 이하 횟수")):
-            hit = [w for w in ws if (w["ratio"] > analysis.STRONG if up else w["ratio"] < -analysis.STRONG)]
+            hit = [w for w in ws if analysis.real_dir(w["ratio"], w["dev"])
+                   and (w["ratio"] > analysis.STRONG if up else w["ratio"] < -analysis.STRONG)]
             rows = []
             for w in hit:
                 row = _week_row(w)
@@ -951,8 +952,18 @@ def find_unusual_regions(week: OneWeek = "", top: Top = 15, start_week: StartWee
     rows = analysis.rank_week(db, wo)
     if not rows:
         return {"error": "그 주차 자료가 없거나 판정할 수 없다. get_data_status로 최신 주차를 확인할 것."}
-    up = [dict(x) for x in rows if x["배수"] > 0][:top]
-    down = [dict(x) for x in rows if x["배수"] < 0][:top]
+    # 같은 방향 규칙(4번): 실제로 늘어난/줄어든 곳만 순위에. 엇갈린 곳은 원래 순위 안에 들었던 것만 따로 짧은 목록으로
+    def clean(x):
+        return {k: v for k, v in x.items() if not k.startswith("_")}
+
+    mixed = {}
+    for sign, name in ((1, "비교하면 많았지만, 실제로 늘지는 않은 곳"), (-1, "비교하면 적었지만, 실제로 줄지는 않은 곳")):
+        lines = [analysis.mixed_line(x["지역"], x["배수"], x["_dev"], x["_com"], x["_hol"])
+                 for x in [x for x in rows if x["배수"] * sign > 0][:top] if not analysis.real_dir(x["배수"], x["_dev"])]
+        if lines:
+            mixed[name] = lines
+    up = [clean(x) for x in rows if x["배수"] > 0 and analysis.real_dir(x["배수"], x["_dev"])][:top]
+    down = [clean(x) for x in rows if x["배수"] < 0 and analysis.real_dir(x["배수"], x["_dev"])][:top]
     mon = dt.date.fromisoformat(analysis.week_dates(wo)[:10])
     sus_lines = []
     for x in up + down:
@@ -972,6 +983,7 @@ def find_unusual_regions(week: OneWeek = "", top: Top = 15, start_week: StartWee
         "주차": f"{wo // 1000}.{(wo // 10) % 100:02d}.{wo % 10}주차", "기간(월~일)": analysis.week_dates(wo),
         "판정한 지역 수": len(rows), "평소 출렁임 2배 넘게 달라진 지역 수": n_strong,
         "평소보다 늘어난 곳": up, "평소보다 줄어든 곳": down,
+        **mixed, **({"엇갈린 곳 전하는 법": analysis.MIXED_NOTE} if mixed else {}),
         "판정 기준": analysis.JUDGE_RULE,
         "주의": sus_lines + notes + [
             "평소 출렁임 2배를 넘는 지역은 평범한 주에도 전국에서 몇 곳씩 나온다(공휴일 없는 주에 위로 약 5%, 아래로 약 3%).",

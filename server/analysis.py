@@ -455,6 +455,53 @@ def all_regions(db):
 
 _rank_cache = {}
 
+# ── 같은 방향 규칙(2026-11-19, 전국순위_기간확장_작업.md 4번) ─────────────────────────────────
+# 비교 대상이 다 같이 크게 움직인 주에는 '평소보다 늘어난 곳'에 실제로는 줄어든 지역이 섞인다(계엄 주 함안 −11% 등).
+# '늘어난 곳'은 평소 대비 +1% 넘게 늘어난 곳만, '줄어든 곳'은 −1% 넘게 줄어든 곳만. 엇갈린 곳은 따로 짧은 목록으로.
+SAME_DIR_PCT = 1.0
+
+
+def real_dir(ratio, dev):
+    """판정 방향과 실제(평소 대비) 방향이 같은가."""
+    p = _pct(dev)
+    if p is None or ratio is None:
+        return False
+    return p > SAME_DIR_PCT if ratio > 0 else p < -SAME_DIR_PCT
+
+
+def _move(p, stem):
+    """+21.3 → '21% 늘어', −26 → '26% 줄어', 거의 0 → None. stem 뒤 말은 부르는 쪽이 붙인다."""
+    if p is None or abs(p) <= SAME_DIR_PCT:
+        return None
+    return f"{abs(round(p))}% {'늘' if p > 0 else '줄'}{stem}"
+
+
+def mixed_line(name, ratio, dev, com, hol_adj):
+    """판정 방향과 실제 방향이 엇갈린 곳의 한 줄. 판정 방식에 맞춰 비교 숫자를 붙인다."""
+    p = _pct(dev)
+    me = _move(p, "었지만") or f"거의 그대로({p:+.1f}%)였지만"
+    if ratio > 0:
+        tail = "그보다는 덜 줄었음" if p < -SAME_DIR_PCT else "그보다는 많았음"
+    else:
+        tail = "그보다는 덜 늘었음" if p > SAME_DIR_PCT else "그보다는 적었음"
+    if hol_adj is not None:
+        h = _pct(hol_adj)
+        hw = _move(h, "던") or None
+        cmp = (f"공휴일 낀 주에는 보통 {abs(round(h))}%씩 {'늘' if h > 0 else '줄'}던 곳이라" if hw
+               else "공휴일 낀 주에도 보통 거의 그대로이던 곳이라")
+    elif com is not None:
+        cw = _move(_pct(com), "어")
+        cmp = f"비슷한 지역들은 {cw}" if cw else "비슷한 지역들은 거의 그대로여서"
+    else:   # 비교군 없음: 평소 대비만으로 판정(드묾)
+        cmp = "이 지역은 평소 오르내림이 아주 작은 곳이라"
+        tail = "이 정도도 평소보다는 많은 편임" if ratio > 0 else "이 정도도 평소보다는 적은 편임"
+    return f"{name}: 이번 주 {me}, {cmp} {tail}"
+
+
+MIXED_NOTE = ["'사람이 몰렸다/빠졌다'고 말하지 말고 이 문장 그대로 전할 것.",
+              "비슷한 지역은 주민 수·30km 안 인구·100km 안 인구가 비슷한 10곳이다(지역 성격은 보지 않음).",
+              "어느 지역인지 물으면 analyze_region_week로 그 지역·그 주를 불러 '비교한 지역'을 보여 줄 것."]
+
 
 def rank_week(db, week_order):
     """한 주의 전국 시군구 판정을 평소 출렁임 배수 순으로(같은 주차는 서버가 켜져 있는 동안 한 번만 계산)."""
@@ -472,6 +519,11 @@ def rank_week(db, week_order):
         row = {"지역": f"{sd} {sg}", "배수": J["ratio"], "판정": J["verdict"],
                "평소 대비(%)": _pct(J["dev"]), "최종 변화(%)": _pct(J["final"]),
                "판정에 쓴 방식": J["method"], "관외 유입(일평균 건수)": round(J["v"])}
+        if J["hol_adj"] is not None:
+            row["공휴일 보정(%)"] = _pct(J["hol_adj"])
+        elif J["method"] == "비교군 대비" and P["com"].get(week_order) is not None:
+            row["비슷한 지역 같은 주 변화(%)"] = _pct(P["com"][week_order])
+        row["_dev"], row["_com"], row["_hol"] = J["dev"], P["com"].get(week_order), J["hol_adj"]
         rw = new_start(sd, sg)
         fj = first_judged(P, rw) if rw else None
         if fj:
@@ -526,6 +578,7 @@ def period_table(db):
                     continue
                 weeks.append(dict(wo=wo, ratio=J["ratio"], verdict=J["verdict"], dev=J["dev"], final=J["final"],
                                   s=J["s"], method=J["method"], v=J["v"], hol=P["hol"].get(wo),
+                                  com=P["com"].get(wo), hol_adj=J["hol_adj"],
                                   suspect=is_suspect(sd, sg, wo)))
             table[canon(sd, sg)] = dict(sido=sd, sigungu=sg, weeks=weeks)
         _period.update(key=key, table=table)
@@ -552,21 +605,24 @@ def repeats(wos):
 
 
 def _strong(weeks, up):
-    return [w for w in weeks if not w["suspect"] and (w["ratio"] > STRONG if up else w["ratio"] < -STRONG)]
+    """'많음' 이상(up) 또는 '적음' 이하 주. 실제 방향이 엇갈린 주(4번)와 원자료 확인 구간은 뺀다."""
+    return [w for w in weeks if not w["suspect"] and real_dir(w["ratio"], w["dev"])
+            and (w["ratio"] > STRONG if up else w["ratio"] < -STRONG)]
 
 
 def rank_period(table, a, b):
     """기간 [a, b] 안에서 지역마다 가장 크게 튄 주 하나(늘어난 쪽·줄어든 쪽 따로)와 '많음' 이상 횟수.
-    원자료 확인 구간인 주는 고르지도 세지도 않는다."""
+    원자료 확인 구간인 주와 실제 방향이 엇갈린 주(4번)는 고르지도 세지도 않는다."""
     up, down = [], []
     for r in table.values():
         ws = [w for w in r["weeks"] if a <= w["wo"] <= b and not w["suspect"]]
         if not ws:
             continue
         for side, pick, keep in ((up, max, lambda x: x > 0), (down, min, lambda x: x < 0)):
-            best = pick(ws, key=lambda w: w["ratio"])
-            if not keep(best["ratio"]):
+            cand = [w for w in ws if keep(w["ratio"]) and real_dir(w["ratio"], w["dev"])]   # 같은 방향 규칙(4번)
+            if not cand:
                 continue
+            best = pick(cand, key=lambda w: w["ratio"])
             strong = _strong(ws, side is up)
             side.append(dict(r=r, best=best, n=len(strong), repeat=repeats([w["wo"] for w in strong])))
     up.sort(key=lambda x: -x["best"]["ratio"])
