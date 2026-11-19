@@ -38,6 +38,30 @@ def reform_week(sido, sigungu):
 BASE_WEEKS = 8
 
 
+def new_start(sido, sigungu):
+    """경계가 바뀌어 판정을 새로 시작한 지역(인천 새 구, 부천·화성의 구)이면 개편 주차. 사라진 옛 이름·이어서 판정하는 곳은 None.
+    (군위군·전남광주통합특별시·특별자치도는 경계 그대로라 이어서 판정 — 전국순위_기간확장_작업.md 3번)"""
+    if (sido, sigungu) in REFORM:
+        return None
+    return reform_week(sido, sigungu)
+
+
+def start_note(first_wo, rw):
+    """새로 시작한 지역 줄에 붙이는 칸 문구."""
+    return f"이 지역은 {label(first_wo)}부터 판정({rw // 1000}년 {(rw // 10) % 100}월 행정구역 개편)"
+
+
+def first_judged(P, rw):
+    """개편 주차 rw 뒤 처음 판정이 나온 주(판정 보류 뺌)."""
+    for wo in sorted(P["me"]):
+        if wo < rw:
+            continue
+        J = judge_week(P, wo)
+        if J and J["ratio"] is not None and not J["verdict"].startswith("판정 보류"):
+            return wo
+    return None
+
+
 GWANGJU_GU = {"동구", "서구", "남구", "북구", "광산구"}
 
 
@@ -445,9 +469,14 @@ def rank_week(db, week_order):
         J = judge_week(P, week_order)
         if not J or J["ratio"] is None:
             continue
-        out.append({"지역": f"{sd} {sg}", "배수": J["ratio"], "판정": J["verdict"],
-                    "평소 대비(%)": _pct(J["dev"]), "최종 변화(%)": _pct(J["final"]),
-                    "판정에 쓴 방식": J["method"], "관외 유입(일평균 건수)": round(J["v"])})
+        row = {"지역": f"{sd} {sg}", "배수": J["ratio"], "판정": J["verdict"],
+               "평소 대비(%)": _pct(J["dev"]), "최종 변화(%)": _pct(J["final"]),
+               "판정에 쓴 방식": J["method"], "관외 유입(일평균 건수)": round(J["v"])}
+        rw = new_start(sd, sg)
+        fj = first_judged(P, rw) if rw else None
+        if fj:
+            row["판정 시작"] = start_note(fj, rw)
+        out.append(row)
     out.sort(key=lambda x: -abs(x["배수"]))
     if len(_rank_cache) > 20:
         _rank_cache.clear()

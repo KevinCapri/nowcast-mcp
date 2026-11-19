@@ -826,6 +826,9 @@ def _period_answer(a, b, top, sido, sigungu, asked):
         out = {**head, "지역": f"{r['sido']} {r['sigungu']}"}
         if ws and (ws[0]["wo"] > lo or ws[-1]["wo"] < hi):
             out["이 지역 판정한 기간"] = f"{analysis.label(ws[0]['wo'])} ~ {analysis.label(ws[-1]['wo'])}"
+        rw = analysis.new_start(r["sido"], r["sigungu"])
+        if rw and r["weeks"]:
+            out["판정 시작"] = analysis.start_note(r["weeks"][0]["wo"], rw)
         for up, name, cnt in ((True, "평소보다 많았던 주('많음' 이상)", "'많음' 이상 횟수"),
                               (False, "평소보다 적었던 주('적음' 이하)", "'적음' 이하 횟수")):
             hit = [w for w in ws if (w["ratio"] > analysis.STRONG if up else w["ratio"] < -analysis.STRONG)]
@@ -867,6 +870,9 @@ def _period_answer(a, b, top, sido, sigungu, asked):
             r, w = x["r"], x["best"]
             row = {"순위": i, "지역": f"{r['sido']} {r['sigungu']}", **_week_row(w)}
             row["'많음' 이상 횟수" if side is up else "'적음' 이하 횟수"] = x["n"]
+            rw = analysis.new_start(r["sido"], r["sigungu"])
+            if rw and r["weeks"]:
+                row["판정 시작"] = analysis.start_note(r["weeks"][0]["wo"], rw)
             if x["repeat"] and repeat_word:
                 row["되풀이"] = repeat_word
             ao = safe.call("개점 뒤 안내(기간 순위)", facility.after_open_short, r["sido"], r["sigungu"],
