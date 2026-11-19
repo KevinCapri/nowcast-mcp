@@ -306,7 +306,9 @@ def fest_weeks(region):
     return _FEST_WEEKS.get(region, set())
 
 
-def _pass(rows, hol, sig=None, skip=()):
+def _pass(rows, hol, sig_at=None):
+    """sig_at: 축제 주 → 그 주 전 자료로 낸 평소 출렁임. 이 값의 3배를 넘게 늘어난 축제 주는 평소 값에 넣지 않는다."""
+    sig_at = sig_at or {}
     out, normal = {}, []
     for wo, wk, v in rows:
         base = median(normal[-BASE_WEEKS:]) if len(normal) >= BASE_WEEKS else None
@@ -314,7 +316,8 @@ def _pass(rows, hol, sig=None, skip=()):
         out[wo] = (wk, v, base, dev)
         if is_long_holiday(hol.get(wo)) or not v:
             continue
-        if sig and wo in skip and dev is not None and dev > SPIKE_K * sig:
+        sig = sig_at.get(wo)
+        if sig and dev is not None and dev > SPIKE_K * sig:
             continue                                # 축제로 크게 늘어난 주는 평소 값에 넣지 않음
         normal.append(v)
     return out
@@ -324,14 +327,20 @@ def deviations(rows, hol, region=None):
     """week_order → (주차, 관외, 평소 값, ln 변화)
     2026-11-15: 축제 주가 직전 8주에 들어가 평소 값을 부풀려, 축제 직후 주가 '뚜렷이 적음'으로 잘못 나오던 문제를 고침.
     region(canon)을 주면, 그 지역 축제 계획 기간 중 평소 출렁임의 3배를 넘게 늘어난 주는 평소 값 계산에서 뺀다.
-    (학기 시작·새 시설처럼 축제가 아닌 변화는 그대로 평소 값에 들어가 새 수준을 따라간다.)"""
+    (학기 시작·새 시설처럼 축제가 아닌 변화는 그대로 평소 값에 들어가 새 수준을 따라간다.)
+    2026-11-19(전국순위_기간확장_작업.md 8번): 이 기준의 평소 출렁임을 2023년 3월 이후 전체 자료가 아니라 '그 주 전 자료만'으로
+    낸다(자료가 쌓여도 지난 판정이 바뀌지 않게, 판정 쪽 평소 출렁임과 같은 방식)."""
     first = _pass(rows, hol)
     skip = fest_weeks(region) if region else set()
     if not skip:
         return first
-    xs = [d for wo, (_, _, _, d) in first.items() if d is not None and wo >= START and not hol.get(wo)]
-    sig = _mad(xs) if len(xs) >= 20 else None
-    return _pass(rows, hol, sig, skip) if sig else first
+    plain = [(wo, d) for wo, (_, _, _, d) in sorted(first.items()) if d is not None and wo >= START and not hol.get(wo)]
+    sig_at = {}
+    for wo in skip:
+        xs = [d for w, d in plain if w < wo]
+        if len(xs) >= 20:
+            sig_at[wo] = _mad(xs)
+    return _pass(rows, hol, sig_at) if sig_at else first
 
 
 def prepare(db, sido, sigungu, memo=None):
