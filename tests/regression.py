@@ -59,7 +59,7 @@ def core(tool, r):
             out[k] = r[k]
     if tool == "find_unusual_regions":
         for k in ("평소보다 늘어난 곳", "평소보다 줄어든 곳"):
-            out[k] = [[x.get("지역"), x.get("배수")] for x in (r.get(k) or [])][:5]
+            out[k] = [[x.get("지역"), x.get("배수(이용자가 물을 때만 말함)", x.get("배수"))] for x in (r.get(k) or [])][:5]
     if tool == "get_region_calendar":
         out["주별"] = [[w["주차"], len(w["일정"]), (w["그 주 유입"] or {}).get("판정") if isinstance(w["그 주 유입"], dict) else w["그 주 유입"]]
                      for w in r.get("주별", [])]
