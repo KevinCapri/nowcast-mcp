@@ -1303,5 +1303,14 @@ if UPDATE_CODE:
     })
 
 
+# 응답 길이 제한(0.5.2): 전송 길이가 size_guard.LIMIT을 넘으면 '무엇을 얼마로 줄여 다시 물을지' 안내로 바꿈.
+# 결과 칸은 바꾸지 않는다. 기준 문서 claude/PlayMCP_재심사_20261120.md
+try:
+    import size_guard
+    size_guard.install(mcp._tool_manager)
+except Exception as _e:  # noqa: BLE001 — 실패해도 서비스는 그대로 돎
+    print("[size_guard] 설치 실패", repr(_e), flush=True)
+
+
 if __name__ == "__main__":
     mcp.run()  # 로컬 시험은 stdio. 인터넷 주소로 띄울 때는 server_http.py
