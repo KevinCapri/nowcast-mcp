@@ -9,6 +9,7 @@
 import datetime as dt
 import json
 import math
+import os
 import re
 import threading
 import time
@@ -16,6 +17,7 @@ from pathlib import Path
 from statistics import median
 
 from starlette.applications import Starlette
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, PlainTextResponse
 from starlette.routing import Route
@@ -886,10 +888,21 @@ async def og_image(request: Request):
     return FileResponse(STATIC / "og.png", media_type="image/png", headers={"cache-control": "public, max-age=86400"})
 
 
-async def api_timing(request):
-    """임시(2026-11-20): analyze_region_week 단계별 걸린 시간 최근 30건. 속도 원인을 고친 뒤 지움."""
+async def api_perf(request):
+    """속도 모니터링(2026-11-21): 느린 이용자 요청(slow)과 측정 요청(monitor) 기록, 최근 단계별 시간(recent).
+    앱 설정 MONITOR_KEY가 있고 머리글 X-Monitor-Key가 같을 때만 답한다(아니면 없는 주소처럼 404).
+    since_slow·since_monitor: 이 시각 이후(ISO, 기본 30일 전·1일 전). GitHub Actions(insight-work perf.yml)가 쓴다."""
+    import hmac
     import timing
-    return JSONResponse(timing.dump())
+    key = os.environ.get("MONITOR_KEY", "")
+    if not key or not hmac.compare_digest(request.headers.get("x-monitor-key", "").encode(), key.encode()):
+        return PlainTextResponse("Not Found", status_code=404)
+    now = dt.datetime.now(dt.timezone(dt.timedelta(hours=9)))
+    q = request.query_params
+    out = await run_in_threadpool(guard.perf, q.get("since_slow") or (now - dt.timedelta(days=30)).isoformat(),
+                                  q.get("since_monitor") or (now - dt.timedelta(days=1)).isoformat())
+    out["recent"] = timing.dump()
+    return JSONResponse(out, headers={"cache-control": "no-store"})
 
 
 app = Starlette(routes=[
@@ -911,7 +924,7 @@ app = Starlette(routes=[
     Route("/api/fest_all", api_fest_all),
     Route("/api/fest_view", api_fest_view),
     Route("/api/feedback", api_feedback, methods=["POST"]),
-    Route("/api/timing", api_timing),
+    Route("/api/perf", api_perf),
 ])
 
 
