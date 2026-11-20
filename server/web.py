@@ -886,6 +886,12 @@ async def og_image(request: Request):
     return FileResponse(STATIC / "og.png", media_type="image/png", headers={"cache-control": "public, max-age=86400"})
 
 
+async def api_timing(request):
+    """임시(2026-11-20): analyze_region_week 단계별 걸린 시간 최근 30건. 속도 원인을 고친 뒤 지움."""
+    import timing
+    return JSONResponse(timing.dump())
+
+
 app = Starlette(routes=[
     Route("/", index),
     Route("/robots.txt", robots),
@@ -905,6 +911,7 @@ app = Starlette(routes=[
     Route("/api/fest_all", api_fest_all),
     Route("/api/fest_view", api_fest_view),
     Route("/api/feedback", api_feedback, methods=["POST"]),
+    Route("/api/timing", api_timing),
 ])
 
 

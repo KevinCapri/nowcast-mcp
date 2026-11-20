@@ -520,13 +520,16 @@ STRONG_X = 2   # '많음' 문턱(평소 출렁임의 배수). 기간 순위의 S
 
 
 def analyze(db, sido, sigungu, week_order):
-    P = prepare(db, sido, sigungu)
+    import timing
+    with timing.step("analysis.prepare(시계열·비교군)"):
+        P = prepare(db, sido, sigungu)
     if not P:
         return {"error": "지역을 찾지 못함. list_regions로 시도·시군구 이름을 확인할 것."}
     rows, me, peers, pdev = P["rows"], P["me"], P["peers"], P["pdev"]
     if week_order not in me:
         return {"error": f"그 주차 자료가 없음(이 지역 자료: {rows[0][1]} ~ {rows[-1][1]})."}
-    J = judge_week(P, week_order)
+    with timing.step("analysis.judge_week(판정)"):
+        J = judge_week(P, week_order)
     if J is None:
         return {"error": "평소 값을 계산할 직전 주가 부족함."}
     wk, v, base, dev, h = J["wk"], J["v"], J["base"], J["dev"], J["h"]
