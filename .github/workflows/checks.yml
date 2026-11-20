@@ -20,3 +20,7 @@ jobs:
         run: python pipeline/check_manual_data.py
       - name: 동시 요청 DB 창구
         run: python tests/thread_db.py
+      - name: 서비스 패키지 설치
+        run: pip install -r requirements.txt
+      - name: 날짜별 방문자 지역 코드 중복 시험
+        run: python tests/test_datalab_codes.py
