@@ -19,6 +19,7 @@ import uvicorn
 from server import mcp
 import feedback
 import guard
+import timing
 import web
 
 PORT = int(os.environ.get("PORT", 8000))
@@ -49,6 +50,7 @@ def _update_loop():
         r = subprocess.run([sys.executable, str(UPDATE)], cwd=UPDATE.parents[1])
         print(f"[update] 끝 (코드 {r.returncode})", flush=True)
         web.warm()                     # 새 자료로 지역·주차 목록 다시 만들기
+        guard.mark_reload()            # 이 직후 느린 요청은 cold로 표시(속도 모니터링)
         time.sleep(_seconds_to_next_run())
 
 
@@ -138,12 +140,15 @@ class RequestLog:
                 resp[0] += m.get("body", b"")
             await send(m)
 
+        if calls:                          # 도구 요청마다 단계별 시간(timing.py)
+            timing.start(calls[0][0], args=calls[0][1])
         t0 = time.time()
         try:
             await self.app(scope, replay, capture)
         finally:
             ok = status[0] == 200 and b'"isError":true' not in resp[0] and b'"error"' not in resp[0][:200]
-            guard.record(calls, ok, (time.time() - t0) * 1000, guard.client_name(hd.get("user-agent", "")))
+            rec = timing.end() if calls else None
+            guard.record(calls, ok, (time.time() - t0) * 1000, guard.client_name(hd.get("user-agent", "")), rec)
             if REQUEST_LOG:
                 print(f"[req] {scope['method']} {scope['path']} ua={hd.get('user-agent', '')[:60]!r} {_summary(body)} "
                       f"-> {status[0]} {resp[0][:300]!r}", flush=True)

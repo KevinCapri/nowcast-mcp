@@ -99,8 +99,8 @@ def _bars(rows, width=170):
 def _page(days):
     con = guard._con()
     since = (dt.datetime.now(KST) - dt.timedelta(days=days)).isoformat()
-    rows = con.execute("SELECT at, tool, args, ok, ms, COALESCE(client,'') FROM usage WHERE at>=? ORDER BY at",
-                       (since,)).fetchall()
+    rows = con.execute("SELECT at, tool, args, ok, ms, COALESCE(client,'') FROM usage WHERE at>=? "
+                       "AND COALESCE(client,'')!='측정' ORDER BY at", (since,)).fetchall()
     con.close()
     allmcp = [r for r in rows if not r[1].startswith("web:")]
     mcp = [r for r in allmcp if r[1] in TOOL_KO]          # 실제 도구 호출만

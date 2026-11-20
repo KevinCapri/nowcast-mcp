@@ -628,11 +628,7 @@ def analyze_region_week(sido: Sido, sigungu: Sigungu, week: Week) -> dict:
         wo = _order(week)
     except Exception:
         return {"error": "week 형식은 'YYYY.MM.N주차'(예: '2026.01.3주차')."}
-    timing.start("analyze_region_week", region=f"{sido} {sigungu}", week=week, preloaded=analysis._ALL is not None)
-    try:
-        return _analyze_region_week(sido, sigungu, wo)
-    finally:
-        timing.end()
+    return _analyze_region_week(sido, sigungu, wo)
 
 
 def _analyze_region_week(sido, sigungu, wo):
