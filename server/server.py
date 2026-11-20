@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 import analysis
+import timing
 import lifepop
 import perf
 import baseball
@@ -627,20 +628,33 @@ def analyze_region_week(sido: Sido, sigungu: Sigungu, week: Week) -> dict:
         wo = _order(week)
     except Exception:
         return {"error": "week 형식은 'YYYY.MM.N주차'(예: '2026.01.3주차')."}
-    r = analysis.analyze(db, sido, sigungu, wo)
+    timing.start("analyze_region_week", region=f"{sido} {sigungu}", week=week, preloaded=analysis._ALL is not None)
+    try:
+        return _analyze_region_week(sido, sigungu, wo)
+    finally:
+        timing.end()
+
+
+def _analyze_region_week(sido, sigungu, wo):
+    with timing.step("analysis.analyze 전체"):
+        r = analysis.analyze(db, sido, sigungu, wo)
     if "error" not in r:
         mon = dt.date.fromisoformat(analysis.week_dates(wo)[:10])
-        try:
-            hd = {d for (d,) in db.execute("SELECT day FROM holidays WHERE day BETWEEN ? AND ?",
-                                           (mon.isoformat(), (mon + dt.timedelta(days=6)).isoformat()))}
-        except sqlite3.OperationalError:
-            hd = set()
-        _addons(r, sido, sigungu, wo, mon, hd)
+        with timing.step("그 주 공휴일 읽기"):
+            try:
+                hd = {d for (d,) in db.execute("SELECT day FROM holidays WHERE day BETWEEN ? AND ?",
+                                               (mon.isoformat(), (mon + dt.timedelta(days=6)).isoformat()))}
+            except sqlite3.OperationalError:
+                hd = set()
+        with timing.step("곁가지(축제·야구·벚꽃·행사·시설·공연)"):
+            _addons(r, sido, sigungu, wo, mon, hd)
         r["함께 볼 것"] = ["get_weather(같은 주 날씨)", "get_datalab_daily(그 주 일별 외지인 방문자, 약 한 달 늦게 나옴)"]
-        sus = safe.call("원자료 의심 구간", analysis.suspect, sido, sigungu, wo)
+        with timing.step("원자료 의심 구간"):
+            sus = safe.call("원자료 의심 구간", analysis.suspect, sido, sigungu, wo)
         if sus:
             r["주의"] = sus + r["주의"]
-        prof = safe.call("지역 성격", _profile, sido, sigungu)
+        with timing.step("지역 성격"):
+            prof = safe.call("지역 성격", _profile, sido, sigungu)
         if prof:
             r["지역 성격"] = prof
         def _past_holidays():
@@ -651,12 +665,14 @@ def analyze_region_week(sido: Sido, sigungu: Sigungu, week: Week) -> dict:
             past = [(w, hol[w][2], P["raw"].get(w)) for w in sorted(hol) if w != wo and w >= analysis.START
                     and hol[w][1] > 0 and P["raw"].get(w) is not None][-6:]
             return [{"주차": P["me"][w][0], "공휴일": n, "평소 대비(%)": analysis._pct(v)} for w, n, v in past] or None
-        ph = safe.call("지난 설·추석", _past_holidays)
+        with timing.step("지난 설·추석"):
+            ph = safe.call("지난 설·추석", _past_holidays)
         if ph:
             r["이 지역 지난 설·추석 주 평소 대비(%)"] = ph
         ym = f"{wo // 1000}{(wo // 10) % 100:02d}"
         try:
-            mig = lifepop._by_period(db, "kosis_migration", lifepop._codes(db, sido, sigungu, "reg_pop"), "AND ITM_ID='T10'")
+            with timing.step("같은 달 총전입"):
+                mig = lifepop._by_period(db, "kosis_migration", lifepop._codes(db, sido, sigungu, "reg_pop"), "AND ITM_ID='T10'")
             if mig:
                 m = ym if ym in mig else max(mig)
                 r["참고: 같은 달 총전입(이사, 명, KOSIS 국내인구이동통계)"] = {
@@ -664,8 +680,10 @@ def analyze_region_week(sido: Sido, sigungu: Sigungu, week: Week) -> dict:
                     "설명": "외부 유입(방문·통근 이동 건수)은 이사가 아니다. 이사가 늘었는지 물으면 이 값을 보여 줄 것."}
         except Exception:
             pass
-        r["자료 기준"] = _as_of()
-    return _answer(r, "judge", SOURCE, calc=True)
+        with timing.step("자료 기준"):
+            r["자료 기준"] = _as_of()
+    with timing.step("답 꾸미기(_answer)"):
+        return _answer(r, "judge", SOURCE, calc=True)
 
 
 def _wo_of_monday(mon):
