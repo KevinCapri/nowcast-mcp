@@ -1109,10 +1109,12 @@ def get_datalab_daily(sido: Sido, sigungu: Sigungu, start_date: str, end_date: s
             codes += r[0].split(",")
     if not codes:
         return {"error": "데이터랩과 이어지지 않은 지역. list_regions로 이름을 확인할 것."}
+    # 옛 이름·새 이름(전남·광주·군위)이 같은 코드를 가져오므로 중복을 먼저 뺀다(물음표 수와 값 수를 맞춤)
+    codes = sorted(set(codes))
     div = {"현지인": 1, "외지인": 2, "외국인": 3}[kind]
     q = (f"SELECT day, SUM(touNum) FROM datalab_daily WHERE signguCode IN ({','.join('?' * len(codes))}) "
          "AND touDivCd=? AND day BETWEEN ? AND ? GROUP BY day ORDER BY day")
-    rows = db.execute(q, (*sorted(set(codes)), div, a.isoformat(), b.isoformat())).fetchall()
+    rows = db.execute(q, (*codes, div, a.isoformat(), b.isoformat())).fetchall()
     hol = dict(db.execute("SELECT day, name FROM holidays WHERE day BETWEEN ? AND ?", (a.isoformat(), b.isoformat())))
     wd = "월화수목금토일"
     notes = ["값은 KT 통신자료 기반 추정 사람 수(일자별 순방문자, 2박3일이면 3명)다. 나우캐스트 '건'과 다르다."]

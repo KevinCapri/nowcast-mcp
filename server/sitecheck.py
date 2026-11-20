@@ -68,10 +68,11 @@ def _one(db, name, sido, sigungu, fn):
         if r and r[0]:
             codes += r[0].split(",")
     dl_day = {}
+    codes = sorted(set(codes))  # 옛 이름·새 이름이 같은 코드를 가져올 때 중복 빼기
     if codes:
         q = (f"SELECT day, SUM(touNum) FROM datalab_daily WHERE signguCode IN ({','.join('?' * len(codes))}) "
              "AND touDivCd=2 AND day BETWEEN '2019-01-01' AND '2025-12-31' GROUP BY day")
-        dl_day = {dt.date.fromisoformat(d): v for d, v in db.execute(q, sorted(set(codes)))}
+        dl_day = {dt.date.fromisoformat(d): v for d, v in db.execute(q, codes)}
     dl = {m: sum(dl_day.get(m + dt.timedelta(days=k), 0) for k in range(7)) / 7 for m in weeks
           if all((m + dt.timedelta(days=k)) in dl_day for k in range(7))}
     ddev = _devs(weeks, dl)
