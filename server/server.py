@@ -1236,6 +1236,9 @@ def get_data_status() -> dict:
     }
 
 
+SERVICE_NAME = "빅데이터 Insight"
+
+
 # ---------- 업데이트 확인(2026-11-17) ----------
 # 이용자의 커넥터는 연결(업데이트 반영) 때 받은 도구 설명을 그대로 쓰고, 결과는 늘 최신 서버에서 온다.
 # 도구 설명·입력값으로 만든 짧은 코드를 설명 첫 줄과 결과의 '서비스 도구'에 함께 넣어,
@@ -1253,8 +1256,9 @@ def _stamp_update_code():
     src = json.dumps([[n, t.description, _params(t.parameters)] for n, t in sorted(tools.items())],
                      ensure_ascii=False, sort_keys=True, default=str)
     code = hashlib.sha1(src.encode()).hexdigest()[:6]
+    # 도구마다 서비스 이름을 붙임(카카오 PlayMCP 심사: description에 서비스명 포함, 2026-11-20)
     for t in tools.values():
-        t.description = f"[업데이트 확인 {code}] " + (t.description or "")
+        t.description = f"[업데이트 확인 {code}] [{SERVICE_NAME}] " + (t.description or "")
     return code
 
 
