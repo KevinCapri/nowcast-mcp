@@ -100,6 +100,43 @@ def compare(base, now):
     return bad, info
 
 
+# 응답 길이(0.5.2): 가장 길게 나올 만한 입력으로 불러 전송 길이가 한도 안인지 본다(PlayMCP 24,000자 에러).
+LIMIT = 20000
+LONG_CASES = [
+    ("get_movement", {"direction": "유입", "category": "시군구", "item": "중구", "sido": "서울특별시",
+                      "start_week": "2019.01.1주차", "end_week": "2030.12.4주차"}),
+    ("get_weather", {"sido": "서울특별시", "sigungu": "중구", "start_week": "2019.01.1주차", "end_week": "2030.12.4주차"}),
+    ("get_region_calendar", {"sido": "서울특별시", "sigungu": "송파구", "start": "2025-01-01", "end": "2025-12-31"}),
+    ("get_datalab_daily", {"sido": "강원특별자치도", "sigungu": "화천군", "start_date": "2025-01-01", "end_date": "2026-01-31"}),
+    ("find_unusual_regions", {"start_week": "2023.06.1주차", "end_week": "2030.12.4주차", "top": 30}),
+    ("find_unusual_regions", {"top": 30}),
+    ("compare_same_week", {"sido": "강원특별자치도", "sigungu": "화천군", "week": "2026.01.3주차", "years_back": 3}),
+    ("list_regions", {"keyword": "구"}),
+    ("get_metadata", {}),
+    ("get_bloom_foliage", {"year": 2026, "kind": "단풍"}),
+    ("get_data_status", {}),
+]
+
+
+def length_check():
+    bad = []
+    for name, args in LONG_CASES:
+        body = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": args}}
+        try:
+            r = requests.post(URL, json=body, timeout=180, headers={"Accept": "application/json, text/event-stream"})
+            raw = r.text
+            for line in raw.splitlines():          # SSE로 오면 data: 줄만
+                if line.startswith("data:"):
+                    raw = line[5:]
+            res = json.loads(raw).get("result") or {}
+            n = sum(len(json.dumps(c.get("text", ""), ensure_ascii=False)) for c in res.get("content") or [])
+            if n > LIMIT:
+                bad.append(f"응답 길이 {name}{args}: {n:,}자 > {LIMIT:,}자")
+        except Exception as e:  # noqa: BLE001
+            bad.append(f"응답 길이 {name}: {type(e).__name__}: {e}")
+    return bad
+
+
 def main():
     t = time.time()
     now = run()
@@ -112,6 +149,7 @@ def main():
         print("기준값(live_baseline.json)이 아직 없음 — --save로 먼저 만들 것")
         return
     bad, info = compare(json.loads(BASE.read_text(encoding="utf-8")), now)
+    bad += length_check()
     for x in info:
         print("  참고:", x)
     for x in bad:
