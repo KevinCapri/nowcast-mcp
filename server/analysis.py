@@ -181,6 +181,39 @@ def speak(J, place, when):
     return " ".join(lines)
 
 
+# 순위 줄용 짧은 판정 풀이(TEST_수정안_20261120.md 3+5번). 지역·날짜·평소 출렁임은 같은 줄 칸에 있으니 뺀다.
+SHORT_STAGE = {
+    "조금": "평소 오르내림 폭을 조금 넘는 정도입니다.",
+    "많음": "평소 오르내림 폭의 두 배가 넘는 흔치 않은 일입니다.",
+    "아주": "평소 오르내림 폭의 세 배가 넘는 아주 드문 일입니다.",
+    "평소": "평소 오르내림 폭 안이라 평소 수준입니다.",
+}
+
+
+def speak_short(w):
+    """w: dev·final·verdict·hol_adj(없어도 됨). 판정 못 한 줄은 None."""
+    v = w.get("verdict") or ""
+    key = ("아주" if v.startswith("아주") else "조금" if v.startswith("조금")
+           else "많음" if v in ("많음", "적음") else "평소" if v == "평소 수준" else None)
+    if not key or w.get("dev") is None:
+        return None
+    stage = SHORT_STAGE[key]
+    p, f = _pct(w["dev"]), _pct(w.get("final"))
+    if f is None or abs(f - p) < SAME_PCT:
+        if abs(p) < 0.5:
+            return f"평소와 거의 같아, {stage}"
+        return f"평소보다 {abs(round(p))}% {'늘어' if p > 0 else '줄어'}, {stage}"
+    head = (f"평소와 거의 같았지만" if abs(p) < 0.5
+            else f"평소보다 {abs(round(p))}% {'늘었' if p > 0 else '줄었'}지만")
+    if w.get("hol_adj") is not None:
+        h = _pct(w["hol_adj"])
+        who = f"공휴일 낀 주에 보통 {'늘어나는' if h > 0 else '줄어드는'} 몫을 빼면"
+    else:
+        c = p - f
+        who = f"비슷한 지역들{'도' if c * p > 0 else '이'} 함께 {'늘어난' if c > 0 else '줄어든'} 몫을 빼면"
+    return f"{head}, {who} {abs(round(f))}% {'많은' if f > 0 else '적은'} 셈이라, {stage}"
+
+
 # 원자료 처리 문제가 의심되는 구간(2026-11-13 점검). 이 지역만 크게 튀고
 # 같은 시도 합계는 그대로이거나 이웃 구가 반대로 움직였으며, 데이터랩 외지인에는 변화가 없었던 경우.
 SUSPECT = [
@@ -235,6 +268,18 @@ def week_dates(wo):
         d += dt.timedelta(days=1)
     mon = d - dt.timedelta(days=k)
     return f"{mon}~{mon + dt.timedelta(days=6)}"
+
+
+def date_ko(wo):
+    """주차 번호 → '2025년 11월 10일~16일'(이용자에게 말하는 날짜, TEST_수정안_20261120.md 8번).
+    달이 바뀌면 '2025년 9월 29일~10월 5일', 해가 바뀌면 '2025년 12월 29일~2026년 1월 4일'."""
+    import datetime as dt
+    a, b = (dt.date.fromisoformat(x) for x in week_dates(wo).split("~"))
+    if a.year != b.year:
+        return f"{a.year}년 {a.month}월 {a.day}일~{b.year}년 {b.month}월 {b.day}일"
+    if a.month != b.month:
+        return f"{a.year}년 {a.month}월 {a.day}일~{b.month}월 {b.day}일"
+    return f"{a.year}년 {a.month}월 {a.day}일~{b.day}일"
 
 
 def holidays(db):
@@ -522,7 +567,7 @@ def analyze(db, sido, sigungu, week_order):
         "평소 출렁임의 몇 배": ratio,
         "판정": verdict,
         "판정 말하는 법": speak(J, f"{sido} {sigungu}" if (sigungu.endswith("구") and " " not in sigungu) else sigungu,
-                          f"{wk}({week_dates(week_order)})에"),
+                          f"{date_ko(week_order)}에"),
         "판정 기준": JUDGE_RULE,
         **(scale(base, s) or {}),
         "그 주 공휴일": h[2],
@@ -632,6 +677,7 @@ def rank_week(db, week_order):
         elif J["method"] == "비교군 대비" and P["com"].get(week_order) is not None:
             row["비슷한 지역 같은 주 변화(%)"] = _pct(P["com"][week_order])
         row["_dev"], row["_com"], row["_hol"] = J["dev"], P["com"].get(week_order), J["hol_adj"]
+        row["_final"] = J["final"]
         rw = new_start(sd, sg)
         fj = first_judged(P, rw) if rw else None
         if fj:
@@ -712,18 +758,21 @@ def repeats(wos):
     return False
 
 
-def _strong(weeks, up):
-    """'많음' 이상(up) 또는 '적음' 이하 주. 실제 방향이 엇갈린 주(4번)와 원자료 확인 구간은 뺀다."""
+def _strong(weeks, up, holiday=False):
+    """'많음' 이상(up) 또는 '적음' 이하 주. 실제 방향이 엇갈린 주(4번)와 원자료 확인 구간은 뺀다.
+    연휴 주(설·추석, 평일 공휴일 2일 이상)는 기본으로 빼고, holiday=True면 연휴 주만 센다(TEST_수정안_20261120.md 1-2번)."""
     return [w for w in weeks if not w["suspect"] and real_dir(w["ratio"], w["dev"])
+            and is_long_holiday(w["hol"]) == holiday
             and (w["ratio"] > STRONG if up else w["ratio"] < -STRONG)]
 
 
 def rank_period(table, a, b):
     """기간 [a, b] 안에서 지역마다 가장 크게 튄 주 하나(늘어난 쪽·줄어든 쪽 따로)와 '많음' 이상 횟수.
-    원자료 확인 구간인 주와 실제 방향이 엇갈린 주(4번)는 고르지도 세지도 않는다."""
+    원자료 확인 구간인 주, 실제 방향이 엇갈린 주(4번), 연휴 주(TEST_수정안_20261120.md 1번)는 고르지도 세지도 않는다.
+    연휴 주는 비슷한 지역들이 크고 제각각 움직여 배수가 부풀기 때문(예: 안산 상록구 2025 설 주 +3.2%가 16배)."""
     up, down = [], []
     for r in table.values():
-        ws = [w for w in r["weeks"] if a <= w["wo"] <= b and not w["suspect"]]
+        ws = [w for w in r["weeks"] if a <= w["wo"] <= b and not w["suspect"] and not is_long_holiday(w["hol"])]
         if not ws:
             continue
         for side, pick, keep in ((up, max, lambda x: x > 0), (down, min, lambda x: x < 0)):
