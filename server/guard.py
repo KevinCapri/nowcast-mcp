@@ -15,7 +15,7 @@
 - 속도 측정(GitHub Actions, User-Agent에 insight-monitor)의 요청은 연결한 곳을 '측정'으로 남기고, 이용 집계에서는 뺀다
 
 느린 요청(속도 모니터링, 2026-11-21)
-- 이용자 요청(측정 제외) 가운데 SLOW_MS(기본 10000ms) 넘게 걸린 것을 usage.db의 slow 표에 따로 남긴다:
+- 이용자 요청(측정 제외) 가운데 SLOW_MS(기본 5000ms) 넘게 걸린 것을 usage.db의 slow 표에 따로 남긴다:
   시각, 도구, 입력값, 걸린 시간, 연결한 곳, 단계별 시간(timing.py), 서버가 막 켜졌거나 자료를 다시 읽은 직후인지(cold)
 - /api/perf(web.py, MONITOR_KEY가 있을 때만)로 GitHub Actions가 받아 가서 매일 다시 잰다
 - 보기: python server/guard.py [일수]   → 도구별·지역별 호출 수
@@ -34,7 +34,7 @@ KST = dt.timezone(dt.timedelta(hours=9))
 RATE_PER_MIN = int(os.environ.get("RATE_PER_MIN", 300))
 RATE_GLOBAL_PER_HOUR = int(os.environ.get("RATE_GLOBAL_PER_HOUR", 6000))
 KEEP_DAYS = 365
-SLOW_MS = int(os.environ.get("SLOW_MS", 10000))
+SLOW_MS = int(os.environ.get("SLOW_MS", 5000))
 COLD_SEC = 300                      # 서버 시작·자료 다시 읽기 뒤 이 시간 안의 요청은 cold로 표시
 MONITOR_CLIENT = "측정"
 _started = time.time()
