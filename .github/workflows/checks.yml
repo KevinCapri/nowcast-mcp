@@ -28,3 +28,5 @@ jobs:
         run: python tests/test_size_guard.py
       - name: 범위 밖 입력 안내 시험
         run: python tests/test_input_guard.py
+      - name: 최신 주차 캐시 시험
+        run: python tests/test_latest_week.py
