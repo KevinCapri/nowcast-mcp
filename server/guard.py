@@ -188,6 +188,23 @@ def perf(since_slow, since_monitor):
         con.close()
 
 
+def usage_summary(since):
+    """/api/perf용(2026-11-21): 이용 집계 요약 — MCP 도구별 콜·실패·평균 ms와 연결한 곳별 콜·실패.
+    측정 요청(client '측정')과 사이트 조회(web:)는 뺀다. 지역·입력값·의견은 담지 않는다(관리 화면에만)."""
+    con = _con()
+    try:
+        cond = "at>=? AND COALESCE(client,'')!=? AND tool NOT LIKE 'web:%'"
+        tools = [dict(zip(("tool", "calls", "fail", "avg_ms"), r)) for r in con.execute(
+            f"SELECT tool, COUNT(*), COUNT(*)-SUM(ok), CAST(AVG(ms) AS INT) FROM usage WHERE {cond} "
+            "GROUP BY tool ORDER BY 2 DESC", (since, MONITOR_CLIENT))]
+        clients = [dict(zip(("client", "calls", "fail"), r)) for r in con.execute(
+            f"SELECT COALESCE(NULLIF(client,''),'기록 전'), COUNT(*), COUNT(*)-SUM(ok) FROM usage WHERE {cond} "
+            "GROUP BY 1 ORDER BY 2 DESC", (since, MONITOR_CLIENT))]
+        return {"since": since, "tools": tools, "clients": clients}
+    finally:
+        con.close()
+
+
 if __name__ == "__main__":      # 운영자용 요약
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     days = int(sys.argv[1]) if len(sys.argv) > 1 else 7

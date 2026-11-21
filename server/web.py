@@ -891,7 +891,8 @@ async def og_image(request: Request):
 async def api_perf(request):
     """속도 모니터링(2026-11-21): 느린 이용자 요청(slow)과 측정 요청(monitor) 기록, 최근 단계별 시간(recent).
     앱 설정 MONITOR_KEY가 있고 머리글 X-Monitor-Key가 같을 때만 답한다(아니면 없는 주소처럼 404).
-    since_slow·since_monitor: 이 시각 이후(ISO, 기본 30일 전·1일 전). GitHub Actions(insight-work perf.yml)가 쓴다."""
+    since_slow·since_monitor: 이 시각 이후(ISO, 기본 30일 전·1일 전). GitHub Actions(insight-work perf.yml)가 쓴다.
+    usage(2026-11-21): 최근 30일 도구별·연결한 곳별 콜·실패 요약(관리 화면 숫자, 지역·입력값 없음). Glama·Tool 합치기 판단용"""
     import hmac
     import timing
     key = os.environ.get("MONITOR_KEY", "")
@@ -902,6 +903,7 @@ async def api_perf(request):
     out = await run_in_threadpool(guard.perf, q.get("since_slow") or (now - dt.timedelta(days=30)).isoformat(),
                                   q.get("since_monitor") or (now - dt.timedelta(days=1)).isoformat())
     out["recent"] = timing.dump()
+    out["usage"] = await run_in_threadpool(guard.usage_summary, (now - dt.timedelta(days=30)).isoformat())
     return JSONResponse(out, headers={"cache-control": "no-store"})
 
 
