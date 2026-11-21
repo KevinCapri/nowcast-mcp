@@ -211,6 +211,7 @@ def refresh_lists():
     if not _lists_lock.acquire(blocking=False):
         return
     try:
+        A._latest["wo"] = None                       # 새 자료가 들어왔을 수 있으니 최신 주차를 다시 확인하게(latest_week 10분 캐시)
         _lists.update(regions=_regions(), weeks=_weeks(), at=time.time())
         print("[web] 지역·주차 목록 준비", flush=True)
         t = time.time()

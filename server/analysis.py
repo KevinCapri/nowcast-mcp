@@ -598,12 +598,26 @@ def all_regions(db):
 
 
 _names = {"key": None, "map": {}}
+_latest = {"wo": None, "checked": 0.0}
+LATEST_TTL = 600   # 초. 자료는 하루 한 번(새벽)만 바뀌므로 최신 주차 확인은 10분에 한 번이면 충분
+
+
+def latest_week(db):
+    """moves의 최신 주차(캐시 열쇠용). 'SELECT MAX(week_order) FROM moves'는 색인을 못 타 표 전체를 훑어,
+    저장소에서 읽을 때는 한 번에 몇 초씩 걸린다(2026-11-21 저녁: 비교 지역 10곳마다 불러 한 번 판정에 20~85초).
+    그래서 10분에 한 번만 실제로 확인한다."""
+    import time
+    now = time.monotonic()
+    if _latest["wo"] is None or now - _latest["checked"] > LATEST_TTL:
+        _latest["wo"] = db.execute("SELECT MAX(week_order) FROM moves").fetchone()[0]
+        _latest["checked"] = now
+    return _latest["wo"]
 
 
 def current_name(db, sido, sigungu):
     """지금 쓰는 시도·시군구 이름(시도 이름이 바뀐 곳은 가장 최근 이름). 보여 주기에만 쓰고 계산은 canon으로 한다.
     region_peers.csv는 개편 전 이름이라 '비교한 지역'에 옛 시도 이름이 나오던 것을 고침(전국순위_기간확장_작업.md 5번)."""
-    key = db.execute("SELECT MAX(week_order) FROM moves").fetchone()[0]
+    key = latest_week(db)
     if _names["key"] != key:
         _names.update(key=key, map={canon(a, b): (a, b) for a, b in all_regions(db)})
     return _names["map"].get(canon(sido, sigungu), (sido, sigungu))
@@ -661,7 +675,7 @@ MIXED_NOTE = ["'사람이 몰렸다/빠졌다'고 말하지 말고 이 문장 �
 
 def rank_week(db, week_order):
     """한 주의 전국 시군구 판정을 평소 출렁임 배수 순으로(같은 주차는 서버가 켜져 있는 동안 한 번만 계산)."""
-    key = (week_order, db.execute("SELECT MAX(week_order) FROM moves").fetchone()[0])
+    key = (week_order, latest_week(db))
     if key in _rank_cache:
         return _rank_cache[key]
     memo, out = {}, []
@@ -715,7 +729,7 @@ def period_table(db):
     """전국 시군구 → 판정할 수 있는 모든 주의 판정 요약. 자료 최신 주차가 바뀔 때만 다시 계산
     (전국 약 250곳 × 약 180주. 서버 시작·자동 갱신 뒤 web.refresh_lists가 미리 불러 둠).
     반환: {canon: {"sido", "sigungu", "weeks": [{wo, ratio, verdict, dev, final, s, method, v, hol, suspect}]}}"""
-    key = db.execute("SELECT MAX(week_order) FROM moves").fetchone()[0]
+    key = latest_week(db)
     if _period["key"] == key and _period["table"] is not None:
         return _period["table"]
     with _period_lock:
