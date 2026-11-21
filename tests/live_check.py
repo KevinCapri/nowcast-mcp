@@ -137,6 +137,26 @@ def length_check():
     return bad
 
 
+# 범위 밖 입력(0.5.2): 영어 검사 오류 대신 한국어 안내 {"error": ...}가 나오는지 실제 서버에서 본다.
+def input_check():
+    body = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "compare_same_week", "arguments": {"sido": "경상북도", "sigungu": "경주시",
+                                                                  "week": "2025.10.2주차", "years_back": 5}}}
+    try:
+        r = requests.post(URL, json=body, timeout=60, headers={"Accept": "application/json, text/event-stream"})
+        raw = r.text
+        for line in raw.splitlines():
+            if line.startswith("data:"):
+                raw = line[5:]
+        res = json.loads(raw).get("result") or {}
+        txt = "".join(c.get("text", "") for c in res.get("content") or [])
+        if res.get("isError") or "1~3만 받는다" not in txt:
+            return [f"범위 밖 입력 안내가 나오지 않음: {txt[:200]}"]
+    except Exception as e:  # noqa: BLE001
+        return [f"범위 밖 입력 확인: {type(e).__name__}: {e}"]
+    return []
+
+
 def main():
     t = time.time()
     now = run()
@@ -150,6 +170,7 @@ def main():
         return
     bad, info = compare(json.loads(BASE.read_text(encoding="utf-8")), now)
     bad += length_check()
+    bad += input_check()
     for x in info:
         print("  참고:", x)
     for x in bad:
