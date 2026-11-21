@@ -24,3 +24,7 @@ jobs:
         run: pip install -r requirements.txt
       - name: 날짜별 방문자 지역 코드 중복 시험
         run: python tests/test_datalab_codes.py
+      - name: 응답 길이 제한 장치 시험
+        run: python tests/test_size_guard.py
+      - name: 범위 밖 입력 안내 시험
+        run: python tests/test_input_guard.py

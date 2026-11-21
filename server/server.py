@@ -67,7 +67,7 @@ db = _ThreadDB(DB)
 SERVICE = "빅데이터 Insight: 지역별 유입인구"
 # 도구 목록이 바뀌면(추가·삭제·입력값·설명) 세 값을 같이 고친다. 회귀 시험이 TOOLS와 실제 도구가 다르면 잡는다.
 # 결과마다 붙여서, 예전에 연결한 이용자에게도 AI가 '새 도구가 생겼으니 다시 연결'을 알려 주게 한다(claude/변경_관리_원칙.md).
-VERSION = "0.5.1"
+VERSION = "0.5.2"
 TOOLS_CHANGED = "2026-11-20"
 TOOLS = ["get_metadata", "list_regions", "get_movement", "get_breakdown", "get_weather", "analyze_region_week",
          "find_unusual_regions", "estimate_life_pop", "forecast_festival", "get_datalab_daily", "report_issue",
@@ -1297,6 +1297,22 @@ if UPDATE_CODE:
             "그 밖의 AI": "빅데이터 Insight에 업데이트가 있습니다. 설정 메뉴에 들어가셔서 다시 연결해 주세요.",
         },
     })
+
+
+# 응답 길이 제한(0.5.2): 전송 길이가 size_guard.LIMIT을 넘으면 '무엇을 얼마로 줄여 다시 물을지' 안내로 바꿈.
+# 결과 칸은 바꾸지 않는다. 기준 문서 claude/PlayMCP_재심사_20261120.md
+try:
+    import size_guard
+    size_guard.install(mcp._tool_manager)
+except Exception as _e:  # noqa: BLE001 — 실패해도 서비스는 그대로 돎
+    print("[size_guard] 설치 실패", repr(_e), flush=True)
+
+# 범위 밖 입력 안내(0.5.2): 입력값이 범위·형식을 벗어나면 영어 검사 오류 대신 {"error": 한국어 안내}.
+try:
+    import input_guard
+    input_guard.install(mcp._tool_manager)
+except Exception as _e:  # noqa: BLE001 — 실패해도 서비스는 그대로 돎
+    print("[input_guard] 설치 실패", repr(_e), flush=True)
 
 
 if __name__ == "__main__":

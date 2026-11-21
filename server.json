@@ -3,7 +3,7 @@
   "name": "io.github.KevinCapri/nowcast-mcp",
   "title": "Big Data Insights for Regional Inflow in Korea",
   "description": "Uses multiple data sources to analyze changes in regional inflows in Korea. Personal, not official.",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "websiteUrl": "https://nowcast-mcp.azurewebsites.net/",
   "remotes": [
     {
