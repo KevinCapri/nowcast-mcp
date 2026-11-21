@@ -48,6 +48,10 @@ STEPS = [
     ("tourism", ["load_tourism.py"], 1, 7200),   # 스스로 판단: 최근 달 27일마다, 빈 옛 달은 매일 조금씩
 ]
 
+# 잠깐 멈출 단계(Azure 앱 설정 PAUSE_STEPS, 쉼표로 여럿). 원천이 우리 서버를 막았을 때처럼
+# 다시 받아 봐야 헛도는 동안 쓴다. 멈춘 단계는 시도하지 않으므로 실패 메일도 가지 않는다.
+PAUSED = {s.strip() for s in os.environ.get("PAUSE_STEPS", "").split(",") if s.strip()}
+
 
 def now():
     return dt.datetime.now(KST)
@@ -181,6 +185,9 @@ def main():
         with open(LOG, "a") as log:
             for name, cmd, days, timeout in STEPS:
                 if args and name not in args:
+                    continue
+                if name in PAUSED:
+                    log.write(f"\n===== {now():%Y-%m-%d %H:%M} {name} 멈춤(PAUSE_STEPS) =====\n")
                     continue
                 if not args and "--all" not in sys.argv and not due(st, name, days):
                     continue
