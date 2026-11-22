@@ -105,7 +105,10 @@ LIMIT = 20000
 LONG_CASES = [
     ("get_movement", {"direction": "유입", "category": "시군구", "item": "중구", "sido": "서울특별시",
                       "start_week": "2019.01.1주차", "end_week": "2030.12.4주차"}),
-    ("get_weather", {"sido": "서울특별시", "sigungu": "중구", "start_week": "2019.01.1주차", "end_week": "2030.12.4주차"}),
+    ("get_movement", {"direction": "유입", "category": "시군구", "start_week": "2019.01.1주차", "end_week": "2030.12.4주차",
+                      "top": 100}),
+    ("get_movement", {"direction": "유입", "category": "시도", "start_week": "2025.01.1주차", "end_week": "2025.12.4주차"}),
+    ("get_datalab_daily", {"sido": "서울특별시", "sigungu": "중구", "start_date": "2026-09-01", "end_date": "2030-12-31"}),
     ("get_region_calendar", {"sido": "서울특별시", "sigungu": "송파구", "start": "2025-01-01", "end": "2025-12-31"}),
     ("get_datalab_daily", {"sido": "강원특별자치도", "sigungu": "화천군", "start_date": "2025-01-01", "end_date": "2026-01-31"}),
     ("find_unusual_regions", {"start_week": "2023.06.1주차", "end_week": "2030.12.4주차", "top": 30}),

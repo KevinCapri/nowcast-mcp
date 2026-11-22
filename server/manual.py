@@ -11,11 +11,11 @@ def status(today=None):
     today = today or dt.date.today()
     out = []
     for s in json.loads((HERE / "manual_sources.json").read_text(encoding="utf-8")):
-        latest = None
+        latest = s.get("기준")
         try:
             with open(HERE / s["파일"], encoding="utf-8") as f:
                 ds = [r.get(s["날짜칸"]) for r in csv.DictReader(f)]
-            latest = max(d for d in ds if d and len(d) == 10)
+            latest = max(d for d in ds if d and len(d) == 10) if s.get("날짜칸") else latest
         except Exception:
             pass
         out.append({"자료": s["자료"], "출처": s["출처"], "자료 기준(가장 늦은 날짜)": latest, "받아서 넣은 날": s["받은 날"],

@@ -805,13 +805,11 @@
   "find_unusual_regions",
   "forecast_festival",
   "get_bloom_foliage",
-  "get_breakdown",
   "get_data_status",
   "get_datalab_daily",
   "get_metadata",
   "get_movement",
   "get_region_calendar",
-  "get_weather",
   "list_regions",
   "report_issue"
  ]

@@ -21,7 +21,7 @@ con.executemany("INSERT INTO region_map VALUES (?,?,?)", [
 ])
 con.execute("CREATE TABLE datalab_daily(signguCode, touDivCd, day, touNum)")
 con.executemany("INSERT INTO datalab_daily VALUES (?,?,?,?)", [
-    ("46860", 2, "2026-04-27", 1000), ("12860", 2, "2026-07-01", 500), ("42790", 2, "2026-01-05", 700),
+    ("46860", 2, "2026-06-20", 1000), ("12860", 2, "2026-07-01", 500), ("42790", 2, "2026-01-05", 700),
 ])
 con.execute("CREATE TABLE holidays(day, name)")
 con.commit()
@@ -32,15 +32,15 @@ sys.path.insert(0, str(HERE.parent / "server"))
 import server as S  # noqa: E402
 
 CHECKS = [
-    (("전라남도", "함평군", "2026-04-27", "2026-07-01"), [1000, 500]),
-    (("전남광주통합특별시", "함평군", "2026-04-27", "2026-04-27"), [1000]),
+    (("전라남도", "함평군", "2026-06-15", "2026-07-01"), [1000, 500]),
+    (("전남광주통합특별시", "함평군", "2026-06-20", "2026-06-20"), [1000]),
     (("강원특별자치도", "화천군", "2026-01-05", "2026-01-05"), [700]),
 ]
 bad = 0
 for args, want in CHECKS:
     try:
         r = S.get_datalab_daily(*args)
-        got = [d["value"] for d in r.get("data", [])]
+        got = [d["방문자(관광공사, 명)"] for d in r.get("data", [])]  # 0.6.0에서 칸 이름 바꿈(value → 방문자(관광공사, 명))
     except Exception as e:  # noqa: BLE001
         got = f"{type(e).__name__}: {e}"
     ok = got == want

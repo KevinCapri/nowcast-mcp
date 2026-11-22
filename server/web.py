@@ -237,6 +237,16 @@ def refresh_lists():
             print(f"[web] 기간 순위 표 미리 계산 ({time.time() - t:.1f}초)", flush=True)
         except Exception as e:
             print("[web] 기간 순위 표 미리 계산 실패", repr(e), flush=True)
+        # 날짜별 방문자의 '날마다 들쭉날쭉한 정도' 전국 비교표(0.6.0). 새 자료가 들어오면 다시 계산.
+        try:
+            import daily
+            t = time.time()
+            daily.clear()
+            daily._WOBBLE.update(at=0, busy=True)
+            daily._build_wobble(_conn())
+            print(f"[web] 날짜별 방문자 전국 비교표 미리 계산 ({time.time() - t:.1f}초)", flush=True)
+        except Exception as e:
+            print("[web] 날짜별 방문자 전국 비교표 미리 계산 실패", repr(e), flush=True)
     except Exception as e:
         print("[web] 목록 만들기 실패", repr(e), flush=True)
     finally:

@@ -22,7 +22,6 @@ MARGIN = 0.9           # 권장 값은 여유를 두고 계산
 # 도구 → (줄일 것 종류, 시작 인자, 끝 인자)
 PERIOD = {
     "get_movement": ("week", "start_week", "end_week"),
-    "get_weather": ("week", "start_week", "end_week"),
     "get_region_calendar": ("date", "start", "end"),
     "get_datalab_daily": ("date", "start_date", "end_date"),
 }
