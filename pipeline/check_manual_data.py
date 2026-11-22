@@ -123,8 +123,33 @@ def regions(name, rs):
             errs.append(f"{name}: 이동 자료에 없는 지역 {r['sido']} {r['sigungu']} ({r.get('name')})")
 
 
+def depop():
+    """인구감소지역 목록(0.6.0): 종류·표시 값, 개수(감소 92·관심 18·인구활력+ 12, 2026-10-07 고시)."""
+    rs = rows("depop_regions.csv")
+    for i, r in enumerate(rs, 2):
+        if r["kind"] not in ("감소", "관심") or r["vitality_plus"] not in ("0", "1"):
+            err("depop_regions.csv", i, "kind는 감소·관심, vitality_plus는 0·1")
+    n = (sum(r["kind"] == "감소" for r in rs), sum(r["kind"] == "관심" for r in rs), sum(r["vitality_plus"] == "1" for r in rs))
+    if n != (92, 18, 12):
+        errs.append(f"depop_regions.csv: 개수 {n}가 고시(92·18·12)와 다름 — 재지정이면 이 검사도 고칠 것")
+    return rs
+
+
+def commute():
+    rs = rows("commute.csv")
+    for i, r in enumerate(rs, 2):
+        try:
+            if float(r["commute_in"]) <= 0:
+                raise ValueError
+        except ValueError:
+            err("commute.csv", i, "commute_in은 0보다 큰 수")
+    return []      # 옛 이름(개편 전 인천 중구 등)도 지난 주 계산에 쓰여 지역 검사는 하지 않음
+
+
 def main():
     print("자료 파일 검사")
+    regions("depop_regions.csv", depop())
+    commute()
     kbo()
     kma()
     ev = ranges("events.csv", "s", "e")

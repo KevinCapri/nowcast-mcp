@@ -17,6 +17,7 @@ import safe
 import season
 import facility
 import tourism
+import daily
 
 MAX_DAYS = 371
 
@@ -90,6 +91,8 @@ def region_calendar(db, sido, sigungu, start, end=""):
         m += dt.timedelta(days=7)
     wos = [mon_wo[m] for m in mons if m in mon_wo]
     weather, stn = safe.call("날씨(일정)", _weather, db, sido, sigungu, wos, default=({}, None))
+    st = None if daily.paused("weather_attach") else safe.call("날씨 관측소(일정)", daily.station, db, sido, sigungu)
+    wline = safe.call("그 주 날씨(일정)", daily.week_weather, db, st[0], wos, default={}) if st else {}
     try:
         hd_all = {d for (d,) in db.execute("SELECT day FROM holidays WHERE day BETWEEN ? AND ?",
                                            (mons[0].isoformat(), (mons[-1] + dt.timedelta(days=6)).isoformat()))}
@@ -131,8 +134,11 @@ def region_calendar(db, sido, sigungu, start, end=""):
             if A.is_suspect(sido, sigungu, wo):
                 inflow["원자료 확인 필요 구간"] = A.SUSPECT_FLAG
                 sus_wos.append(wo)
-        weeks.append({"주차": P["me"][wo][0] if wo else _label(mon), "기간(월~일)": f"{mon}~{sun}", "일정": ev,
-                      "그 주 유입": inflow})
+        wk = {"주차": P["me"][wo][0] if wo else _label(mon), "기간(월~일)": f"{mon}~{sun}", "일정": ev,
+              "그 주 유입": inflow}
+        if wo in wline:
+            wk["그 주 날씨"] = wline[wo]
+        weeks.append(wk)
     hist = safe.call("벚꽃·단풍 지난 기록(일정)", season.history, P, sido, sigungu,
                      skip_year=range(a.year, z.year + 1), default=[]) if season.spots(sido, sigungu) else []
     out = {"지역": f"{sido} {sigungu}", "기간": f"{a}~{z}", "일정 있는 주": n_ev, "주별": weeks,
@@ -144,8 +150,12 @@ def region_calendar(db, sido, sigungu, start, end=""):
                   "벚꽃·단풍 날짜는 기상청 관측일이다. 웹 기사의 예보·예상 날짜보다 이 날짜를 먼저 말하고, 웹 내용은 출처를 나눠 덧붙일 것.",
                   "지난 기록은 조회한 해를 빼고 계산한다(get_bloom_foliage와 같은 숫자).",
                   "'그 주 유입'은 analyze_region_week와 같은 계산이다. 더 자세한 판정(비교군·평소 값)은 그 도구로 볼 것.",
-                  "축제 일정은 주로 문체부 연초 계획이라 실제와 다를 수 있다(일부는 언론 보도로 확인). 공연은 큰 공연장(3천 석 이상)만, 날씨는 큰 눈·비만 있다.",
+                  "축제 일정은 주로 문체부 연초 계획이라 실제와 다를 수 있다(일부는 언론 보도로 확인). 공연은 큰 공연장(3천 석 이상)만 있다. "
+                  "날씨는 주마다 '그 주 날씨' 한 줄(관측소 값)이 있고, 큰 눈·비는 일정에도 넣었다.",
+                  daily.WEATHER_RULE,
                   "자료 기준 뒤의 일정·유입은 없다. 그 뒤를 물으면 '이 서비스에는 ○○까지 있다'고 말하고 원출처를 안내할 것."]}
+    if wline:
+        out["날씨 관측소"] = f"{st[1]}({st[0]}), {st[2]}. 관측소 값이라 산간·해안은 실제와 다를 수 있음"
     if sus_wos:
         out["주의"] = A.suspect(sido, sigungu, min(sus_wos), max(sus_wos))
     if hist:
