@@ -10,7 +10,11 @@ import analysis
 HERE = Path(__file__).resolve().parent
 FLOW_WEEKS = 52          # 주 단위 흐름은 한 번에 1년
 RANK_DEFAULT, RANK_MAX = 20, 100
-AREAS = ("전체", "인구감소지역", "인구감소관심지역", "인구활력+지역")
+AREAS = ("전체", "인구감소지역", "인구활력+지역")   # 인구감소지역은 관심지역 포함(2026-11-22 Kevin). 옛 값 '인구감소관심지역'도 같은 범위로 받음
+AREA_NAME = {"인구감소지역": "인구감소지역(관심지역 포함 110곳)", "인구감소관심지역": "인구감소지역(관심지역 포함 110곳)",
+             "인구활력+지역": "인구활력+지역(12곳)"}
+MARK_NOTES = ["*는 인구감소관심지역(18곳), 표시 없는 곳은 인구감소지역(92곳)이에요.",
+              "+는 인구활력+지역(12곳)이에요. 여건이 나아져 5년간 지원을 이어 받는 곳이에요."]
 DEPOP_SOURCE = "행정안전부 2026-10-07 인구감소지역·인구감소관심지역 재지정·고시"
 _DEPOP = None
 
@@ -36,10 +40,8 @@ def in_area(key, area):
     d = depop().get(key)
     if not d:
         return False
-    if area == "인구감소지역":
-        return d[0] == "감소"
-    if area == "인구감소관심지역":
-        return d[0] == "관심"
+    if area in ("인구감소지역", "인구감소관심지역"):
+        return True
     return d[1]
 
 
@@ -105,8 +107,12 @@ def breakdown(db, direction, category, a, b):
 
 def rank(db, direction, a, b, top, rank_from, area, pop_of):
     """시군구 '많이 오는 곳': 그 기간 관외 이동 하루 평균 건수 순. pop_of(sido, sigungu) → 주민 수."""
-    rows = db.execute("SELECT sido, item, week_order, outside FROM moves WHERE direction=? AND category='시군구' "
-                      "AND week_order BETWEEN ? AND ?", (direction, a, b)).fetchall()
+    if direction == "유입" and analysis._ALL is not None:
+        # 서버 저장소가 느려 긴 기간을 DB에서 읽으면 2분이 넘음 → 판정 쪽이 메모리에 올려 둔 관외 유입을 씀
+        rows = [(sd, sg, wo, v) for (sd, sg), ser in analysis._ALL.items() for wo, _wk, v in ser if a <= wo <= b]
+    else:
+        rows = db.execute("SELECT sido, item, week_order, outside FROM moves WHERE direction=? AND category='시군구' "
+                          "AND week_order BETWEEN ? AND ?", (direction, a, b)).fetchall()
     if not rows:
         return None
     acc, names, weeks = {}, {}, set()
@@ -118,8 +124,12 @@ def rank(db, direction, a, b, top, rank_from, area, pop_of):
         names[k] = (sd, sg)
         weeks.add(wo)
     n_weeks = len(weeks)
-    lst = []
+    last = max(weeks)
+    lst, gone = [], []
     for k, wv in acc.items():
+        if last not in wv:          # 기간 끝에 자료가 없는 이름(개편으로 없어진 옛 이름 등)은 순위에서 뺌
+            gone.append(k)
+            continue
         if not in_area(k, area):
             continue
         lst.append((mean(wv.values()), k, len(wv)))
@@ -131,25 +141,33 @@ def rank(db, direction, a, b, top, rank_from, area, pop_of):
     out_rows = []
     for i, (v, k, nw) in enumerate(part, start):
         sd, sg = names[k]
-        row = {"순위": i, "지역": f"{sd} {sg}", "하루 평균 관외 이동(건)": round(v)}
+        mark = ""
+        if area != "전체":
+            kind, plus = dp.get(k, (None, False))
+            mark = ("*" if kind == "관심" else "") + ("+" if plus else "")
+        row = {"순위": i, "지역": f"{sd} {sg}{mark}", "하루 평균 관외 이동(건)": round(v)}
         p = pop_of(sd, sg)
         if p:
             row["주민 1명당(건)"] = round(v / p, 2)
         if nw < n_weeks:
             row["자료 있는 주"] = f"{nw}/{n_weeks}주(행정구역 개편 등으로 일부 기간만 있음)"
-        if area != "전체" and dp.get(k, (None, False))[1]:
-            row["인구활력+지역"] = "여건이 나아져 5년간 지원을 이어 받는 곳"
         out_rows.append(row)
     noun = "외부에서 들어오는 이동이 많은 곳" if direction == "유입" else "다른 지역으로 나가는 이동이 많은 곳"
     out = {
         "이름": noun,
-        "지역 범위": area + (f"({DEPOP_SOURCE})" if area != "전체" else ""),
+        "지역 범위": AREA_NAME.get(area, area) + (f"({DEPOP_SOURCE})" if area != "전체" else ""),
         "읽는 법": ["많이 오는 곳은 지역 크기와 주변 인구에 따라 정해지는 면이 커요. 좋고 나쁨을 뜻하지 않아요.",
                  "지역이 작게 나뉜 곳(구)일수록 옆 지역에서 온 이동까지 들어가 크게 잡혀요. 넓은 시·군과 바로 견줄 때는 이 점을 함께 봐 주세요.",
                  "이 순위는 이동이 '많은' 곳이다. 평소보다 '늘어난' 곳은 find_unusual_regions로 따로 본다."],
         "지역 수": len(lst),
         "순위": out_rows,
     }
+    if area != "전체":
+        out["표시"] = MARK_NOTES
+    if gone:
+        olds = sorted({names[k][1] if names[k][1].endswith("시") else f"{names[k][0][:2]} {names[k][1]}" for k in gone})
+        out["행정구역이 바뀐 곳"] = (f"기간 중 행정구역이 바뀐 곳은 기간 끝의 이름만 넣었어요(빠진 옛 이름: {', '.join(olds)}). "
+                             "옛 이름은 그 이름으로 흐름을 따로 볼 수 있어요.")
     if start - 1 + top < len(lst):
         nxt = start + top
         out["이어서"] = (f"{len(lst)}곳 가운데 {start}~{start - 1 + len(part)}위를 보여 드렸어요. 이어서 {nxt}~{min(nxt + top - 1, len(lst))}위를 "

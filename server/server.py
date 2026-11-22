@@ -69,7 +69,7 @@ db = _ThreadDB(DB)
 SERVICE = "빅데이터 Insight: 지역별 유입인구"
 # 도구 목록이 바뀌면(추가·삭제·입력값·설명) 세 값을 같이 고친다. 회귀 시험이 TOOLS와 실제 도구가 다르면 잡는다.
 # 결과마다 붙여서, 예전에 연결한 이용자에게도 AI가 '새 도구가 생겼으니 다시 연결'을 알려 주게 한다(claude/변경_관리_원칙.md).
-VERSION = "0.6.1"
+VERSION = "0.6.2"
 TOOLS_CHANGED = "2026-11-22"
 TOOLS = ["get_metadata", "list_regions", "get_movement", "analyze_region_week",
          "find_unusual_regions", "estimate_life_pop", "forecast_festival", "get_datalab_daily", "report_issue",
@@ -510,9 +510,10 @@ def _week_range(start_week, end_week, direction):
 
 RankTop = Annotated[int, Field(description="시군구 순위에서 몇 곳까지(1~100, 기본 20)", ge=1, le=100)]
 RankFrom = Annotated[int, Field(description="시군구 순위를 몇 위부터 보여 줄지(기본 1, 이어서 볼 때 결과의 안내대로)", ge=1)]
-Area = Annotated[Literal["전체", "인구감소지역", "인구감소관심지역", "인구활력+지역"],
-                 Field(description="시군구 순위의 지역 범위. 행정안전부 2026-10 재지정 목록(인구감소지역 92·관심지역 18, "
-                                   "인구활력+지역 12는 그 안에서 여건이 나아진 곳)")]
+Area = Annotated[Literal["전체", "인구감소지역", "인구활력+지역", "인구감소관심지역"],
+                 Field(description="시군구 순위의 지역 범위. 행정안전부 2026-10 재지정 목록. '인구감소지역'은 관심지역을 포함한 110곳"
+                                   "(결과에서 관심지역은 이름 옆 *), '인구활력+지역'은 그 안에서 여건이 나아진 12곳(이름 옆 +). "
+                                   "'인구감소관심지역'은 예전 값으로 '인구감소지역'과 같다. 결과의 '표시'를 함께 전할 것.")]
 
 
 @mcp.tool(annotations=READ_ONLY)
