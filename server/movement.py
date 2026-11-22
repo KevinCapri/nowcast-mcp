@@ -105,8 +105,12 @@ def breakdown(db, direction, category, a, b):
 
 def rank(db, direction, a, b, top, rank_from, area, pop_of):
     """시군구 '많이 오는 곳': 그 기간 관외 이동 하루 평균 건수 순. pop_of(sido, sigungu) → 주민 수."""
-    rows = db.execute("SELECT sido, item, week_order, outside FROM moves WHERE direction=? AND category='시군구' "
-                      "AND week_order BETWEEN ? AND ?", (direction, a, b)).fetchall()
+    if direction == "유입" and analysis._ALL is not None:
+        # 서버 저장소가 느려 긴 기간을 DB에서 읽으면 2분이 넘음 → 판정 쪽이 메모리에 올려 둔 관외 유입을 씀
+        rows = [(sd, sg, wo, v) for (sd, sg), ser in analysis._ALL.items() for wo, _wk, v in ser if a <= wo <= b]
+    else:
+        rows = db.execute("SELECT sido, item, week_order, outside FROM moves WHERE direction=? AND category='시군구' "
+                          "AND week_order BETWEEN ? AND ?", (direction, a, b)).fetchall()
     if not rows:
         return None
     acc, names, weeks = {}, {}, set()
@@ -118,8 +122,12 @@ def rank(db, direction, a, b, top, rank_from, area, pop_of):
         names[k] = (sd, sg)
         weeks.add(wo)
     n_weeks = len(weeks)
-    lst = []
+    last = max(weeks)
+    lst, gone = [], []
     for k, wv in acc.items():
+        if last not in wv:          # 기간 끝에 자료가 없는 이름(개편으로 없어진 옛 이름 등)은 순위에서 뺌
+            gone.append(k)
+            continue
         if not in_area(k, area):
             continue
         lst.append((mean(wv.values()), k, len(wv)))
@@ -150,6 +158,10 @@ def rank(db, direction, a, b, top, rank_from, area, pop_of):
         "지역 수": len(lst),
         "순위": out_rows,
     }
+    if gone:
+        olds = sorted({names[k][1] if names[k][1].endswith("시") else f"{names[k][0][:2]} {names[k][1]}" for k in gone})
+        out["행정구역이 바뀐 곳"] = (f"기간 중 행정구역이 바뀐 곳은 기간 끝의 이름만 넣었어요(빠진 옛 이름: {', '.join(olds)}). "
+                             "옛 이름은 그 이름으로 흐름을 따로 볼 수 있어요.")
     if start - 1 + top < len(lst):
         nxt = start + top
         out["이어서"] = (f"{len(lst)}곳 가운데 {start}~{start - 1 + len(part)}위를 보여 드렸어요. 이어서 {nxt}~{min(nxt + top - 1, len(lst))}위를 "
