@@ -542,10 +542,12 @@ def scale(base, s):
 STRONG_X = 2   # '많음' 문턱(평소 출렁임의 배수). 기간 순위의 STRONG과 같은 값
 
 
-def analyze(db, sido, sigungu, week_order):
+def analyze(db, sido, sigungu, week_order, P=None):
+    """P: 같은 지역의 prepare 결과를 이미 만들어 뒀으면 넘김(compare_same_week가 해마다 다시 만들지 않게, 2026-11-23)."""
     import timing
-    with timing.step("analysis.prepare(시계열·비교군)"):
-        P = prepare(db, sido, sigungu)
+    if P is None:
+        with timing.step("analysis.prepare(시계열·비교군)"):
+            P = prepare(db, sido, sigungu)
     if not P:
         return {"error": "지역을 찾지 못함. list_regions로 시도·시군구 이름을 확인할 것."}
     rows, me, peers, pdev = P["rows"], P["me"], P["peers"], P["pdev"]
