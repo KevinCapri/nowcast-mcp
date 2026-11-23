@@ -1353,7 +1353,15 @@ def get_datalab_daily(sido: Sido, sigungu: Sigungu, start_date: str, end_date: s
         nc_end = max(R.nc) + dt.timedelta(days=6)
     end_avail = max(x for x in (last, nc_end) if x) if last else None
     if end_avail is None or a > end_avail:
-        return {"error": "그 기간 자료가 없음(관광공사 값은 약 한 달 늦게 나옴). get_data_status로 최신 날짜를 확인할 것."}
+        # 0.6.4: 볼 수 있는 날짜를 함께 알려 줌(11-22 TEST: '지난주'를 물으면 AI가 추정이 있는 날 대신 관광공사 값 끝 주를 권했음)
+        if end_avail is None:
+            return {"error": "그 기간 자료가 없음(관광공사 값은 약 한 달 늦게 나옴). get_data_status로 최신 날짜를 확인할 것."}
+        msg = f"그 기간은 아직 자료가 없음. 관광공사 값은 {daily.date_ko(last)}까지"
+        if nc_end and nc_end > last:
+            msg += f", 그 뒤 {daily.date_ko(nc_end)}까지는 이 서비스의 추정 범위로 볼 수 있음"
+        msg += (f". {daily.date_ko(end_avail)} 이전 날짜로 다시 물을 수 있다고 안내할 것"
+                "(관광공사 값은 약 한 달, 이동 자료는 주가 끝나고 약 열흘 늦게 나옴).")
+        return {"error": msg}
     full_a, full_b = a, min(b, end_avail)
     if b > end_avail:
         notes.append(f"{daily.date_ko(end_avail)}까지만 있어요(그 뒤는 아직 자료가 없음).")
