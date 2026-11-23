@@ -32,3 +32,5 @@ jobs:
         run: python tests/test_latest_week.py
       - name: KOSIS 표 메모리 시험
         run: python tests/test_kosis_memory.py
+      - name: 이동 표 메모리 시험
+        run: python tests/test_moves_memory.py

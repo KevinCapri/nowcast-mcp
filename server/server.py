@@ -479,9 +479,16 @@ def list_regions(keyword: str = "") -> list:
     """시도·시군구 이름을 검색한다. 시군구 이름은 여러 시도에 겹친다(예: 중구, 동구, 서구).
     지역 값을 조회하기 전에 이 도구로 정확한 '시도'와 '시군구' 짝을 먼저 확인할 것.
     keyword를 비우면 시도 목록만 돌려준다."""
+    names = analysis._NAMES
     if not keyword:
+        if names is not None:
+            return [{"시도": s} for s in names["sido"]]
         rows = db.execute("SELECT DISTINCT sido FROM moves WHERE category='시도' ORDER BY sido").fetchall()
         return [{"시도": r[0]} for r in rows]
+    # 메모리 목록에서 찾음(2026-11-23, 표 전체를 훑어 3.6초). LIKE와 뜻이 달라질 수 있는 글자(%, _, 영문 대소문자)는 전처럼 DB
+    if names is not None and not any(ch in keyword for ch in "%_") and keyword == keyword.lower() == keyword.upper():
+        return [{"시도": a, "시군구": b} for a, b in names["sgg"]
+                if (b is not None and keyword in b) or (a is not None and keyword in a)]
     rows = db.execute(
         "SELECT DISTINCT sido, sigungu FROM moves WHERE category='시군구' "
         "AND (sigungu LIKE ? OR sido LIKE ?) ORDER BY sido, sigungu",
@@ -1105,7 +1112,7 @@ def find_unusual_regions(week: OneWeek = "", top: Top = 15, start_week: StartWee
         if week:
             wo = _order(week)
         else:
-            wo = db.execute("SELECT MAX(week_order) FROM moves WHERE direction='유입' AND category='시군구'").fetchone()[0]
+            wo = analysis.latest_inflow_week(db)
     except Exception:
         return {"error": "week 형식은 'YYYY.MM.N주차'(예: '2026.10.5주차')."}
     rows = analysis.rank_week(db, wo)

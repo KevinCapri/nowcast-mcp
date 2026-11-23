@@ -107,9 +107,10 @@ def breakdown(db, direction, category, a, b):
 
 def rank(db, direction, a, b, top, rank_from, area, pop_of):
     """시군구 '많이 오는 곳': 그 기간 관외 이동 하루 평균 건수 순. pop_of(sido, sigungu) → 주민 수."""
-    if direction == "유입" and analysis._ALL is not None:
-        # 서버 저장소가 느려 긴 기간을 DB에서 읽으면 2분이 넘음 → 판정 쪽이 메모리에 올려 둔 관외 유입을 씀
-        rows = [(sd, sg, wo, v) for (sd, sg), ser in analysis._ALL.items() for wo, _wk, v in ser if a <= wo <= b]
+    mem = analysis._ALL if direction == "유입" else analysis._ALL_OUT
+    if mem is not None:
+        # 서버 저장소가 느려 긴 기간을 DB에서 읽으면 2분이 넘음 → 메모리에 올려 둔 관외 유입·유출을 씀(유출은 2026-11-23부터)
+        rows = [(sd, sg, wo, v) for (sd, sg), ser in mem.items() for wo, _wk, v in ser if a <= wo <= b]
     else:
         rows = db.execute("SELECT sido, item, week_order, outside FROM moves WHERE direction=? AND category='시군구' "
                           "AND week_order BETWEEN ? AND ?", (direction, a, b)).fetchall()
