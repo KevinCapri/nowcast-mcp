@@ -13,6 +13,11 @@
 - 세션 번호(2026-11-23): 서버는 요청마다 따로 처리(stateless)하지만, 처음 연결(initialize) 응답에 무작위 번호를 붙여 준다.
   AI가 그 번호를 다음 요청 헤더(mcp-session-id)에 들고 오면 기록에 같이 적어, 한 번 이용에서 어떤 Tool을 어떤 순서로
   불렀는지 묶어 볼 수 있다. 서버는 번호를 기억·검사하지 않으므로 재시작·배포해도 연결이 끊기지 않는다
+- ChatGPT는 tools/call에 헤더 번호를 다시 보내지 않는다(2026-11-23 확인). 대신 Tool 호출 _meta["openai/session"]
+  (OpenAI가 대화 안 요청을 묶으라고 주는 익명 대화 번호)을 한 번 더 뒤섞어(sha256) 앞 12자리를 세션 칸에 쓴다.
+  원래 값은 남기지 않고, 사람 단위 번호(openai/subject)·위치 등 다른 _meta는 읽지 않는다
+- 꼬리표 이름(임시, 2026-11-23~): Claude 등 다른 AI에도 대화 번호 같은 칸이 있는지 보려고, tools/call _meta의 칸 이름만
+  (값은 빼고) usage meta 칸에 적는다. 쓸 칸을 찾으면 이 기록은 뺀다
 - 운영자 화면: /admin (앱 설정 ADMIN_PW가 있을 때만 열림, 비밀번호만 넣는 로그인 화면)
 - 1년 지난 기록은 지움
 - 속도 측정(GitHub Actions, User-Agent에 insight-monitor)의 요청은 연결한 곳을 '측정'으로 남기고, 이용 집계에서는 뺀다
@@ -25,6 +30,7 @@
 """
 import collections
 import datetime as dt
+import hashlib
 import json
 import re
 import os
@@ -111,8 +117,11 @@ def _con():
     con.execute("CREATE TABLE IF NOT EXISTS usage(at TEXT, tool TEXT, args TEXT, ok INT, ms INT)")
     if "client" not in [r[1] for r in con.execute("PRAGMA table_info(usage)")]:
         con.execute("ALTER TABLE usage ADD COLUMN client TEXT DEFAULT ''")
-    if "session" not in [r[1] for r in con.execute("PRAGMA table_info(usage)")]:
+    cols = [r[1] for r in con.execute("PRAGMA table_info(usage)")]
+    if "session" not in cols:
         con.execute("ALTER TABLE usage ADD COLUMN session TEXT DEFAULT ''")
+    if "meta" not in cols:
+        con.execute("ALTER TABLE usage ADD COLUMN meta TEXT DEFAULT ''")
     con.execute("CREATE TABLE IF NOT EXISTS slow(at TEXT, tool TEXT, args TEXT, ms INT, client TEXT, cold INT, "
                 "steps TEXT)")
     return con
@@ -142,6 +151,35 @@ def session_tag(raw: str) -> str:
     return raw.replace("-", "").lower()[:12]
 
 
+def meta_session(body: bytes) -> str:
+    """tools/call의 _meta["openai/session"](ChatGPT 대화 번호)을 뒤섞은 앞 12자리. 없으면 빈칸."""
+    try:
+        j = json.loads(body or b"null")
+    except Exception:
+        return ""
+    for it in (j if isinstance(j, list) else [j]):
+        if isinstance(it, dict) and it.get("method") == "tools/call":
+            v = ((it.get("params") or {}).get("_meta") or {}).get("openai/session")
+            if isinstance(v, str) and v:
+                return "o" + hashlib.sha256(v.encode()).hexdigest()[:11]
+    return ""
+
+
+def meta_keys(body: bytes) -> str:
+    """tools/call _meta의 칸 이름만(값 없이) 쉼표로. 임시 진단용."""
+    try:
+        j = json.loads(body or b"null")
+    except Exception:
+        return ""
+    keys = set()
+    for it in (j if isinstance(j, list) else [j]):
+        if isinstance(it, dict) and it.get("method") == "tools/call":
+            m = (it.get("params") or {}).get("_meta")
+            if isinstance(m, dict):
+                keys.update(str(k)[:40] for k in m)
+    return ",".join(sorted(keys))[:300]
+
+
 def is_initialize(body: bytes) -> bool:
     """요청 본문이 처음 연결(initialize)인지."""
     try:
@@ -168,7 +206,7 @@ def tool_calls(body: bytes):
     return out
 
 
-def record(calls, ok, ms, client="", steps=None, session=""):
+def record(calls, ok, ms, client="", steps=None, session="", meta=""):
     if not calls:
         return
     cold = int(time.time() - _reloaded[0] < COLD_SEC + ms / 1000)
@@ -180,9 +218,9 @@ def record(calls, ok, ms, client="", steps=None, session=""):
                 con = _con()
                 now = dt.datetime.now(KST)
                 at = now.isoformat(timespec="seconds")
-                con.executemany("INSERT INTO usage(at, tool, args, ok, ms, client, session) VALUES (?,?,?,?,?,?,?)",
+                con.executemany("INSERT INTO usage(at, tool, args, ok, ms, client, session, meta) VALUES (?,?,?,?,?,?,?,?)",
                                 [(at, t, a, int(ok), int(ms),
-                                  client or ("사이트" if t.startswith("web:") else ""), session) for t, a in calls])
+                                  client or ("사이트" if t.startswith("web:") else ""), session, meta) for t, a in calls])
                 if slow:
                     con.executemany("INSERT INTO slow(at, tool, args, ms, client, cold, steps) VALUES (?,?,?,?,?,?,?)",
                                     [(at, t, a, int(ms), client, cold,
