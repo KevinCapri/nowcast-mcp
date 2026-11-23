@@ -11,8 +11,15 @@
   400을 다시 시도하며 계속 불러 11-21~22 2시간씩 헛돎 → 모든 호출 사이를 MIN_GAP초 이상 띄우고(초당 4번 아래),
   막힘(400·'Request Blocked')이 오면 다시 시도하지 않고 그 자리에서 이번 받기를 멈춘다(실패 메일이 감).
 - 공연 목록(pblprfr)은 개발가이드상 한 번에 31일까지 → 31일씩 요청
+- 연결이 안 될 때(2026-11-23 저녁, 응답 없이 ConnectTimeout만 나며 2시간을 헛돎): 차단 응답이 없으면 위 '막힘'으로
+  잡히지 않아 구간마다 4번씩 다시 시도했다 → 조금씩 확인하고 넓힌다.
+  ① 처음에 한 번 불러 보기(안 되면 30초 쉬고 한 번 더). 두 번 다 안 되면 그 자리에서 멈춤(실패 메일)
+  ② 직전 받기가 실패였으면 이번엔 큰 공연장 SAMPLE곳의 최근 기간만 받고 끝냄(종료 코드 3 = '샘플만 받음'.
+     update.py는 성공으로 치지 않아 다음 실행 때 다시 돌고, 실패 메일도 보내지 않음)
+  ③ 샘플이 됐으면 다음 실행 때 전체
+  ④ 전체를 받는 도중 연결 실패(시간 초과 등)가 FAIL_RUN번 이어지면 그 자리에서 멈춤
 
-쓰는 법: python pipeline/load_kopis.py [--full]
+쓰는 법: python pipeline/load_kopis.py [--full]   (--full: 샘플 단계 없이 지난 자료까지 처음부터 다시)
 """
 import datetime as dt
 import sys
@@ -25,27 +32,45 @@ BASE = "http://www.kopis.or.kr/openApi/restful"
 BIG_SEATS = 3000
 MIN_GAP = 0.25          # 호출 사이 최소 간격(초). KOPIS 한도는 IP당 초당 10번
 SPAN = 31               # 공연 목록 한 번에 요청하는 날 수(개발가이드 최대 31일)
+SAMPLE = 5              # 직전 받기가 실패였을 때 먼저 받아 볼 큰 공연장 수
+FAIL_RUN = 2            # 연결 실패가 이만큼 이어지면 받기를 멈춤
+PARTIAL = 3             # 샘플만 받고 끝냈을 때의 종료 코드(update.py가 알아봄)
 _last = [0.0]
+_fails = [0]            # 이어진 연결 실패 수
 
 
 class Blocked(RuntimeError):
     """KOPIS가 이 서버 IP를 막음(400·'Request Blocked'). 다시 시도하면 차단이 길어지므로 받기를 멈춘다."""
+
+
+class Unreachable(Blocked):
+    """KOPIS에 연결이 안 됨(시간 초과 등, 응답이 없음). KOPIS 차단·KOPIS 점검·우리 서버 쪽 문제 중 무엇인지는 모름."""
+
+
+def _conn_fail(e):
+    return any(w in str(e) for w in ("Timeout", "ConnectionError"))
+
 START = dt.date(2023, 1, 1)
 SIDO_ALIAS = {"강원도": "강원특별자치도", "전라북도": "전북특별자치도"}
 
 
-def xml(path, **params):
+def xml(path, _tries=4, _wait=10, **params):
     gap = MIN_GAP - (time.monotonic() - _last[0])
     if gap > 0:
         time.sleep(gap)
     try:
-        r = get(f"{BASE}/{path}", params=params, timeout=60, wait=10)   # 400은 다시 시도하지 않음(막힘)
+        r = get(f"{BASE}/{path}", params=params, tries=_tries, timeout=60, wait=_wait)   # 400은 다시 시도하지 않음(막힘)
     except RuntimeError as e:
         if "HTTP 400" in str(e) or "HTTP 429" in str(e):
             raise Blocked(f"KOPIS가 요청을 막음({path}): {e}") from None
+        if _conn_fail(e):
+            _fails[0] += 1
+            if _fails[0] >= FAIL_RUN:
+                raise Unreachable(f"KOPIS 연결 실패가 {_fails[0]}번 이어짐({path}): {e}") from None
         raise
     finally:
         _last[0] = time.monotonic()
+    _fails[0] = 0
     r.encoding = "utf-8"
     if "Request Blocked" in r.text[:500]:
         raise Blocked(f"KOPIS가 요청을 막음({path}): Request Blocked")
@@ -81,7 +106,46 @@ def setup(con):
     CREATE INDEX IF NOT EXISTS kopis_perf_venue ON kopis_perf(mt10id, s, e);
     CREATE TABLE IF NOT EXISTS kopis_backfill(mt10id TEXT PRIMARY KEY, done TEXT);
     CREATE INDEX IF NOT EXISTS kopis_venue_region ON kopis_venue(sido, sigungu);
+    CREATE TABLE IF NOT EXISTS kopis_state(k TEXT PRIMARY KEY, v TEXT);
     """)
+
+
+def state(con, v=None):
+    """직전 받기 결과: 'ok'(전체 성공) / 'sample_ok'(샘플만 됨) / 'fail'. 기록이 없으면 'fail'로 봄(이 기능을 넣은 2026-11-23 저녁에 직전 받기가 실패였음, 처음 까는 곳도 샘플부터)."""
+    if v is None:
+        row = con.execute("SELECT v FROM kopis_state WHERE k='last'").fetchone()
+        return row[0] if row else "fail"
+    con.execute("INSERT OR REPLACE INTO kopis_state VALUES('last', ?)", (v,))
+    con.commit()
+
+
+def probe(k):
+    """받기 전에 한 번 불러 보기. 안 되면 30초 쉬고 한 번 더, 두 번 다 안 되면 Unreachable(막힘이면 Blocked)."""
+    try:
+        xml("prfplc", _tries=2, _wait=30, service=k, cpage=1, rows=1)
+    except Blocked:
+        raise
+    except Exception as e:
+        raise Unreachable(f"처음 불러 보기 두 번 모두 실패: {e}") from None
+    print("처음 불러 보기 성공", flush=True)
+
+
+def load_sample(con, k):
+    """큰 공연장 SAMPLE곳의 최근 기간만 받아 본다(지난 자료를 다 받은 곳부터). (받은 건수, 실패한 구간 수)"""
+    rows = con.execute("SELECT v.mt10id, v.name FROM kopis_venue v JOIN kopis_backfill b USING(mt10id) "
+                       "WHERE v.seats>=? ORDER BY v.mt10id LIMIT ?", (BIG_SEATS, SAMPLE)).fetchall()
+    if len(rows) < SAMPLE:
+        rows = con.execute("SELECT mt10id, name FROM kopis_venue WHERE seats>=? ORDER BY mt10id LIMIT ?",
+                           (BIG_SEATS, SAMPLE)).fetchall()
+    today = dt.date.today()
+    n = bad = 0
+    for vid, vname in rows:
+        m, b = _venue_range(con, k, vid, vname, today - dt.timedelta(days=90), today + dt.timedelta(days=180),
+                            today.isoformat())
+        n += m
+        bad += b
+    print(f"샘플 {len(rows)}곳: 공연 {n}건 받음, 실패한 구간 {bad}개", flush=True)
+    return n, bad
 
 
 def load_venues(con, k):
@@ -198,9 +262,20 @@ def main():
     full = "--full" in sys.argv
     con = connect()
     setup(con)
+    sample = state(con) == "fail" and not full
+    state(con, "fail")                     # 끝까지 못 가고 끊겨도(2시간 제한 등) '실패'로 남게 먼저 적음
     try:
-        load_venues(con, k)
-        got, bad = load_perfs(con, k, full)
+        probe(k)
+        if sample:
+            got, bad = load_sample(con, k)
+        else:
+            load_venues(con, k)
+            got, bad = load_perfs(con, k, full)
+    except Unreachable as e:               # 연결이 안 되면 더 부르지 않고 실패로 끝냄(메일)
+        con.commit()
+        con.close()
+        sys.exit(f"{e}\n→ 이번 받기를 멈춤(연결 안 됨). KOPIS 차단·KOPIS 점검·우리 서버 쪽 문제 중 무엇인지 모름 → "
+                 "update.log에서 이번 받기의 앞부분을 보고, Kudu에서 KOPIS와 다른 사이트에 한 번씩 접속해 볼 것")
     except Blocked as e:                   # 막히면 더 부르지 않고 실패로 끝냄(메일). 30~40분 뒤 풀림, 계속되면 KOPIS에 회신
         con.commit()
         con.close()
@@ -208,9 +283,16 @@ def main():
                  "kopis@gokams.or.kr에 회신(아직 차단 중이라고)")
     cnt = con.execute("SELECT COUNT(*), MIN(s), MAX(e) FROM kopis_perf").fetchone()
     print(f"쌓인 공연 {cnt[0]}건 ({cnt[1]} ~ {cnt[2]})", flush=True)
-    con.close()
     if bad and not got:                    # 하나도 못 받고 전부 실패(인증키 만료 등)면 실패로 끝내 메일이 가게
+        con.close()
         sys.exit(f"공연을 하나도 받지 못함(실패 구간 {bad}개)")
+    if sample:
+        state(con, "sample_ok")
+        con.close()
+        print("샘플이 됨 → 다음 실행 때 전체를 받음", flush=True)
+        sys.exit(PARTIAL)
+    state(con, "ok")
+    con.close()
 
 
 if __name__ == "__main__":

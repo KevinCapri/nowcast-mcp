@@ -7,6 +7,8 @@
 - 결과는 /home/data/update_status.json(단계별 마지막 시도·성공·오류)에 남고, 출력은 update.log에 쌓인다.
 - 여러 개가 동시에 돌지 않게 잠금 파일을 쓴다.
 - 실패한 단계가 있으면 운영자에게 메일(notify.py).
+- 단계가 종료 코드 3(PARTIAL)으로 끝나면 '일부만 함'(KOPIS 샘플 받기): 성공으로 치지 않아 다음 실행 때 다시 돌고,
+  실패도 아니라 메일을 보내지 않는다. 직전 실패 기록(last_error)은 전체가 성공할 때까지 그대로 둔다.
 - 나우캐스트를 그날 새로 받았으면 원자료 이상 자동 검사(check_raw.py, 운영자 메일만)를 이어서 돌린다.
 
 쓰는 법:
@@ -34,6 +36,7 @@ STATUS = DATA / "update_status.json"
 LOG = DATA / "update.log"
 LOCK = DATA / "update.lock"
 KST = dt.timezone(dt.timedelta(hours=9))
+PARTIAL = 3     # 단계가 '일부만 함'으로 끝났을 때의 종료 코드(load_kopis.py 샘플 받기)
 
 # (이름, 실행할 명령, 며칠마다, 제한 시간(초))
 STEPS = [
@@ -83,6 +86,8 @@ def run_step(name, cmd, timeout, log):
     try:
         r = subprocess.run([sys.executable, "-u", str(HERE / cmd[0]), *cmd[1:]], stdout=log,
                            stderr=subprocess.STDOUT, timeout=timeout, cwd=HERE.parent)
+        if r.returncode == PARTIAL:
+            return PARTIAL
         return None if r.returncode == 0 else f"종료 코드 {r.returncode}"
     except subprocess.TimeoutExpired:
         return f"{timeout}초 넘어 멈춤"
@@ -194,6 +199,11 @@ def main():
                 s = st.setdefault(name, {})
                 s["last_try"] = now().isoformat(timespec="seconds")
                 err = run_step(name, cmd, timeout, log)
+                if err == PARTIAL:                       # 일부만 함: 성공도 실패도 아님(다음 실행 때 다시)
+                    s["last_partial"] = s["last_try"]
+                    save_status(st)
+                    print(name, "일부만 함(다음 실행 때 이어서)", flush=True)
+                    continue
                 if err:
                     log.flush()
                     s["last_error"] = f"{err}\n{tail(LOG)}"
