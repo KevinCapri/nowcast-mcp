@@ -126,7 +126,7 @@ class RequestLog:
         calls = guard.tool_calls(body)
         # 세션 번호(guard.py 설명): 처음 연결이면 새 번호를 응답 헤더로 주고, 아니면 들고 온 번호를 기록에 씀
         new_sid = uuid.uuid4().hex if guard.is_initialize(body) and not hd.get("mcp-session-id") else ""
-        session = guard.session_tag(new_sid or hd.get("mcp-session-id", ""))
+        session = guard.session_tag(new_sid or hd.get("mcp-session-id", "")) or guard.meta_session(body)
         it = iter(chunks)
 
         async def replay():
@@ -157,7 +157,7 @@ class RequestLog:
             ok = status[0] == 200 and b'"isError":true' not in resp[0] and b'"error"' not in resp[0][:200]
             rec = timing.end() if calls else None
             guard.record(calls, ok, (time.time() - t0) * 1000, guard.client_name(hd.get("user-agent", "")), rec,
-                         session=session)
+                         session=session, meta=guard.meta_keys(body))
             if REQUEST_LOG:
                 print(f"[req] {scope['method']} {scope['path']} ua={hd.get('user-agent', '')[:60]!r} sid={session[:4] or '-'} {_summary(body)} "
                       f"-> {status[0]} {resp[0][:300]!r}", flush=True)
