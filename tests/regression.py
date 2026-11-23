@@ -49,10 +49,14 @@ CASES = [
 KEYS = ["판정", "평소 출렁임의 몇 배", "평소 대비 변화(%)", "최종 변화(%)", "판정에 쓴 방식", "프로야구 홈경기 몫 추정(%)",
         "error"]
 
+MULT_NEW = "배수(이용자가 물을 때만 말함)"
+
 
 def core(tool, r):
     if not isinstance(r, dict):
         return {"type": str(type(r))}
+    if MULT_NEW in r and "평소 출렁임의 몇 배" not in r:   # 0.6.4 칸 이름 바뀜 → 옛 기준과 견주려고 옛 이름으로
+        r = {("평소 출렁임의 몇 배" if k == MULT_NEW else k): v for k, v in r.items()}
     out = {"keys": sorted(r.keys())}
     for k in KEYS:
         if k in r:
