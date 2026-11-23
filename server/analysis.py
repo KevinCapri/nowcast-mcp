@@ -592,7 +592,7 @@ def analyze(db, sido, sigungu, week_order, P=None):
         "판정에 쓴 방식": method,
         "최종 변화(%)": _pct(final),
         "평소 출렁임(%)": _pct(s),
-        "평소 출렁임의 몇 배": ratio,
+        "배수(이용자가 물을 때만 말함)": ratio,   # 0.6.4: 칸 이름 '평소 출렁임의 몇 배'를 AI가 그대로 읽어 '5.1배'로 말함 → 순위와 같은 이름
         "판정": verdict,
         "판정 말하는 법": speak(J, f"{sido} {sigungu}" if (sigungu.endswith("구") and " " not in sigungu) else sigungu,
                           f"{date_ko(week_order)}에"),

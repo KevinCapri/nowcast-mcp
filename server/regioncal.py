@@ -44,7 +44,7 @@ def _inflow(P, wo):
     j = A.judge_week(P, wo) if (P and wo in P["me"]) else None
     if not j:
         return None
-    out = {"판정": j["verdict"], "평소 출렁임의 몇 배": j["ratio"], "평소 대비 변화(%)": A._pct(j["dev"]),
+    out = {"판정": j["verdict"], "배수(이용자가 물을 때만 말함)": j["ratio"], "평소 대비 변화(%)": A._pct(j["dev"]),
            "관외 유입(일평균 건수)": round(j["v"])}
     if j.get("baseball") is not None:
         out["프로야구 홈경기 몫 추정(%)"] = A._pct(j["baseball"])
