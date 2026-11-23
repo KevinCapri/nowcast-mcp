@@ -1206,10 +1206,13 @@ def estimate_life_pop(sido: Sido, sigungu: Sigungu, year_month: YearMonth) -> di
     - 공표된 생활인구처럼 말하지 말 것. 반드시 '비공식 참고 추정치'라고 밝힐 것.
     - 공표되지 않은 지역은 타지역 통근 비율 30% 미만이면 공표 지역에서 배운 공식으로 범위를 준다(등급 B, 확인 불가능한 추정).
       30% 이상(대도시 구 등)은 추정하지 않는다.
-    - year_month 형식: 'YYYYMM' (예: '202610')."""
+    - year_month 형식: 'YYYY-MM'(예: '2026-09')."""
     ym = year_month.replace("-", "").replace(".", "")[:6]
     if not (len(ym) == 6 and ym.isdigit()):
-        return {"error": "year_month 형식은 'YYYYMM'(예: '202610')."}
+        return {"error": "year_month 형식은 'YYYY-MM'(예: '2026-09')."}
+    # 0.6.4: 목록에 없는 이름이면 다른 Tool처럼 먼저 알려 줌(11-22: '세종특별자치시/세종시'에 '통근 비율 자료 없음'이라는 엉뚱한 이유)
+    if not analysis.series(db, sido, sigungu):
+        return {"error": "지역을 찾지 못함. list_regions로 시도·시군구 이름을 확인할 것."}
     r = lifepop.estimate(db, sido, sigungu, ym)
     if "error" not in r:
         r["자료 기준"] = _as_of()
