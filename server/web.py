@@ -219,6 +219,14 @@ def refresh_lists():
         _hol_days.clear()
         _hol_days.update(_load_hol_days())
         print(f"[web] 지역별 시계열 {n}곳 메모리에 올림 ({time.time() - t:.1f}초)", flush=True)
+        # KOSIS 표(주민·외국인·통근·전입·생활인구)와 지역 연결표도 메모리로(0.6.4). 색인 없는 표를 요청마다 훑던 것
+        # (인구감소지역 순위 37~49초, '지역 성격' 2~5초)을 없앰. 실패하면 전처럼 DB에서 읽는다.
+        try:
+            t = time.time()
+            k = lifepop.load_memory(_conn())
+            print(f"[web] KOSIS 표·지역 연결표 {k}개 메모리에 올림 ({time.time() - t:.1f}초)", flush=True)
+        except Exception as e:
+            print("[web] KOSIS 표 메모리 올리기 실패", repr(e), flush=True)
         # find_unusual_regions의 가장 최근 주 전국 순위를 미리 계산해 둠(처음 부를 때 약 3.7초 걸리던 것).
         # rank_week는 (주차, 최신 주차)로 캐시하므로 새 자료가 들어오면 저절로 다시 계산된다.
         try:
