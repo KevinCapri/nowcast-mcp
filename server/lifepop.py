@@ -45,19 +45,80 @@ def _codes(db, sido, sigungu, col):
     """지역 연결표의 코드. 시도 이름이 바뀐 지역(전남광주통합특별시·군위)은 옛 이름·새 이름 줄을 모두 합친다
     (2026-11-14 시험 E6: 강진을 '전라남도'로 찾으면 7월 이후가 비어 추정이 막혔음)."""
     out = []
+    mem = _MEM.get("region_map")
     for sd, sg in A.variants(sido, sigungu):
-        try:
-            r = db.execute(f"SELECT {col} FROM region_map WHERE sido=? AND sigungu=?", (sd, sg)).fetchone()
-        except Exception:
-            r = None
+        if mem is not None and col in mem["cols"]:
+            v = mem["rows"].get((sd, sg), {}).get(col)
+            r = (v,) if v is not None else None
+        else:
+            try:
+                r = db.execute(f"SELECT {col} FROM region_map WHERE sido=? AND sigungu=?", (sd, sg)).fetchone()
+            except Exception:
+                r = None
         if r and r[0]:
             out += [c for c in str(r[0]).split(",") if c]
     return sorted(set(out))
 
 
+# ── KOSIS 표·지역 연결표를 메모리에 (0.6.4, 2026-11-23) ─────────────────────────────────────
+# kosis_* 표에는 색인이 없어(pipeline이 to_sql로 통째로 바꿔 씀) 느린 서버 저장소에서는 읽을 때마다 표 전체를 훑는다.
+# 인구감소지역 순위(top=100)가 순위 줄마다 주민·외국인 수를 다시 읽어 37~49초, '지역 성격'도 한 번에 2~5초 걸렸음(B.Box 11-23).
+# 서버 시작·자동 갱신 뒤(web.refresh_lists) 한 번에 읽어 표 → 지역 코드 → 항목 → {시점: 합계}로 두고, _by_period는 여기서 꺼낸다.
+# 값은 DB에서 읽던 것과 같다(같은 SUM을 코드·항목별로 미리 해 둔 것). 아직 안 올라왔거나 모르는 조건이면 전처럼 DB에서 읽는다.
+KOSIS_TABLES = ("kosis_life_pop", "kosis_reg_pop", "kosis_foreigners", "kosis_commute", "kosis_migration")
+_MEM = {}
+
+
+def load_memory(db):
+    """KOSIS 표 5개와 지역 연결표를 한 번에 읽어 메모리에 둔다. 자료가 바뀌면 다시 부른다. 읽은 표 수를 돌려준다."""
+    new = {}
+    for t in KOSIS_TABLES:
+        try:
+            agg = {}
+            for c1, itm, prd, v in db.execute(f"SELECT C1, ITM_ID, PRD_DE, SUM(CAST(DT AS REAL)) FROM {t} "
+                                              "GROUP BY C1, ITM_ID, PRD_DE"):
+                if v is not None:
+                    agg.setdefault(str(c1), {}).setdefault(str(itm), {})[str(prd)] = v
+            new[t] = agg
+        except Exception as e:          # 표가 없거나 모양이 다르면 그 표만 DB에서 읽게 둠
+            print(f"[lifepop] {t} 메모리 올리기 건너뜀", repr(e), flush=True)
+    try:
+        cur = db.execute("SELECT * FROM region_map")
+        cols = [d[0] for d in cur.description]
+        rows = {}
+        for r in cur.fetchall():
+            d = dict(zip(cols, r))
+            rows.setdefault((d.get("sido"), d.get("sigungu")), d)   # DB의 fetchone처럼 처음 줄
+        new["region_map"] = {"cols": set(cols), "rows": rows}
+    except Exception as e:
+        print("[lifepop] region_map 메모리 올리기 건너뜀", repr(e), flush=True)
+    _MEM.clear()
+    _MEM.update(new)
+    return len(new)
+
+
+def _item_of(extra):
+    """_by_period의 extra 조건 → 메모리에서 쓸 항목(None=모든 항목 합). 모르는 조건이면 False(DB에서 읽기)."""
+    e = " ".join(extra.split())
+    if not e:
+        return None
+    if e.startswith("AND ITM_ID='") and e.endswith("'") and e.count("'") == 2:
+        return e[len("AND ITM_ID='"):-1]
+    return False
+
+
 def _by_period(db, table, codes, extra=""):
     if not codes:
         return {}
+    mem, itm = _MEM.get(table), _item_of(extra)
+    if mem is not None and itm is not False:
+        out = {}
+        for c1 in set(map(str, codes)):
+            for it, ser in mem.get(c1, {}).items():
+                if itm is None or it == itm:
+                    for p, v in ser.items():
+                        out[p] = out.get(p, 0.0) + v
+        return out
     q = (f"SELECT PRD_DE, SUM(CAST(DT AS REAL)) FROM {table} WHERE C1 IN ({','.join('?' * len(codes))}) {extra} "
          "GROUP BY PRD_DE")
     return {str(p): v for p, v in db.execute(q, codes).fetchall() if v is not None}
