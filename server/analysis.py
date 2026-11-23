@@ -296,17 +296,40 @@ def is_long_holiday(h):
 
 
 _ALL = None   # (시도, 시군구) → [(주차 번호, 주차, 관외 유입)]. 서버 저장소가 느려 한 번에 읽어 메모리에 둠
+_ALL_OUT = None   # 같은 모양의 관외 유출(시군구 유출 순위용, 2026-11-23)
+_NAMES = None     # list_regions용: {"sgg": [(시도, 시군구)] 정렬, "sido": [시도] 정렬} (2026-11-23)
 
 
 def load_all(db):
-    """시군구 관외 유입 전체를 한 번에 읽어 둔다. 자료가 바뀌면 다시 부른다."""
-    global _ALL
+    """시군구 관외 유입·유출과 지역 이름 목록을 한 번에 읽어 둔다. 자료가 바뀌면 다시 부른다.
+    유출·이름 목록은 2026-11-23에 더함: 유출 순위가 긴 기간이면 표를 통째로 읽어 9~43초, list_regions가 3.6초 걸렸음."""
+    global _ALL, _ALL_OUT, _NAMES
     out = {}
     for sd, sg, wo, wk, v in db.execute("SELECT sido, item, week_order, week, outside FROM moves "
                                         "WHERE direction='유입' AND category='시군구' ORDER BY week_order"):
         out.setdefault((sd, sg), []).append((wo, wk, v))
     _ALL = out
+    try:
+        o, names = {}, set()
+        for sd, sg, wo, wk, v in db.execute("SELECT sido, item, week_order, week, outside FROM moves "
+                                            "WHERE direction='유출' AND category='시군구' ORDER BY week_order"):
+            o.setdefault((sd, sg), []).append((wo, wk, v))
+        for sd, sg in db.execute("SELECT DISTINCT sido, sigungu FROM moves WHERE category='시군구'"):
+            names.add((sd, sg))
+        sidos = [r[0] for r in db.execute("SELECT DISTINCT sido FROM moves WHERE category='시도' ORDER BY sido")]
+        _ALL_OUT = o
+        _NAMES = {"sgg": sorted(names, key=lambda x: (x[0] is not None, x[0] or "", x[1] is not None, x[1] or "")),
+                  "sido": sidos}
+    except Exception as e:      # 유출·이름 목록은 못 올려도 유입 판정은 그대로(전처럼 DB에서 읽음)
+        print("[analysis] 유출·이름 목록 메모리 올리기 실패", repr(e), flush=True)
     return len(out)
+
+
+def latest_inflow_week(db):
+    """시군구 유입 자료의 최신 주차. 메모리에 올라와 있으면 표를 훑지 않는다(2026-11-23)."""
+    if _ALL:
+        return max(ser[-1][0] for ser in _ALL.values() if ser)
+    return db.execute("SELECT MAX(week_order) FROM moves WHERE direction='유입' AND category='시군구'").fetchone()[0]
 
 
 def series(db, sido, sigungu):
@@ -519,10 +542,12 @@ def scale(base, s):
 STRONG_X = 2   # '많음' 문턱(평소 출렁임의 배수). 기간 순위의 STRONG과 같은 값
 
 
-def analyze(db, sido, sigungu, week_order):
+def analyze(db, sido, sigungu, week_order, P=None):
+    """P: 같은 지역의 prepare 결과를 이미 만들어 뒀으면 넘김(compare_same_week가 해마다 다시 만들지 않게, 2026-11-23)."""
     import timing
-    with timing.step("analysis.prepare(시계열·비교군)"):
-        P = prepare(db, sido, sigungu)
+    if P is None:
+        with timing.step("analysis.prepare(시계열·비교군)"):
+            P = prepare(db, sido, sigungu)
     if not P:
         return {"error": "지역을 찾지 못함. list_regions로 시도·시군구 이름을 확인할 것."}
     rows, me, peers, pdev = P["rows"], P["me"], P["peers"], P["pdev"]

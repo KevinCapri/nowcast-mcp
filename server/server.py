@@ -479,9 +479,16 @@ def list_regions(keyword: str = "") -> list:
     """시도·시군구 이름을 검색한다. 시군구 이름은 여러 시도에 겹친다(예: 중구, 동구, 서구).
     지역 값을 조회하기 전에 이 도구로 정확한 '시도'와 '시군구' 짝을 먼저 확인할 것.
     keyword를 비우면 시도 목록만 돌려준다."""
+    names = analysis._NAMES
     if not keyword:
+        if names is not None:
+            return [{"시도": s} for s in names["sido"]]
         rows = db.execute("SELECT DISTINCT sido FROM moves WHERE category='시도' ORDER BY sido").fetchall()
         return [{"시도": r[0]} for r in rows]
+    # 메모리 목록에서 찾음(2026-11-23, 표 전체를 훑어 3.6초). LIKE와 뜻이 달라질 수 있는 글자(%, _, 영문 대소문자)는 전처럼 DB
+    if names is not None and not any(ch in keyword for ch in "%_") and keyword == keyword.lower() == keyword.upper():
+        return [{"시도": a, "시군구": b} for a, b in names["sgg"]
+                if (b is not None and keyword in b) or (a is not None and keyword in a)]
     rows = db.execute(
         "SELECT DISTINCT sido, sigungu FROM moves WHERE category='시군구' "
         "AND (sigungu LIKE ? OR sido LIKE ?) ORDER BY sido, sigungu",
@@ -679,8 +686,9 @@ def _as_of():
         return None
 
 
-def _addons(r, sido, sigungu, wo, mon, hd):
-    """그 주에 있었던 일(곁가지). 하나가 실패해도 그 항목만 빠지고 판정은 그대로 나간다(safe.py)."""
+def _addons(r, sido, sigungu, wo, mon, hd, light=False):
+    """그 주에 있었던 일(곁가지). 하나가 실패해도 그 항목만 빠지고 판정은 그대로 나간다(safe.py).
+    light=True(compare_same_week)면 결과에 안 쓰는 '이 지역 지난 기록(벚꽃·단풍)'은 만들지 않는다."""
     end = mon + dt.timedelta(days=6)
     fest = safe.call("축제", festival.in_week, sido, sigungu, mon, hd)
     if fest:
@@ -699,7 +707,7 @@ def _addons(r, sido, sigungu, wo, mon, hd):
     sw = safe.call("벚꽃·단풍", season.in_week, sido, sigungu, mon)
     if sw:
         r["그 주 벚꽃 만발·단풍 절정(기상청 관측, 원인 단정 금지)"] = sw
-    if safe.call("벚꽃·단풍 명소", season.spots, sido, sigungu):
+    if not light and safe.call("벚꽃·단풍 명소", season.spots, sido, sigungu):
         hist = safe.call("벚꽃·단풍 지난 기록", lambda: season.history(analysis.prepare(db, sido, sigungu), sido, sigungu,
                                                                 skip_year=wo // 1000))
         if hist:
@@ -739,9 +747,11 @@ def analyze_region_week(sido: Sido, sigungu: Sigungu, week: Week) -> dict:
     return _analyze_region_week(sido, sigungu, wo)
 
 
-def _analyze_region_week(sido, sigungu, wo):
+def _analyze_region_week(sido, sigungu, wo, light=False, P=None):
+    """light=True(compare_same_week): 판정·그 주에 있었던 일·날씨·원자료 주의만 만들고, compare가 버리던 칸
+    (지역 성격·지난 설·추석·같은 달 총전입·자료 기준·답 꾸미기)은 건너뜀. P는 해마다 같이 쓰는 판정 재료(2026-11-23)."""
     with timing.step("analysis.analyze 전체"):
-        r = analysis.analyze(db, sido, sigungu, wo)
+        r = analysis.analyze(db, sido, sigungu, wo, P=P)
     if "error" not in r:
         mon = dt.date.fromisoformat(analysis.week_dates(wo)[:10])
         with timing.step("그 주 공휴일 읽기"):
@@ -751,7 +761,7 @@ def _analyze_region_week(sido, sigungu, wo):
             except sqlite3.OperationalError:
                 hd = set()
         with timing.step("곁가지(축제·야구·벚꽃·행사·시설·공연)"):
-            _addons(r, sido, sigungu, wo, mon, hd)
+            _addons(r, sido, sigungu, wo, mon, hd, light)
         st = None if daily.paused("weather_attach") else safe.call("날씨 관측소", daily.station, db, sido, sigungu)
         if st:
             wl = safe.call("그 주 날씨", daily.week_weather, db, st[0], [wo], default={})
@@ -763,6 +773,8 @@ def _analyze_region_week(sido, sigungu, wo):
             sus = safe.call("원자료 의심 구간", analysis.suspect, sido, sigungu, wo)
         if sus:
             r["주의"] = sus + r["주의"]
+        if light:
+            return r
         with timing.step("지역 성격"):
             prof = safe.call("지역 성격", _profile, sido, sigungu)
         if prof:
@@ -855,9 +867,10 @@ def compare_same_week(sido: Sido, sigungu: Sigungu, week: Week,
             "평소 출렁임의 몇 배", "관외 유입(일평균 건수)", "프로야구 홈경기 몫 추정(%)")
 
     sus_lines = []
+    P = analysis.prepare(db, sido, sigungu)      # 해마다 같은 지역이라 판정 재료는 한 번만(2026-11-23)
 
     def one(w, how):
-        r = analyze_region_week(sido, sigungu, _label(w))
+        r = _analyze_region_week(sido, sigungu, w, light=True, P=P) if P else analyze_region_week(sido, sigungu, _label(w))
         row = {"주차": _label(w), "견준 방식": how}
         if "error" in r:
             row["없음"] = r["error"]
@@ -1105,7 +1118,7 @@ def find_unusual_regions(week: OneWeek = "", top: Top = 15, start_week: StartWee
         if week:
             wo = _order(week)
         else:
-            wo = db.execute("SELECT MAX(week_order) FROM moves WHERE direction='유입' AND category='시군구'").fetchone()[0]
+            wo = analysis.latest_inflow_week(db)
     except Exception:
         return {"error": "week 형식은 'YYYY.MM.N주차'(예: '2026.10.5주차')."}
     rows = analysis.rank_week(db, wo)
