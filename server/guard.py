@@ -9,7 +9,10 @@
 
 이용 기록(usage.db, DB와 같은 폴더)
 - 도구 호출마다: 시각, 도구 이름, 입력값(지역·기간 등), 결과 상태, 걸린 시간, 연결한 곳(Claude·ChatGPT·PlayMCP·사이트 등
-  짧은 이름만). IP·접속 정보 원본은 남기지 않는다
+  짧은 이름만), 세션 번호(앞 12자리). IP·접속 정보 원본은 남기지 않는다
+- 세션 번호(2026-11-23): 서버는 요청마다 따로 처리(stateless)하지만, 처음 연결(initialize) 응답에 무작위 번호를 붙여 준다.
+  AI가 그 번호를 다음 요청 헤더(mcp-session-id)에 들고 오면 기록에 같이 적어, 한 번 이용에서 어떤 Tool을 어떤 순서로
+  불렀는지 묶어 볼 수 있다. 서버는 번호를 기억·검사하지 않으므로 재시작·배포해도 연결이 끊기지 않는다
 - 운영자 화면: /admin (앱 설정 ADMIN_PW가 있을 때만 열림, 비밀번호만 넣는 로그인 화면)
 - 1년 지난 기록은 지움
 - 속도 측정(GitHub Actions, User-Agent에 insight-monitor)의 요청은 연결한 곳을 '측정'으로 남기고, 이용 집계에서는 뺀다
@@ -23,6 +26,7 @@
 import collections
 import datetime as dt
 import json
+import re
 import os
 import sqlite3
 import sys
@@ -107,6 +111,8 @@ def _con():
     con.execute("CREATE TABLE IF NOT EXISTS usage(at TEXT, tool TEXT, args TEXT, ok INT, ms INT)")
     if "client" not in [r[1] for r in con.execute("PRAGMA table_info(usage)")]:
         con.execute("ALTER TABLE usage ADD COLUMN client TEXT DEFAULT ''")
+    if "session" not in [r[1] for r in con.execute("PRAGMA table_info(usage)")]:
+        con.execute("ALTER TABLE usage ADD COLUMN session TEXT DEFAULT ''")
     con.execute("CREATE TABLE IF NOT EXISTS slow(at TEXT, tool TEXT, args TEXT, ms INT, client TEXT, cold INT, "
                 "steps TEXT)")
     return con
@@ -123,6 +129,26 @@ def client_name(user_agent: str) -> str:
         if key in u:
             return name
     return "기타" if u else "알 수 없음"
+
+
+_SID = re.compile(r"[0-9a-fA-F-]{8,64}")
+
+
+def session_tag(raw: str) -> str:
+    """요청 헤더의 세션 번호를 기록용 앞 12자리로. 번호 모양(16진수)이 아니면 빈칸."""
+    raw = (raw or "").strip()
+    if not _SID.fullmatch(raw):
+        return ""
+    return raw.replace("-", "").lower()[:12]
+
+
+def is_initialize(body: bytes) -> bool:
+    """요청 본문이 처음 연결(initialize)인지."""
+    try:
+        j = json.loads(body or b"null")
+    except Exception:
+        return False
+    return any(isinstance(it, dict) and it.get("method") == "initialize" for it in (j if isinstance(j, list) else [j]))
 
 
 def tool_calls(body: bytes):
@@ -142,7 +168,7 @@ def tool_calls(body: bytes):
     return out
 
 
-def record(calls, ok, ms, client="", steps=None):
+def record(calls, ok, ms, client="", steps=None, session=""):
     if not calls:
         return
     cold = int(time.time() - _reloaded[0] < COLD_SEC + ms / 1000)
@@ -154,9 +180,9 @@ def record(calls, ok, ms, client="", steps=None):
                 con = _con()
                 now = dt.datetime.now(KST)
                 at = now.isoformat(timespec="seconds")
-                con.executemany("INSERT INTO usage(at, tool, args, ok, ms, client) VALUES (?,?,?,?,?,?)",
+                con.executemany("INSERT INTO usage(at, tool, args, ok, ms, client, session) VALUES (?,?,?,?,?,?,?)",
                                 [(at, t, a, int(ok), int(ms),
-                                  client or ("사이트" if t.startswith("web:") else "")) for t, a in calls])
+                                  client or ("사이트" if t.startswith("web:") else ""), session) for t, a in calls])
                 if slow:
                     con.executemany("INSERT INTO slow(at, tool, args, ms, client, cold, steps) VALUES (?,?,?,?,?,?,?)",
                                     [(at, t, a, int(ms), client, cold,

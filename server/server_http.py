@@ -12,6 +12,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from pathlib import Path
 
 import uvicorn
@@ -123,6 +124,9 @@ class RequestLog:
             more = m["type"] == "http.request" and m.get("more_body", False)
         body = b"".join(c.get("body", b"") for c in chunks)
         calls = guard.tool_calls(body)
+        # 세션 번호(guard.py 설명): 처음 연결이면 새 번호를 응답 헤더로 주고, 아니면 들고 온 번호를 기록에 씀
+        new_sid = uuid.uuid4().hex if guard.is_initialize(body) and not hd.get("mcp-session-id") else ""
+        session = guard.session_tag(new_sid or hd.get("mcp-session-id", ""))
         it = iter(chunks)
 
         async def replay():
@@ -136,6 +140,10 @@ class RequestLog:
         async def capture(m):
             if m["type"] == "http.response.start":
                 status[0] = m["status"]
+                hs = list(m.get("headers") or [])
+                if new_sid and m["status"] == 200 and not any(k.lower() == b"mcp-session-id" for k, _ in hs):
+                    hs.append((b"mcp-session-id", new_sid.encode()))
+                    m = {**m, "headers": hs}
             elif m["type"] == "http.response.body" and len(resp[0]) < 4000:
                 resp[0] += m.get("body", b"")
             await send(m)
@@ -148,9 +156,10 @@ class RequestLog:
         finally:
             ok = status[0] == 200 and b'"isError":true' not in resp[0] and b'"error"' not in resp[0][:200]
             rec = timing.end() if calls else None
-            guard.record(calls, ok, (time.time() - t0) * 1000, guard.client_name(hd.get("user-agent", "")), rec)
+            guard.record(calls, ok, (time.time() - t0) * 1000, guard.client_name(hd.get("user-agent", "")), rec,
+                         session=session)
             if REQUEST_LOG:
-                print(f"[req] {scope['method']} {scope['path']} ua={hd.get('user-agent', '')[:60]!r} {_summary(body)} "
+                print(f"[req] {scope['method']} {scope['path']} ua={hd.get('user-agent', '')[:60]!r} sid={session[:4] or '-'} {_summary(body)} "
                       f"-> {status[0]} {resp[0][:300]!r}", flush=True)
 
 
