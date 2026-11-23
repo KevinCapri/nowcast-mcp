@@ -99,7 +99,7 @@ def _bars(rows, width=170):
 def _page(days):
     con = guard._con()
     since = (dt.datetime.now(KST) - dt.timedelta(days=days)).isoformat()
-    rows = con.execute("SELECT at, tool, args, ok, ms, COALESCE(client,'') FROM usage WHERE at>=? "
+    rows = con.execute("SELECT at, tool, args, ok, ms, COALESCE(client,''), COALESCE(session,'') FROM usage WHERE at>=? "
                        "AND COALESCE(client,'')!='측정' ORDER BY at", (since,)).fetchall()
     con.close()
     allmcp = [r for r in rows if not r[1].startswith("web:")]
@@ -175,11 +175,11 @@ def _page(days):
             return raw or ""
 
     def rec_table(rs, n):
-        out = ['<table class="list"><tr><th>시각</th><th>어디서</th><th>도구</th><th>입력</th><th>결과</th><th>걸린 시간</th></tr>']
-        for at, tool, args, ok, ms, client in rs[-n:][::-1]:
+        out = ['<table class="list"><tr><th>시각</th><th>어디서</th><th>도구</th><th>입력</th><th>결과</th><th>걸린 시간</th><th>세션</th></tr>']
+        for at, tool, args, ok, ms, client, sess in rs[-n:][::-1]:
             out.append(f"<tr><td>{_e(at[5:16].replace('T', ' '))}</td><td>{_e(client or '–')}</td>"
                        f"<td>{_e(TOOL_KO.get(tool, tool))}</td><td class='a'>{_e(_args(args)[:120])}</td>"
-                       f"<td>{'성공' if ok else '<b class=bad>실패</b>'}</td><td>{ms:,}ms</td></tr>")
+                       f"<td>{'성공' if ok else '<b class=bad>실패</b>'}</td><td>{ms:,}ms</td><td>{_e(sess[:4] or '–')}</td></tr>")
         out.append("</table>" if rs else '</table><p class="none">기록 없음</p>')
         return "".join(out)
     rec_html = [rec_table(mcp, 50)]
