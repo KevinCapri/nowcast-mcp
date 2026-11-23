@@ -6,6 +6,11 @@
   처음에는 START부터, 그 뒤에는 최근 90일 ~ 앞으로 180일을 다시 받는다(일정 변경 반영).
 - 관객 수(예매 통계)는 쓰지 않는다. 공연 이름·기간·공연장만 '그 주에 있었던 일'의 판단 재료로 쓴다.
 - 인증키는 환경변수 KOPIS_KEY. 3개월 넘게 안 쓰면 승인이 취소되므로 update.py가 6일마다 돌린다.
+- 호출 한도(2026-11-23 KOPIS 담당자 답변): 같은 IP에서 1초에 10번을 넘으면 그 IP를 30~40분 막고 'Request Blocked'를
+  돌려준다(홈페이지 접속도 함께 셈, 서비스키를 여러 개 써도 IP 기준으로 합침). 11-15 첫 받기 때 걸렸고, 막힌 동안에도
+  400을 다시 시도하며 계속 불러 11-21~22 2시간씩 헛돎 → 모든 호출 사이를 MIN_GAP초 이상 띄우고(초당 4번 아래),
+  막힘(400·'Request Blocked')이 오면 다시 시도하지 않고 그 자리에서 이번 받기를 멈춘다(실패 메일이 감).
+- 공연 목록(pblprfr)은 개발가이드상 한 번에 31일까지 → 31일씩 요청
 
 쓰는 법: python pipeline/load_kopis.py [--full]
 """
@@ -18,13 +23,32 @@ from common import connect, get, key
 
 BASE = "http://www.kopis.or.kr/openApi/restful"
 BIG_SEATS = 3000
+MIN_GAP = 0.25          # 호출 사이 최소 간격(초). KOPIS 한도는 IP당 초당 10번
+SPAN = 31               # 공연 목록 한 번에 요청하는 날 수(개발가이드 최대 31일)
+_last = [0.0]
+
+
+class Blocked(RuntimeError):
+    """KOPIS가 이 서버 IP를 막음(400·'Request Blocked'). 다시 시도하면 차단이 길어지므로 받기를 멈춘다."""
 START = dt.date(2023, 1, 1)
 SIDO_ALIAS = {"강원도": "강원특별자치도", "전라북도": "전북특별자치도"}
 
 
 def xml(path, **params):
-    r = get(f"{BASE}/{path}", params=params, timeout=60, wait=10, retry_codes=(400, 429))
+    gap = MIN_GAP - (time.monotonic() - _last[0])
+    if gap > 0:
+        time.sleep(gap)
+    try:
+        r = get(f"{BASE}/{path}", params=params, timeout=60, wait=10)   # 400은 다시 시도하지 않음(막힘)
+    except RuntimeError as e:
+        if "HTTP 400" in str(e) or "HTTP 429" in str(e):
+            raise Blocked(f"KOPIS가 요청을 막음({path}): {e}") from None
+        raise
+    finally:
+        _last[0] = time.monotonic()
     r.encoding = "utf-8"
+    if "Request Blocked" in r.text[:500]:
+        raise Blocked(f"KOPIS가 요청을 막음({path}): Request Blocked")
     return ET.fromstring(r.text)
 
 
@@ -66,6 +90,8 @@ def load_venues(con, k):
     while True:
         try:
             root = xml("prfplc", service=k, cpage=page, rows=100)
+        except Blocked:
+            raise
         except Exception as e:                         # 목록이 중간에 끊기면 이미 받은 공연장으로 계속
             print(f"  공연장 목록 {page}쪽 실패, 여기까지로 진행: {e}", flush=True)
             break
@@ -74,13 +100,14 @@ def load_venues(con, k):
             break
         ids += [txt(d, "mt10id") for d in rows]
         page += 1
-        time.sleep(0.2)
     new = [i for i in ids if i and i not in have]
     print(f"공연장 {len(ids)}곳, 새로 받을 곳 {len(new)}곳", flush=True)
     today = dt.date.today().isoformat()
     for n, i in enumerate(new, 1):
         try:
             d = xml(f"prfplc/{i}", service=k).find("db")
+        except Blocked:
+            raise
         except Exception as e:
             print(f"  {i} 상세 실패: {e}", flush=True)
             continue
@@ -103,16 +130,15 @@ def load_venues(con, k):
         if n % 100 == 0:
             con.commit()
             print(f"  상세 {n}/{len(new)}", flush=True)
-        time.sleep(0.15)
     con.commit()
 
 
 def _venue_range(con, k, vid, vname, a, z, stamp):
-    """한 공연장의 [a, z] 공연을 석 달씩 받는다. (받은 건수, 실패한 구간 수)"""
+    """한 공연장의 [a, z] 공연을 31일씩 받는다. (받은 건수, 실패한 구간 수). 막힘(Blocked)은 위로 올려 받기를 멈춤"""
     n = bad = 0
     s = a
     while s <= z:
-        e = min(s + dt.timedelta(days=91), z)
+        e = min(s + dt.timedelta(days=SPAN - 1), z)
         page = 1
         try:
             while True:
@@ -125,10 +151,12 @@ def _venue_range(con, k, vid, vname, a, z, stamp):
                                  txt(d, "prfpdto").replace(".", "-"), vid, txt(d, "fcltynm") or vname,
                                  txt(d, "genrenm"), stamp))
                     n += 1
-                time.sleep(0.3)
                 if len(rows) < 100:
                     break
                 page += 1
+        except Blocked:
+            con.commit()
+            raise
         except Exception as ex:                        # 한 구간이 실패해도 나머지는 계속 받음
             bad += 1
             print(f"  건너뜀 {vname} {s}~{e}: {ex}", flush=True)
@@ -170,8 +198,14 @@ def main():
     full = "--full" in sys.argv
     con = connect()
     setup(con)
-    load_venues(con, k)
-    got, bad = load_perfs(con, k, full)
+    try:
+        load_venues(con, k)
+        got, bad = load_perfs(con, k, full)
+    except Blocked as e:                   # 막히면 더 부르지 않고 실패로 끝냄(메일). 30~40분 뒤 풀림, 계속되면 KOPIS에 회신
+        con.commit()
+        con.close()
+        sys.exit(f"{e}\n→ 이번 받기를 멈춤. KOPIS 차단은 30~40분 뒤 저절로 풀림. 다음 실행에도 막히면 "
+                 "kopis@gokams.or.kr에 회신(아직 차단 중이라고)")
     cnt = con.execute("SELECT COUNT(*), MIN(s), MAX(e) FROM kopis_perf").fetchone()
     print(f"쌓인 공연 {cnt[0]}건 ({cnt[1]} ~ {cnt[2]})", flush=True)
     con.close()
