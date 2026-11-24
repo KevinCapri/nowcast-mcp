@@ -334,17 +334,23 @@ def _wd_ratio(db, ym):
     return w / n
 
 
-def _dl_month(db, sido, sigungu):
-    """관광공사 외지인 하루 평균(명), 그 달 날짜가 다 찬 달만. {YYYYMM: 값}"""
+def _dl_month(db, sido, sigungu, months=None):
+    """관광공사 외지인 하루 평균(명), 그 달 날짜가 다 찬 달만. {YYYYMM: 값}
+    months(YYYYMM 목록)를 주면 그 기간만 읽는다(0.6.5 배포 뒤: 2018년부터 통째로 읽어 첫 추정이 4분 넘게 걸렸음)."""
     import calendar
     codes = _codes(db, sido, sigungu, "datalab")
     if not codes:
         return {}
     try:
-        q = (f"SELECT day, SUM(touNum) FROM datalab_daily WHERE touDivCd=2 AND signguCode IN "
-             f"({','.join('?' * len(codes))}) GROUP BY day")
+        q = (f"SELECT day, SUM(touNum) FROM datalab_daily WHERE signguCode IN "
+             f"({','.join('?' * len(codes))}) AND touDivCd=2")
+        args = list(codes)
+        if months:
+            a, b = min(months), max(months)
+            q += " AND day >= ? AND day <= ?"
+            args += [f"{a[:4]}-{a[4:]}-01", f"{b[:4]}-{b[4:]}-31"]
         agg = {}
-        for day, v in db.execute(q, codes):
+        for day, v in db.execute(q + " GROUP BY day", args):
             d = str(day).replace("-", "")
             agg.setdefault(d[:6], []).append(v or 0)
     except Exception:
@@ -383,14 +389,37 @@ _fit_mem = {}      # method → (시각, 결과). 공표 지역마다 표를 읽
                    # 서버 시작·자동 갱신 뒤(load_memory) 비움
 
 
-def _fit(db, method="nc"):
+_fit_locks = {}
+
+
+def _fit(db, method="nc", wait=True):
+    """wait=False면 다른 요청이 만드는 중일 때 기다리지 않고 None(그 요청은 다음 방법으로)."""
+    import threading
     import time
     hit = _fit_mem.get(method)
     if hit and time.time() - hit[0] < _FIT_TTL:
         return hit[1]
-    out = _fit_build(db, method)
-    _fit_mem[method] = (time.time(), out)
-    return out
+    lock = _fit_locks.setdefault(method, threading.Lock())
+    if not lock.acquire(blocking=wait):
+        return None
+    try:
+        hit = _fit_mem.get(method)
+        if hit and time.time() - hit[0] < _FIT_TTL:
+            return hit[1]
+        out = _fit_build(db, method)
+        _fit_mem[method] = (time.time(), out)
+        return out
+    finally:
+        lock.release()
+
+
+def warm_fits(db):
+    """서버 시작·자동 갱신 뒤 미공표 지역 공식을 미리 맞춰 둠(첫 이용자가 기다리지 않게, 0.6.5)."""
+    for m in ("dl", "sub", "nc"):
+        try:
+            _fit(db, m)
+        except Exception as e:
+            print("[lifepop] 공식 미리 맞추기 실패", m, repr(e), flush=True)
 
 
 def _fit_build(db, method="nc"):
@@ -410,8 +439,9 @@ def _fit_build(db, method="nc"):
         live = _by_period(db, "kosis_life_pop", _codes(db, sd, sg, "life_pop"), "AND ITM_ID='T001'")
         jumin, frn = _reg(db, sd, sg)
         nc = _nc_month(db, sd, sg)
-        dl = _dl_month(db, sd, sg) if method == "dl" else {}
-        for m in sorted(live)[-12:]:
+        last12 = sorted(live)[-12:]
+        dl = _dl_month(db, sd, sg, last12) if method == "dl" and last12 else {}
+        for m in last12:
             j, f = _latest_le(jumin, m), _latest_le(frn, m[:4])
             if j is None or f is None:
                 continue
@@ -485,14 +515,14 @@ def estimate_unpublished(db, sido, sigungu, ym):
     if j is None or f is None:
         return feedback.cant({"error": "주민등록인구나 등록외국인 자료가 없어 추정할 수 없다."}, "주민·외국인 자료 없음")
     # 0.6.5 ⑤: 관광공사 값이 다 찬 달(광역시 구 제외)은 외지인 방법, 아니면 출근 몫 빼기, 출근 인원 자료가 없으면 옛 방법
-    dl = {} if _metro_gu(sido, sigungu) else _dl_month(db, sido, sigungu)
+    dl = {} if _metro_gu(sido, sigungu) else _dl_month(db, sido, sigungu, [ym])
     order = (["dl"] if ym in dl else []) + ["sub", "nc"]
     method, F, ft = None, None, None
     for mth in order:
         ft = _feat(mth, db, sido, sigungu, ym, nc, dl, j + f)
         if ft is None:
             continue
-        F = _fit(db, mth)
+        F = _fit(db, mth, wait=(mth != "dl"))     # 외지인 공식을 다른 요청이 만드는 중이면 기다리지 않고 출근 몫 빼기로
         if F:
             method = mth
             break
