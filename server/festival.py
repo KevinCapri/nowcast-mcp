@@ -20,6 +20,7 @@ from pathlib import Path
 from statistics import mean, median
 
 import analysis as A
+import feedback
 import safe
 
 CSV = Path(__file__).with_name("festivals.csv")
@@ -176,6 +177,7 @@ def forecast(db, sido, sigungu, name="", start_date="", end_date=""):
                "이유": "이 지역에서 그 축제의 지난 회차를 찾지 못했다(문체부 개최 계획 2023~2026 기준). "
                      "처음 여는 축제이거나 계획에 이름이 다르게 올랐을 수 있다.",
                "이 지역 축제(문체부 계획)": listed[:30]}
+        feedback.cant(out, "축제 지난 회차 없음")
         if ref:
             out["낮은 신뢰도 참고 범위"] = ref
             out["주의"] = [

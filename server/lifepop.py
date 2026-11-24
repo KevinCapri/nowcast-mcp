@@ -14,6 +14,7 @@ import math
 from statistics import mean
 
 import analysis as A
+import feedback
 
 ERR_HALF = 0.053      # 전국 과거 오차 중앙값. 지역 자체 채점 건수가 모자랄 때만 씀
 MIN_BACKTEST = 6      # 지역별 범위를 쓰려면 되짚어 본 달이 이만큼 있어야 함
@@ -198,7 +199,7 @@ def estimate(db, sido, sigungu, ym):
 
     r_est, how = predict(ym, pub)
     if r_est is None:
-        return {"error": "공표된 달이 부족해 비율을 정할 수 없다."}
+        return feedback.cant({"error": "공표된 달이 부족해 비율을 정할 수 없다."}, "공표 달 부족")
 
     # 이 지역 자체 채점: 공표된 각 달을 그 전 달까지만 보고 추정했을 때의 체류인구 오차(로그)
     errs = []
@@ -345,20 +346,22 @@ def estimate_unpublished(db, sido, sigungu, ym):
     base = {"지역": f"{sido} {sigungu}", "달": ym, "공표": "이 지역은 생활인구 공표 대상(인구감소·관심지역)이 아니다."}
     share = commute_share(db, sido, sigungu)
     if share is None:
-        return {**base, "추정": "하지 않음",
-                "이유": "타지역 통근 비율 자료가 없어 추정 공식을 써도 되는 지역인지 판단할 수 없다. 숫자를 지어내지 말 것."}
+        return feedback.cant({**base, "추정": "하지 않음",
+                "이유": "타지역 통근 비율 자료가 없어 추정 공식을 써도 되는 지역인지 판단할 수 없다. 숫자를 지어내지 말 것."},
+                "통근 비율 자료 없음")
     if share >= COMMUTE_LIMIT:
-        return {**base, "추정": "하지 않음(등급 C)", "타지역 통근 비율(%)": share,
+        out = {**base, "추정": "하지 않음(등급 C)", "타지역 통근 비율(%)": share,
                 "이유": f"주민의 {share:.0f}%가 다른 지역으로 출근하는 지역이라 통근 이동이 방문과 섞인다. "
                        "시험한 대도시 구에서 오차가 23~28%(최대 115%)여서 추정치를 내지 않는다. "
                        "대신 외부 유입 규모와 평소 대비 변화(analyze_region_week)로 답할 것."}
+        return feedback.cant(out, "통근 많아 추정 안 함")
     nc = _nc_month(db, sido, sigungu)
     if ym not in nc or nc[ym][1] < 3:
         return {"error": "그 달의 나우캐스트 주 자료가 3주 미만이라 추정할 수 없다(진행 중인 달은 추정하지 않음)."}
     jumin, frn = _reg(db, sido, sigungu)
     j, f = _latest_le(jumin, ym), _latest_le(frn, ym[:4])
     if j is None or f is None:
-        return {"error": "주민등록인구나 등록외국인 자료가 없어 추정할 수 없다."}
+        return feedback.cant({"error": "주민등록인구나 등록외국인 자료가 없어 추정할 수 없다."}, "주민·외국인 자료 없음")
     F = _fit(db)
     if not F:
         return {"error": "추정 공식을 맞출 공표 지역 자료가 모자란다."}
