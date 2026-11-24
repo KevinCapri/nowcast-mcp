@@ -624,13 +624,15 @@ def all_regions(db):
 
 _names = {"key": None, "map": {}}
 _latest = {"wo": None, "checked": 0.0}
-LATEST_TTL = 600   # 초. 자료는 하루 한 번(새벽)만 바뀌므로 최신 주차 확인은 10분에 한 번이면 충분
+LATEST_TTL = 6 * 3600   # 초. 자료는 새벽 자동 갱신 때만 바뀌고, 그 뒤 web.refresh_lists가 새 최신 주차를 넣어 준다.
+# 6시간은 갱신 고리 밖에서 DB가 바뀐 경우(손으로 돌린 갱신 등)를 위한 안전장치(2026-11-24, 전엔 10분)
 
 
 def latest_week(db):
     """moves의 최신 주차(캐시 열쇠용). 'SELECT MAX(week_order) FROM moves'는 색인을 못 타 표 전체를 훑어,
     저장소에서 읽을 때는 한 번에 몇 초씩 걸린다(2026-11-21 저녁: 비교 지역 10곳마다 불러 한 번 판정에 20~85초).
-    그래서 10분에 한 번만 실제로 확인한다."""
+    그래서 10분에 한 번만 실제로 확인했는데, 밤새 쉰 뒤 처음 훑는 한 번이 11.9초까지 걸려(2026-11-24 속도 측정)
+    서버 시작·자동 갱신 뒤 web.refresh_lists가 뒤에서 미리 읽어 넣어 두고, 여기서는 6시간에 한 번만 다시 확인한다."""
     import time
     now = time.monotonic()
     if _latest["wo"] is None or now - _latest["checked"] > LATEST_TTL:

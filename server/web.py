@@ -211,7 +211,6 @@ def refresh_lists():
     if not _lists_lock.acquire(blocking=False):
         return
     try:
-        A._latest["wo"] = None                       # 새 자료가 들어왔을 수 있으니 최신 주차를 다시 확인하게(latest_week 10분 캐시)
         _lists.update(regions=_regions(), weeks=_weeks(), at=time.time())
         print("[web] 지역·주차 목록 준비", flush=True)
         t = time.time()
@@ -219,6 +218,16 @@ def refresh_lists():
         _hol_days.clear()
         _hol_days.update(_load_hol_days())
         print(f"[web] 지역별 시계열 {n}곳 메모리에 올림 ({time.time() - t:.1f}초)", flush=True)
+        # 최신 주차(latest_week 캐시 열쇠)를 여기서 뒤에서 읽어 넣어 둠. 이용자 요청이 표 전체 훑기를 하지 않게(2026-11-24).
+        # 전에는 여기서 None으로 지워 다음 요청이 직접 훑었음(밤새 쉰 뒤 11.9초).
+        try:
+            t = time.time()
+            wo = _conn().execute("SELECT MAX(week_order) FROM moves").fetchone()[0]
+            A._latest.update(wo=wo, checked=time.monotonic())
+            print(f"[web] 최신 주차 {wo} 확인 ({time.time() - t:.1f}초)", flush=True)
+        except Exception as e:
+            A._latest["wo"] = None                   # 못 읽으면 전처럼 다음 요청이 확인
+            print("[web] 최신 주차 확인 실패", repr(e), flush=True)
         # KOSIS 표(주민·외국인·통근·전입·생활인구)와 지역 연결표도 메모리로(0.6.4). 색인 없는 표를 요청마다 훑던 것
         # (인구감소지역 순위 37~49초, '지역 성격' 2~5초)을 없앰. 실패하면 전처럼 DB에서 읽는다.
         try:
