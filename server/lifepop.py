@@ -446,15 +446,32 @@ def _fit_build(db, method="nc"):
     return out
 
 
+# 0.6.5 ⑥: 지역별고용조사 시군 표에 없는 곳의 타지역 통근 비율(%)과 출처. 모두 30% 넘어 추정 안 함(등급 C) 이유를 바로잡음
+SHARE_FALLBACK = {
+    ("세종특별자치시", "세종시"): (32.3, "인구총조사 2020, 다른 시도로 출근"),
+    ("인천광역시", "제물포구"): (60.0, "옛 인천 동구 값(지역별고용조사, 2026-07 구 개편 전)"),
+    ("인천광역시", "영종구"): (33.0, "옛 인천 중구 값(지역별고용조사, 2026-07 구 개편 전)"),
+    ("인천광역시", "서해구"): (50.0, "옛 인천 서구 값(지역별고용조사, 2026-07 구 개편 전)"),
+    ("인천광역시", "검단구"): (50.0, "옛 인천 서구 값(지역별고용조사, 2026-07 구 개편 전)"),
+}
+
+
 def estimate_unpublished(db, sido, sigungu, ym):
     base = {"지역": f"{sido} {sigungu}", "달": ym, "공표": "이 지역은 생활인구 공표 대상(인구감소·관심지역)이 아니다."}
-    share = commute_share(db, sido, sigungu)
+    share, share_src = commute_share(db, sido, sigungu), "지역별고용조사(최근 반기)"
+    if share is None:
+        fb = next((v for (sd, sg), v in SHARE_FALLBACK.items() if A.canon(sd, sg) == A.canon(sido, sigungu)), None)
+        if fb:
+            share, share_src = fb
     if share is None:
         return feedback.cant({**base, "추정": "하지 않음",
                 "이유": "타지역 통근 비율 자료가 없어 추정 공식을 써도 되는 지역인지 판단할 수 없다. 숫자를 지어내지 말 것."},
                 "통근 비율 자료 없음")
     if share >= COMMUTE_LIMIT:
-        out = {**base, "추정": "하지 않음(등급 C)", "타지역 통근 비율(%)": share,
+        out = {**base, "추정": "하지 않음(등급 C)", "타지역 통근 비율(%)": share, "통근 비율 출처": share_src,
+                "이용자에게 할 말": f"{sigungu}은(는) 날마다 다른 지역으로 출퇴근하는 사람이 많아요. 이동 자료는 같은 사람이 "
+                                "출근할 때마다 따로 세서, 한 달에 한 번 세는 생활인구로 바꾸면 크게 빗나가요. "
+                                "대신 바깥에서 들어온 이동이 평소보다 많았는지는 알려 드릴 수 있어요.",
                 "이유": f"주민의 {share:.0f}%가 다른 지역으로 출근하는 지역이라 통근 이동이 방문과 섞인다. "
                        "시험한 대도시 구에서 오차가 23~28%(최대 115%)여서 추정치를 내지 않는다. "
                        "대신 외부 유입 규모와 평소 대비 변화(analyze_region_week)로 답할 것."}
