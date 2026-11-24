@@ -69,8 +69,8 @@ db = _ThreadDB(DB)
 SERVICE = "빅데이터 Insight: 지역별 유입인구"
 # 도구 목록이 바뀌면(추가·삭제·입력값·설명) 세 값을 같이 고친다. 회귀 시험이 TOOLS와 실제 도구가 다르면 잡는다.
 # 결과마다 붙여서, 예전에 연결한 이용자에게도 AI가 '새 도구가 생겼으니 다시 연결'을 알려 주게 한다(claude/변경_관리_원칙.md).
-VERSION = "0.6.4"
-TOOLS_CHANGED = "2026-11-22"
+VERSION = "0.6.5"
+TOOLS_CHANGED = "2026-11-25"
 TOOLS = ["get_metadata", "list_regions", "get_movement", "analyze_region_week",
          "find_unusual_regions", "estimate_life_pop", "forecast_festival", "get_datalab_daily", "report_issue",
          "get_region_calendar", "get_bloom_foliage", "get_data_status", "compare_same_week"]
@@ -359,9 +359,10 @@ def get_metadata() -> dict:
                 "지역별 출발지·연령·성별·시간대·체류 시간",
                 "여러 해에 걸친 추세 판단",
             ],
-            "의견": "틀린 값이나 추가했으면 하는 자료는 \"의견 보낼게\"라고 말하면 운영자에게 전달",
+            "의견": "틀린 값이나 추가했으면 하는 자료·기능은 \"의견 보낼게\"라고 말하면 개발자에게 전달",
+            "알림": "지금은 시범 운영 중이라 기준을 다듬고 있어요. 결과가 바뀔 수 있어요.",
             "보여 줄 때": "이용자가 'Insight 소개'·'Hello Insight'·'헬로 인사이트'·'안녕 인사이트'(또는 'Insight 소개 유입인구'·'Hello Insight 유입인구')라고 하거나 할 수 있는 일을 물으면 이 칸을 문구 그대로, 위 순서대로 보여 줄 것. 예시 질문의 ○○은 그대로 둘 것. 다른 '빅데이터 Insight' 서비스도 연결돼 있으면 서비스마다 나눠 보여 줄 것. "
-                     "'할 수 있는 일'과 '할 수 없는 일'만 그대로 보여 주고, 웹 검색·사진·직접 지은 서비스 설명을 덧붙이지 말 것. "
+                     "'할 수 있는 일'과 '할 수 없는 일'만 그대로 보여 주고, 끝에 '알림' 한 줄을 붙일 것. 웹 검색·사진·직접 지은 서비스 설명을 덧붙이지 말 것. "
                      "이 서비스가 원인을 찾아 준다거나 축제 효과·성과를 잰다고 소개하지 말 것.",
         },
         "정의": {
