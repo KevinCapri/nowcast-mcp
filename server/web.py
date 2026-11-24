@@ -236,6 +236,12 @@ def refresh_lists():
             print(f"[web] KOSIS 표·지역 연결표 {k}개 메모리에 올림 ({time.time() - t:.1f}초)", flush=True)
         except Exception as e:
             print("[web] KOSIS 표 메모리 올리기 실패", repr(e), flush=True)
+        try:                                  # 0.6.5: 미공표 지역 생활인구 공식 미리 맞추기
+            t = time.time()
+            lifepop.warm_fits(_conn())
+            print(f"[web] 생활인구 공식 미리 맞춤 ({time.time() - t:.1f}초)", flush=True)
+        except Exception as e:
+            print("[web] 생활인구 공식 미리 맞추기 실패", repr(e), flush=True)
         # find_unusual_regions의 가장 최근 주 전국 순위를 미리 계산해 둠(처음 부를 때 약 3.7초 걸리던 것).
         # rank_week는 (주차, 최신 주차)로 캐시하므로 새 자료가 들어오면 저절로 다시 계산된다.
         try:
