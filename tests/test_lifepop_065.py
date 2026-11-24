@@ -92,6 +92,9 @@ assert r["추정"].startswith("하지 않음(등급 C)") and r["통근 비율 �
 assert r["이용자에게 할 말"].startswith("세종시는"), r["이용자에게 할 말"]
 assert "의견 보내기" in r
 
+r = L.estimate_unpublished(db, "세종특별자치시", "세종특별자치시", "202605")
+assert r["추정"].startswith("하지 않음(등급 C)") and r["이용자에게 할 말"].startswith("세종특별자치시는"), r
+
 r = L.estimate_unpublished(db, "인천광역시", "제물포구", "202605")
 assert r["타지역 통근 비율(%)"] == 60.0 and r["이용자에게 할 말"].startswith("제물포구는"), r
 
