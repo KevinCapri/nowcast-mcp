@@ -114,8 +114,26 @@ def submit(message, kind="", region="", period="", tool="", link=""):
     _notify(f"의견 접수 {rid}", f"종류: {kind}\n지역: {region}\n기간: {period}\n도구: {tool}\n링크: {link}\n\n{text}")
     # 2026-11-15: 한 방향 전송만. 접수 번호·확인 키는 운영자 기록용으로만 남기고 이용자에게 돌려주지 않는다.
     return {"받음": True,
-            "안내": "의견을 받았다. 따로 답장은 하지 않으며(연락처를 받지 않음), 반영된 내용은 서비스에 바로 적용된다. "
+            "안내": "개발자에게 전달했다. 따로 답장은 하지 않으며(연락처를 받지 않음), 반영되면 서비스에 바로 적용된다. "
                    "이용자에게 이 두 가지를 그대로 전할 것."}
+
+
+# 0.6.5 ③: 기다려도 풀리지 않는 '할 수 없음' 결과 끝에 붙이는 한 줄(AI에게 주는 신호, 서버 안내문 ①과 짝).
+# 입력 형식 오류·아직 안 나온 최근 자료에는 붙이지 않는다.
+HINT = ("원하면 개발자에게 이 자료·기능을 전달할 수 있다고 이 대화에서 한 번만 안내할 것"
+        "(이용자가 그러겠다고 할 때만 report_issue).")
+
+
+def cant(d, reason=""):
+    """'할 수 없음' 결과에 의견 보내기 줄을 붙여 돌려준다. reason은 짧은 이유(못 한 응답 기록용)."""
+    d["의견 보내기"] = HINT
+    if reason:                       # 0.6.5 ④: 이용 기록의 '못 한 이유' 칸으로(guard.record)
+        try:
+            import timing
+            timing.mark("cant", reason[:40])
+        except Exception:
+            pass
+    return d
 
 
 def status(report_id, key):

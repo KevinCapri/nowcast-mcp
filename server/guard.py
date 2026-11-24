@@ -122,6 +122,8 @@ def _con():
         con.execute("ALTER TABLE usage ADD COLUMN session TEXT DEFAULT ''")
     if "meta" not in cols:
         con.execute("ALTER TABLE usage ADD COLUMN meta TEXT DEFAULT ''")
+    if "cant" not in cols:           # 0.6.5 ④: '할 수 없음'으로 끝난 이유(feedback.cant)
+        con.execute("ALTER TABLE usage ADD COLUMN cant TEXT DEFAULT ''")
     con.execute("CREATE TABLE IF NOT EXISTS slow(at TEXT, tool TEXT, args TEXT, ms INT, client TEXT, cold INT, "
                 "steps TEXT)")
     return con
@@ -211,6 +213,7 @@ def record(calls, ok, ms, client="", steps=None, session="", meta=""):
         return
     cold = int(time.time() - _reloaded[0] < COLD_SEC + ms / 1000)
     slow = ms >= SLOW_MS and client != MONITOR_CLIENT
+    cant = str((steps or {}).get("cant", ""))[:40]
 
     def run():
         try:
@@ -218,9 +221,11 @@ def record(calls, ok, ms, client="", steps=None, session="", meta=""):
                 con = _con()
                 now = dt.datetime.now(KST)
                 at = now.isoformat(timespec="seconds")
-                con.executemany("INSERT INTO usage(at, tool, args, ok, ms, client, session, meta) VALUES (?,?,?,?,?,?,?,?)",
+                con.executemany("INSERT INTO usage(at, tool, args, ok, ms, client, session, meta, cant) "
+                                "VALUES (?,?,?,?,?,?,?,?,?)",
                                 [(at, t, a, int(ok), int(ms),
-                                  client or ("사이트" if t.startswith("web:") else ""), session, meta) for t, a in calls])
+                                  client or ("사이트" if t.startswith("web:") else ""), session, meta, cant)
+                                 for t, a in calls])
                 if slow:
                     con.executemany("INSERT INTO slow(at, tool, args, ms, client, cold, steps) VALUES (?,?,?,?,?,?,?)",
                                     [(at, t, a, int(ms), client, cold,
@@ -264,7 +269,23 @@ def usage_summary(since):
         clients = [dict(zip(("client", "calls", "fail"), r)) for r in con.execute(
             f"SELECT COALESCE(NULLIF(client,''),'기록 전'), COUNT(*), COUNT(*)-SUM(ok) FROM usage WHERE {cond} "
             "GROUP BY 1 ORDER BY 2 DESC", (since, MONITOR_CLIENT))]
-        return {"since": since, "tools": tools, "clients": clients}
+        # 0.6.5 ④: 못 한 응답(최근 7일) — 이유별 횟수와 지역(입력값의 sido·sigungu만). 같은 이유 3번 넘으면 B.Box로(예약 작업)
+        since7 = max(since, (dt.datetime.now(KST) - dt.timedelta(days=7)).isoformat())
+        cant = {}
+        for reason, tool, args in con.execute(
+                f"SELECT cant, tool, args FROM usage WHERE {cond} AND COALESCE(cant,'')!=''", (since7, MONITOR_CLIENT)):
+            c = cant.setdefault(reason, {"reason": reason, "calls": 0, "tools": {}, "regions": {}})
+            c["calls"] += 1
+            c["tools"][tool] = c["tools"].get(tool, 0) + 1
+            try:
+                a = json.loads(args or "{}")
+                rg = " ".join(x for x in (a.get("sido", ""), a.get("sigungu", "")) if x)
+            except Exception:
+                rg = ""
+            if rg:
+                c["regions"][rg] = c["regions"].get(rg, 0) + 1
+        return {"since": since, "tools": tools, "clients": clients,
+                "cant_since": since7, "cant": sorted(cant.values(), key=lambda x: -x["calls"])}
     finally:
         con.close()
 

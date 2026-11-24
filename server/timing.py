@@ -30,6 +30,13 @@ def step(name):
             c["steps"].append((name, round(time.perf_counter() - t, 2)))
 
 
+def mark(key, value):
+    """도구 안에서 이번 요청 기록에 값 하나를 남긴다(0.6.5: 못 한 이유 'cant'). 기록 중이 아니면 아무것도 안 함."""
+    c = _cur.get()
+    if c is not None:
+        c[key] = value
+
+
 def end():
     """끝난 기록을 돌려준다(없으면 None)."""
     c = _cur.get()

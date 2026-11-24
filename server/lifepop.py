@@ -14,6 +14,7 @@ import math
 from statistics import mean
 
 import analysis as A
+import feedback
 
 ERR_HALF = 0.053      # 전국 과거 오차 중앙값. 지역 자체 채점 건수가 모자랄 때만 씀
 MIN_BACKTEST = 6      # 지역별 범위를 쓰려면 되짚어 본 달이 이만큼 있어야 함
@@ -71,6 +72,7 @@ _MEM = {}
 
 def load_memory(db):
     """KOSIS 표 5개와 지역 연결표를 한 번에 읽어 메모리에 둔다. 자료가 바뀌면 다시 부른다. 읽은 표 수를 돌려준다."""
+    _fit_mem.clear()                 # 0.6.5: 새 자료로 미공표 지역 공식을 다시 맞추게
     new = {}
     for t in KOSIS_TABLES:
         try:
@@ -198,7 +200,7 @@ def estimate(db, sido, sigungu, ym):
 
     r_est, how = predict(ym, pub)
     if r_est is None:
-        return {"error": "공표된 달이 부족해 비율을 정할 수 없다."}
+        return feedback.cant({"error": "공표된 달이 부족해 비율을 정할 수 없다."}, "공표 달 부족")
 
     # 이 지역 자체 채점: 공표된 각 달을 그 전 달까지만 보고 추정했을 때의 체류인구 오차(로그)
     errs = []
@@ -294,8 +296,106 @@ def _reg(db, sido, sigungu):
     return jumin, frn
 
 
-def _fit(db):
-    """공표 지역으로 공식을 맞추고, 지역 하나씩 빼고 맞혀 오차 분포를 낸다(최신 공표 달이 바뀔 때만 다시)."""
+# ── 0.6.5 ⑤ 미공표 지역 공식(2026-11-24 Kevin 확정, 근거 insight-work 분석/2026-11-23_생활인구_기준 run2) ──────────
+# 'dl'  관광공사 외지인 방법: log 체류 = a + b·log(그 달 하루 평균 외지인) + c·log(주민+외국인). 관광공사 값이 다 찬 달에만.
+#       통근 30% 미만 오차 중앙 9.4 → 8.2%, 관광지에서 크게 나아짐(평창 31 → 13%).
+# 'sub' 출근 몫 빼기: 관외 유입에서 출근 몫(통근 유입 인원 × 그 달 근무일 몫)을 빼고 공식, 출근하는 사람은 체류에 따로 더함.
+#       관광공사 값이 아직 없는 최근 달·광역시(특별시) 구. 통근 30% 미만 9.4 → 8.3%, 원도심 13곳 20 → 14%.
+# 'nc'  옛 방법(나우캐스트 관외 유입 그대로). 출근 인원 자료가 없을 때만.
+# 광역시 구는 'dl'을 쓰지 않는다: 시험에서 원도심 구가 외지인 방법으로 나빠짐(부산 중구 33 → 58%, 동구 17 → 41%).
+METHOD_NAME = {"dl": "관광공사 외지인 방법", "sub": "출근 몫 빼기 방법", "nc": "관외 유입 방법(옛 방법)"}
+
+
+def _metro_gu(sido, sigungu):
+    return (sido.endswith("광역시") or sido == "서울특별시") and sigungu.endswith("구")
+
+
+def _commute_in(sido, sigungu):
+    try:
+        import daily
+        return daily.commute(sido, sigungu)
+    except Exception:
+        return None
+
+
+def _wd_ratio(db, ym):
+    """그 달 날짜 중 근무일(주말·공휴일 뺌) 몫."""
+    import calendar
+    import datetime as dt
+    try:
+        import daily
+        hol = daily.holidays(db)
+    except Exception:
+        hol = {}
+    y, m = int(ym[:4]), int(ym[4:])
+    n = calendar.monthrange(y, m)[1]
+    w = sum(1 for d in range(1, n + 1)
+            if dt.date(y, m, d).weekday() < 5 and dt.date(y, m, d) not in hol)
+    return w / n
+
+
+def _dl_month(db, sido, sigungu):
+    """관광공사 외지인 하루 평균(명), 그 달 날짜가 다 찬 달만. {YYYYMM: 값}"""
+    import calendar
+    codes = _codes(db, sido, sigungu, "datalab")
+    if not codes:
+        return {}
+    try:
+        q = (f"SELECT day, SUM(touNum) FROM datalab_daily WHERE touDivCd=2 AND signguCode IN "
+             f"({','.join('?' * len(codes))}) GROUP BY day")
+        agg = {}
+        for day, v in db.execute(q, codes):
+            d = str(day).replace("-", "")
+            agg.setdefault(d[:6], []).append(v or 0)
+    except Exception:
+        return {}
+    return {ym: sum(vs) / len(vs) for ym, vs in agg.items()
+            if len(vs) == calendar.monthrange(int(ym[:4]), int(ym[4:]))[1]}
+
+
+def _feat(method, db, sido, sigungu, ym, nc, dl, jf, stay=None):
+    """(x들, y) — y는 학습 때만. 못 만들면 None."""
+    if method == "dl":
+        if ym not in dl or dl[ym] <= 0:
+            return None
+        x = [math.log(dl[ym]), math.log(jf)]
+        return x, (math.log(stay) if stay is not None and stay > 0 else None)
+    if ym not in nc or nc[ym][1] < 3:
+        return None
+    if method == "sub":
+        cm = _commute_in(sido, sigungu)
+        if not cm:
+            return None
+        vis = nc[ym][0] - cm * _wd_ratio(db, ym)
+        if vis <= 0:
+            return None
+        y = None
+        if stay is not None:
+            if stay - cm <= 0:
+                return None
+            y = math.log(stay - cm)
+        return [math.log(vis), math.log(jf)], y
+    return [math.log(nc[ym][0]), math.log(jf)], (math.log(stay) if stay is not None and stay > 0 else None)
+
+
+_FIT_TTL = 6 * 3600
+_fit_mem = {}      # method → (시각, 결과). 공표 지역마다 표를 읽어 만드는 일이라(외지인 방법은 지역마다 관광공사 표) 6시간 재사용,
+                   # 서버 시작·자동 갱신 뒤(load_memory) 비움
+
+
+def _fit(db, method="nc"):
+    import time
+    hit = _fit_mem.get(method)
+    if hit and time.time() - hit[0] < _FIT_TTL:
+        return hit[1]
+    out = _fit_build(db, method)
+    _fit_mem[method] = (time.time(), out)
+    return out
+
+
+def _fit_build(db, method="nc"):
+    """공표 지역으로 공식을 맞추고, 지역 하나씩 빼고 맞혀 오차 분포를 낸다(최신 공표 달이 바뀔 때만 다시).
+    method: 'dl'·'sub'·'nc'(0.6.5, 위 설명)."""
     import numpy as np
     regions = db.execute("SELECT sido, sigungu FROM region_map WHERE life_pop IS NOT NULL AND life_pop<>''").fetchall()
     seen, rows = set(), []
@@ -310,16 +410,21 @@ def _fit(db):
         live = _by_period(db, "kosis_life_pop", _codes(db, sd, sg, "life_pop"), "AND ITM_ID='T001'")
         jumin, frn = _reg(db, sd, sg)
         nc = _nc_month(db, sd, sg)
+        dl = _dl_month(db, sd, sg) if method == "dl" else {}
         for m in sorted(live)[-12:]:
             j, f = _latest_le(jumin, m), _latest_le(frn, m[:4])
-            if m not in nc or nc[m][1] < 3 or j is None or f is None:
+            if j is None or f is None:
                 continue
             stay = live[m] - j - f
-            if stay > 0:
-                rows.append((k, math.log(stay), math.log(nc[m][0]), math.log(j + f)))
+            if stay <= 0:
+                continue
+            ft = _feat(method, db, sd, sg, m, nc, dl, j + f, stay)
+            if ft is None or ft[1] is None:
+                continue
+            rows.append((k, ft[1], ft[0][0], ft[0][1]))
     if len(seen) < 20 or len(rows) < 100:
         return None
-    key = (len(rows), round(sum(r[1] for r in rows), 3))
+    key = (method, len(rows), round(sum(r[1] for r in rows), 3))
     if key in _fit_cache:
         return _fit_cache[key]
     ks = np.array([r[0][0] + "|" + r[0][1] for r in rows])
@@ -341,37 +446,72 @@ def _fit(db):
     return out
 
 
+# 0.6.5 ⑥: 지역별고용조사 시군 표에 없는 곳의 타지역 통근 비율(%)과 출처. 모두 30% 넘어 추정 안 함(등급 C) 이유를 바로잡음
+SHARE_FALLBACK = {
+    ("세종특별자치시", "세종특별자치시"): (32.3, "인구총조사 2020, 다른 시도로 출근"),   # 지역 목록의 이름
+    ("세종특별자치시", "세종시"): (32.3, "인구총조사 2020, 다른 시도로 출근"),
+    ("인천광역시", "제물포구"): (60.0, "옛 인천 동구 값(지역별고용조사, 2026-07 구 개편 전)"),
+    ("인천광역시", "영종구"): (33.0, "옛 인천 중구 값(지역별고용조사, 2026-07 구 개편 전)"),
+    ("인천광역시", "서해구"): (50.0, "옛 인천 서구 값(지역별고용조사, 2026-07 구 개편 전)"),
+    ("인천광역시", "검단구"): (50.0, "옛 인천 서구 값(지역별고용조사, 2026-07 구 개편 전)"),
+}
+
+
 def estimate_unpublished(db, sido, sigungu, ym):
     base = {"지역": f"{sido} {sigungu}", "달": ym, "공표": "이 지역은 생활인구 공표 대상(인구감소·관심지역)이 아니다."}
-    share = commute_share(db, sido, sigungu)
+    share, share_src = commute_share(db, sido, sigungu), "지역별고용조사(최근 반기)"
     if share is None:
-        return {**base, "추정": "하지 않음",
-                "이유": "타지역 통근 비율 자료가 없어 추정 공식을 써도 되는 지역인지 판단할 수 없다. 숫자를 지어내지 말 것."}
+        fb = next((v for (sd, sg), v in SHARE_FALLBACK.items() if A.canon(sd, sg) == A.canon(sido, sigungu)), None)
+        if fb:
+            share, share_src = fb
+    if share is None:
+        return feedback.cant({**base, "추정": "하지 않음",
+                "이유": "타지역 통근 비율 자료가 없어 추정 공식을 써도 되는 지역인지 판단할 수 없다. 숫자를 지어내지 말 것."},
+                "통근 비율 자료 없음")
     if share >= COMMUTE_LIMIT:
-        return {**base, "추정": "하지 않음(등급 C)", "타지역 통근 비율(%)": share,
+        out = {**base, "추정": "하지 않음(등급 C)", "타지역 통근 비율(%)": share, "통근 비율 출처": share_src,
+                "이용자에게 할 말": f"{sigungu}{'은' if (ord(sigungu[-1]) - 0xAC00) % 28 else '는'} 날마다 다른 지역으로 출퇴근하는 사람이 많아요. 이동 자료는 같은 사람이 "
+                                "출근할 때마다 따로 세서, 한 달에 한 번 세는 생활인구로 바꾸면 크게 빗나가요. "
+                                "대신 바깥에서 들어온 이동이 평소보다 많았는지는 알려 드릴 수 있어요.",
                 "이유": f"주민의 {share:.0f}%가 다른 지역으로 출근하는 지역이라 통근 이동이 방문과 섞인다. "
                        "시험한 대도시 구에서 오차가 23~28%(최대 115%)여서 추정치를 내지 않는다. "
                        "대신 외부 유입 규모와 평소 대비 변화(analyze_region_week)로 답할 것."}
+        return feedback.cant(out, "통근 많아 추정 안 함")
     nc = _nc_month(db, sido, sigungu)
     if ym not in nc or nc[ym][1] < 3:
         return {"error": "그 달의 나우캐스트 주 자료가 3주 미만이라 추정할 수 없다(진행 중인 달은 추정하지 않음)."}
     jumin, frn = _reg(db, sido, sigungu)
     j, f = _latest_le(jumin, ym), _latest_le(frn, ym[:4])
     if j is None or f is None:
-        return {"error": "주민등록인구나 등록외국인 자료가 없어 추정할 수 없다."}
-    F = _fit(db)
+        return feedback.cant({"error": "주민등록인구나 등록외국인 자료가 없어 추정할 수 없다."}, "주민·외국인 자료 없음")
+    # 0.6.5 ⑤: 관광공사 값이 다 찬 달(광역시 구 제외)은 외지인 방법, 아니면 출근 몫 빼기, 출근 인원 자료가 없으면 옛 방법
+    dl = {} if _metro_gu(sido, sigungu) else _dl_month(db, sido, sigungu)
+    order = (["dl"] if ym in dl else []) + ["sub", "nc"]
+    method, F, ft = None, None, None
+    for mth in order:
+        ft = _feat(mth, db, sido, sigungu, ym, nc, dl, j + f)
+        if ft is None:
+            continue
+        F = _fit(db, mth)
+        if F:
+            method = mth
+            break
     if not F:
         return {"error": "추정 공식을 맞출 공표 지역 자료가 모자란다."}
     a, b, c = F["coef"]
-    ls = a + b * math.log(nc[ym][0]) + c * math.log(j + f)
-    stay = math.exp(ls)
-    rng = lambda e: [round(stay * math.exp(-e) + j + f, -2), round(stay * math.exp(e) + j + f, -2)]
+    ls = a + b * ft[0][0] + c * ft[0][1]
+    add = (_commute_in(sido, sigungu) or 0.0) if method == "sub" else 0.0     # 출근하는 사람은 따로 더함
+    stay = math.exp(ls) + add
+    rng = lambda e: [round(math.exp(ls - e) + add + j + f, -2), round(math.exp(ls + e) + add + j + f, -2)]
     notes = [
         "생활인구가 공표되지 않는 지역의 비공식 참고 추정치다. 실제 값이 한 번도 없어 맞았는지 확인할 수 없는 추정이다.",
         "공식은 대부분 인구감소지역인 공표 지역에서 배웠다. 인구가 늘거나 도시 성격이 강한 지역은 오차가 더 클 수 있다.",
         "관광 중심 지역은 방문 한 번당 머무는 방식이 달라 규모 오차가 30~40%까지 커진 적이 있다(평창·태안·보령·울릉 등).",
         "보고서에 '생활인구 ○만 명'으로 쓰지 말 것. 쓰려면 '비공식 참고 추정치'라고 밝히고 범위·계산 방법·오차를 함께 적을 것.",
     ]
+    if method != "dl" and dl and ym not in dl:
+        notes.insert(0, "관광공사 값이 나오면 더 정확한 방법으로 다시 계산되어 숫자가 달라질 수 있어요"
+                        "(관광공사 값은 약 한 달 늦게 나옴).")
     try:
         r = db.execute("SELECT weekend_ratio FROM region_rhythm WHERE sido=? AND sigungu=?", (sido, sigungu)).fetchone()
         if r and r[0] and r[0] >= 1.5:
@@ -385,14 +525,21 @@ def estimate_unpublished(db, sido, sigungu, ym):
         "참고 추정 체류인구(명, 비공식)": round(stay, -2),
         "과거 둘 중 한 번은 이 범위 안": rng(F["e50"]),
         "과거 열 번 중 여덟 번은 이 범위 안": rng(F["e80"]),
-        "범위를 정한 근거": f"공표 지역 {F['n_regions']}곳을 하나씩 빼고 맞혀 본 오차(통근 비율 30% 미만 지역, 최근 12개월)",
-        "추정 방법": "log 체류인구 = a + b·log(그 달 관외 유입 주 평균) + c·log(주민등록인구+등록외국인), "
-                   f"a={a:.3f}, b={b:.3f}, c={c:.3f}. 생활인구 = 체류인구 + 주민등록인구 + 등록외국인",
+        "범위를 정한 근거": f"공표 지역 {F['n_regions']}곳을 하나씩 빼고 맞혀 본 오차(같은 방법, 통근 비율 30% 미만 지역, 최근 12개월)",
+        "추정 방법": METHOD_NAME[method] + ". " + {
+            "dl": "log 체류인구 = a + b·log(그 달 하루 평균 외지인, 한국관광공사) + c·log(주민등록인구+등록외국인)",
+            "sub": "log(체류인구 − 출근 인원) = a + b·log(그 달 관외 유입 − 출근 몫) + c·log(주민등록인구+등록외국인), "
+                   "출근 인원은 인구총조사 2020 통근 유입, 출근 몫은 출근 인원 × 그 달 근무일 몫",
+            "nc": "log 체류인구 = a + b·log(그 달 관외 유입 주 평균) + c·log(주민등록인구+등록외국인)",
+        }[method] + f", a={a:.3f}, b={b:.3f}, c={c:.3f}. 생활인구 = 체류인구 + 주민등록인구 + 등록외국인",
+        "쓴 방법": METHOD_NAME[method],
         "그 달 나우캐스트 관외 유입 주 평균(건)": round(nc[ym][0]),
         "관외 유입 단위": "하루 평균 이동 건수(그 달 주차들의 하루 평균을 평균낸 값). 일주일 합계가 아님",
         "주민등록인구(명, 공표)": round(j),
         "등록외국인(명, 공표, 연)": round(f),
         "타지역 통근 비율(%)": share,
+        **({"그 달 하루 평균 외지인(명, 한국관광공사)": round(dl[ym])} if method == "dl" else {}),
+        **({"출근 인원(명, 인구총조사 2020 통근 유입)": round(add)} if method == "sub" else {}),
         "보고서용 표기 예": (f"{sido} {sigungu} {ym[:4]}년 {int(ym[4:])}월 생활인구 비공식 참고 추정치 "
                        f"약 {rng(F['e50'])[0] / 10000:.1f}만~{rng(F['e50'])[1] / 10000:.1f}만 명"
                        "(공표되지 않는 지역, 다른 지역에서 배운 공식으로 계산해 맞았는지 확인할 수 없는 추정, 빅데이터 Insight: 지역별 유입인구 계산)"),

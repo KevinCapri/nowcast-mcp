@@ -34,3 +34,5 @@ jobs:
         run: python tests/test_kosis_memory.py
       - name: 이동 표 메모리 시험
         run: python tests/test_moves_memory.py
+      - name: 미공표 지역 생활인구 공식 시험(0.6.5)
+        run: python tests/test_lifepop_065.py
