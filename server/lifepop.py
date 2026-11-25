@@ -539,7 +539,8 @@ def estimate_unpublished(db, sido, sigungu, ym):
         "관광 중심 지역은 방문 한 번당 머무는 방식이 달라 규모 오차가 30~40%까지 커진 적이 있다(평창·태안·보령·울릉 등).",
         "보고서에 '생활인구 ○만 명'으로 쓰지 말 것. 쓰려면 '비공식 참고 추정치'라고 밝히고 범위·계산 방법·오차를 함께 적을 것.",
     ]
-    if method != "dl" and dl and ym not in dl:
+    # #116 뒤 dl은 그 달만 읽어서(빈 dict), 옛 조건 `dl and ym not in dl`이 늘 거짓이 돼 이 줄이 빠졌음(11-25 TEST)
+    if method != "dl" and not _metro_gu(sido, sigungu) and _codes(db, sido, sigungu, "datalab"):
         notes.insert(0, "관광공사 값이 나오면 더 정확한 방법으로 다시 계산되어 숫자가 달라질 수 있어요"
                         "(관광공사 값은 약 한 달 늦게 나옴).")
     try:
