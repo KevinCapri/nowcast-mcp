@@ -2,6 +2,7 @@
 
 - 나우캐스트: 매일 확인(파일 이름이 바뀌었을 때만 받으므로 가벼움)
 - 데이터랩(최근 3개월 다시 받기)·날씨: 6일마다
+- KOPIS: 매일, 새벽 정기 받기에서만(NIGHT_ONLY, 11-25 afterdate 방식)
 - KOSIS·공휴일·지역 연결표: 27일마다
 - 날짜가 아니라 '마지막 성공'을 기준으로 하므로, 서버가 꺼져 하루 건너뛰어도 다음 실행 때 따라잡는다.
 - 결과는 /home/data/update_status.json(단계별 마지막 시도·성공·오류)에 남고, 출력은 update.log에 쌓인다.
@@ -47,13 +48,19 @@ STEPS = [
     ("kosis", ["load_kosis.py"], 27, 3600),
     ("region_map", ["build_region_map.py"], 27, 3600),
     ("rhythm", ["build_rhythm.py"], 27, 3600),
-    ("kopis", ["load_kopis.py"], 6, 7200),
+    ("kopis", ["load_kopis.py"], 1, 7200),       # 11-25 afterdate 방식: 매일, 새벽 정기 받기에서만(NIGHT_ONLY)
     ("tourism", ["load_tourism.py"], 1, 7200),   # 스스로 판단: 최근 달 27일마다, 빈 옛 달은 매일 조금씩
 ]
 
 # 잠깐 멈출 단계(Azure 앱 설정 PAUSE_STEPS, 쉼표로 여럿). 원천이 우리 서버를 막았을 때처럼
 # 다시 받아 봐야 헛도는 동안 쓴다. 멈춘 단계는 시도하지 않으므로 실패 메일도 가지 않는다.
 PAUSED = {s.strip() for s in os.environ.get("PAUSE_STEPS", "").split(",") if s.strip()}
+
+# 새벽 정기 받기(UPDATE_HOUR시)에서만 돌 단계. 배포로 서버가 다시 켜질 때 도는 받기에서는 건너뜀
+# (11-25 KOPIS: 조회형 API라 하룻밤 정해진 만큼만 천천히 부름. 낮에 배포가 이어지면 또 부르게 되므로)
+NIGHT_ONLY = {"kopis"}
+UPDATE_HOUR = int(os.environ.get("UPDATE_HOUR", 5))
+NIGHT_HOURS = range(UPDATE_HOUR, UPDATE_HOUR + 4)
 
 
 def now():
@@ -195,6 +202,9 @@ def main():
                     log.write(f"\n===== {now():%Y-%m-%d %H:%M} {name} 멈춤(PAUSE_STEPS) =====\n")
                     continue
                 if not args and "--all" not in sys.argv and not due(st, name, days):
+                    continue
+                if not args and name in NIGHT_ONLY and now().hour not in NIGHT_HOURS:
+                    log.write(f"\n===== {now():%Y-%m-%d %H:%M} {name} 건너뜀(새벽 정기 받기에서만) =====\n")
                     continue
                 s = st.setdefault(name, {})
                 s["last_try"] = now().isoformat(timespec="seconds")

@@ -122,7 +122,7 @@ def region_calendar(db, sido, sigungu, start, end=""):
             ev.append({"종류": "대형 시설 " + ("개점" if "개점" in f else "폐점"), "이름": f["시설"], "날짜": f.get("개점") or f.get("폐점"),
                        "유입 시험": f["유입 시험"], "출처": "회사 발표·보도(이 서비스가 확인), 원인 단정 금지"})
         for p in safe.call("공연(일정)", perf.in_range, db, sido, sigungu, mon, sun, default=[]) or []:
-            ev.append({"종류": "큰 공연장 공연", **p, "출처": "KOPIS 공연예술통합전산망(발권 기준, 원인 단정 금지)"})
+            ev.append({"종류": "큰 공연장 공연", **p, "출처": perf.CREDIT.removeprefix("출처: ") + "(발권 기준, 원인 단정 금지)"})
         for w in weather.get(wo, []):
             ev.append({"종류": "날씨", "이름": w, "출처": f"기상청 {stn} 관측소"})
         n_ev += bool(ev)

@@ -2,26 +2,35 @@
 
 - 공연장: 전체 목록을 받아 새로 생긴 곳만 상세(좌석 수·주소·좌표)를 받는다.
   주소에서 시도·시군구를 뽑아 둔다(주소·좌표는 나중에 읍면동 단위 분석에도 쓸 수 있게 그대로 보관).
-- 공연: 큰 공연장(좌석 BIG_SEATS 이상)의 공연만 받는다. 작은 공연장은 시군구 유입을 움직이지 못한다.
-  처음에는 START부터, 그 뒤에는 최근 90일 ~ 앞으로 180일을 다시 받는다(일정 변경 반영).
+- 공연: 큰 공연장(좌석 BIG_SEATS 이상)의 공연만 쌓는다. 작은 공연장은 시군구 유입을 움직이지 못한다.
 - 관객 수(예매 통계)는 쓰지 않는다. 공연 이름·기간·공연장만 '그 주에 있었던 일'의 판단 재료로 쓴다.
-- 인증키는 환경변수 KOPIS_KEY. 3개월 넘게 안 쓰면 승인이 취소되므로 update.py가 6일마다 돌린다.
+- 인증키는 환경변수 KOPIS_KEY. 3개월 넘게 안 쓰면 승인이 취소된다(매일 부르므로 걱정 없음).
 - 호출 한도(2026-11-23 KOPIS 담당자 답변): 같은 IP에서 1초에 10번을 넘으면 그 IP를 30~40분 막고 'Request Blocked'를
   돌려준다(홈페이지 접속도 함께 셈, 서비스키를 여러 개 써도 IP 기준으로 합침). 11-15 첫 받기 때 걸렸고, 막힌 동안에도
-  400을 다시 시도하며 계속 불러 11-21~22 2시간씩 헛돎 → 모든 호출 사이를 MIN_GAP초 이상 띄우고(11-25부터 2초),
+  400을 다시 시도하며 계속 불러 11-21~22 2시간씩 헛돎 → 모든 호출 사이를 MIN_GAP초 이상 띄우고(11-25부터 1분),
   막힘(400·'Request Blocked')이 오면 다시 시도하지 않고 그 자리에서 이번 받기를 멈춘다(실패 메일이 감).
 - 공연 목록(pblprfr)은 개발가이드상 한 번에 31일까지 → 31일씩 요청
-- 연결이 안 될 때(2026-11-23 저녁, 응답 없이 ConnectTimeout만 나며 2시간을 헛돎): 차단 응답이 없으면 위 '막힘'으로
-  잡히지 않아 구간마다 4번씩 다시 시도했다 → 조금씩 확인하고 넓힌다.
-  ① 처음에 한 번 불러 보기(안 되면 30초 쉬고 한 번 더). 두 번 다 안 되면 그 자리에서 멈춤(실패 메일)
-  ② 직전 받기가 실패였으면 이번엔 큰 공연장 SAMPLE곳의 최근 기간만 받고 끝냄(종료 코드 3 = '샘플만 받음'.
-     update.py는 성공으로 치지 않아 다음 실행 때 다시 돌고, 실패 메일도 보내지 않음)
-  ③ 샘플이 됐으면 다음 실행 때 전체
-  ④ 전체를 받는 도중 연결 실패(시간 초과 등)가 FAIL_RUN번 이어지면 그 자리에서 멈춤
+- 연결이 안 될 때(2026-11-23 저녁, 응답 없이 ConnectTimeout만 나며 2시간을 헛돎): 한 호출은 한 번만 다시 시도하고,
+  연결 실패가 FAIL_RUN번 이어지면 그 자리에서 멈춤(실패 메일). 11-23의 '처음 불러 보기·샘플 받기'는 afterdate 방식에서 뺌
+  (하룻밤 호출이 MAX_CALLS번뿐이고 진행이 남아 다음 날 이어지므로)
 
-쓰는 법: python pipeline/load_kopis.py [--full]   (--full: 샘플 단계 없이 지난 자료까지 처음부터 다시)
+- 2026-11-25 방식 바꿈(afterdate): 공연 목록은 정보를 그때그때 조회하라고 만든 '조회형' API인데, 큰 공연장마다 31일씩
+  매일 수백 번 '무작정 다 받기'로 짜서 KOPIS 크롤러 차단에 걸렸다(짧은 시간에 8~10번 부르면 'Request Blocked').
+  → 전국 공연 목록을 afterdate(그날 뒤로 등록·수정된 것만)로 받는다.
+  ① 매일 새벽 정기 받기에서만(update.py NIGHT_ONLY — 배포로 다시 켜질 때 도는 받기에선 안 부름)
+  ② 한 회차 = 회차 시작일 기준 지난 31일 + 앞으로 31일 × 6, 31일씩 7구간 × 100건씩 쪽 넘기기
+  ③ 호출 간격 MIN_GAP(1분), 하룻밤 MAX_CALLS번까지. 못 끝내면 어디까지 했는지(kopis_state) 기억해 두고 다음 날 이어서.
+     7구간을 다 끝내야 다음 afterdate를 그 회차 시작일로 옮긴다 → 빠지는 날이 없음. 첫 회차는 FIRST_AFTER(11-15)부터
+  ④ 공연장 찾기: 목록의 공연장 이름 + 시도(area)로 kopis_venue에서 찾음(11-25 시험 100건 중 99건, 이름은 전국에 겹치지 않음).
+     좌석 BIG_SEATS 이상 공연장 공연만 쌓음(지금처럼). 못 찾은 이름은 kopis_unmatched에 모아 둠
+  ⑤ 공연장 목록은 한 달에 한 번, 남은 호출로 며칠에 나눠 받고 새 곳만 상세. 새 큰 공연장이 나오면 그곳 공연만 한 번 따로 받음
+     (afterdate로는 그 공연장의 예전에 등록된 공연이 다시 안 오므로)
+  ⑥ 막히면 지금처럼 그 자리에서 멈춤(몇 번째 호출인지 남김). 다음 날 이어서
+
+쓰는 법: python pipeline/load_kopis.py
 """
 import datetime as dt
+import json
 import sys
 import time
 import xml.etree.ElementTree as ET
@@ -33,14 +42,19 @@ BASE = "http://www.kopis.or.kr/openApi/restful"
 # (GitHub Actions 새 IP에서 시험: python-requests 400, 우리 이름·curl·브라우저 200). IP 차단이 아니었음 → 우리 이름을 밝힘
 HEADERS = {"User-Agent": "nowcast-mcp (+https://nowcast-mcp.azurewebsites.net)"}
 BIG_SEATS = 3000
-MIN_GAP = 2.0           # 호출 사이 최소 간격(초). 11-25: 0.25초(초당 4번)로도 10번쯤에 'Request Blocked'(크롤러 차단 강화) → 2초(10번에 20초, 7배 여유)
+MIN_GAP = 60.0          # 호출 사이 최소 간격(초). 11-25: 0.25초·2초 간격 모두 8~10번째에 'Request Blocked'(짧은 시간 안 횟수로 막음) → 1분
+MAX_CALLS = 20          # 하룻밤 호출 수 상한(처음엔 20번, 로그를 보며 늘림)
+WINDOWS = 7             # 한 회차 구간 수: 지난 31일 1구간 + 앞으로 31일 6구간
+FIRST_AFTER = dt.date(2026, 11, 15)   # 첫 회차 afterdate(마지막으로 다 받은 날)
 SPAN = 31               # 공연 목록 한 번에 요청하는 날 수(개발가이드 최대 31일)
-SAMPLE = 5              # 직전 받기가 실패였을 때 먼저 받아 볼 큰 공연장 수
 FAIL_RUN = 2            # 연결 실패가 이만큼 이어지면 받기를 멈춤
-PARTIAL = 3             # 샘플만 받고 끝냈을 때의 종료 코드(update.py가 알아봄)
 _last = [0.0]
 _count = [0, None]       # 이번 받기의 호출 수, 첫 호출 시각(막힐 때 기록)
 _fails = [0]            # 이어진 연결 실패 수
+
+
+class Budget(RuntimeError):
+    """이번 밤 호출 수(MAX_CALLS)를 다 씀. 어디까지 했는지는 kopis_state에 있고 다음 날 이어서 함."""
 
 
 class Blocked(RuntimeError):
@@ -54,7 +68,6 @@ class Unreachable(Blocked):
 def _conn_fail(e):
     return any(w in str(e) for w in ("Timeout", "ConnectionError"))
 
-START = dt.date(2023, 1, 1)
 SIDO_ALIAS = {"강원도": "강원특별자치도", "전라북도": "전북특별자치도"}
 
 
@@ -64,7 +77,9 @@ def _where():
     return f"{_count[0]}번째 호출, 첫 호출부터 {t:.0f}초, 간격 {MIN_GAP}초"
 
 
-def xml(path, _tries=4, _wait=10, **params):
+def xml(path, _tries=2, _wait=60, **params):
+    if _count[0] >= MAX_CALLS:
+        raise Budget(f"이번 밤 호출 {MAX_CALLS}번을 다 씀")
     gap = MIN_GAP - (time.monotonic() - _last[0])
     if gap > 0:
         time.sleep(gap)
@@ -120,94 +135,147 @@ def setup(con):
     CREATE TABLE IF NOT EXISTS kopis_backfill(mt10id TEXT PRIMARY KEY, done TEXT);
     CREATE INDEX IF NOT EXISTS kopis_venue_region ON kopis_venue(sido, sigungu);
     CREATE TABLE IF NOT EXISTS kopis_state(k TEXT PRIMARY KEY, v TEXT);
+    CREATE TABLE IF NOT EXISTS kopis_unmatched(name TEXT, area TEXT, n INTEGER, last TEXT, PRIMARY KEY(name, area));
     """)
 
 
-def state(con, v=None):
-    """직전 받기 결과: 'ok'(전체 성공) / 'sample_ok'(샘플만 됨) / 'fail'. 기록이 없으면 'fail'로 봄(이 기능을 넣은 2026-11-23 저녁에 직전 받기가 실패였음, 처음 까는 곳도 샘플부터)."""
-    if v is None:
-        row = con.execute("SELECT v FROM kopis_state WHERE k='last'").fetchone()
-        return row[0] if row else "fail"
-    con.execute("INSERT OR REPLACE INTO kopis_state VALUES('last', ?)", (v,))
+def get_state(con, k, default=None):
+    row = con.execute("SELECT v FROM kopis_state WHERE k=?", (k,)).fetchone()
+    return row[0] if row else default
+
+
+def set_state(con, **kv):
+    for k, v in kv.items():
+        if v is None:
+            con.execute("DELETE FROM kopis_state WHERE k=?", (k,))
+        else:
+            con.execute("INSERT OR REPLACE INTO kopis_state VALUES(?, ?)", (k, str(v)))
     con.commit()
 
 
-def probe(k):
-    """받기 전에 한 번 불러 보기. 안 되면 30초 쉬고 한 번 더, 두 번 다 안 되면 Unreachable(막힘이면 Blocked)."""
-    try:
-        xml("prfplc", _tries=2, _wait=30, service=k, cpage=1, rows=1)
-    except Blocked:
-        raise
-    except Exception as e:
-        raise Unreachable(f"처음 불러 보기 두 번 모두 실패: {e}") from None
-    print("처음 불러 보기 성공", flush=True)
+def _venue_map(con):
+    """(공연장 이름, 시도) → (mt10id, 좌석). 시도가 안 맞아도 이름이 전국에 하나면 그 이름만으로도 찾음."""
+    by_both, by_name = {}, {}
+    for vid, name, sido, seats in con.execute("SELECT mt10id, name, sido, seats FROM kopis_venue"):
+        nm = (name or "").strip()
+        by_both[(nm, sido)] = (vid, seats or 0)
+        by_name.setdefault(nm, []).append((vid, seats or 0))
+    return by_both, {n: v[0] for n, v in by_name.items() if len(v) == 1}
 
 
-def load_sample(con, k):
-    """큰 공연장 SAMPLE곳의 최근 기간만 받아 본다(지난 자료를 다 받은 곳부터). (받은 건수, 실패한 구간 수)"""
-    rows = con.execute("SELECT v.mt10id, v.name FROM kopis_venue v JOIN kopis_backfill b USING(mt10id) "
-                       "WHERE v.seats>=? ORDER BY v.mt10id LIMIT ?", (BIG_SEATS, SAMPLE)).fetchall()
-    if len(rows) < SAMPLE:
-        rows = con.execute("SELECT mt10id, name FROM kopis_venue WHERE seats>=? ORDER BY mt10id LIMIT ?",
-                           (BIG_SEATS, SAMPLE)).fetchall()
-    today = dt.date.today()
-    n = bad = 0
-    for vid, vname in rows:
-        m, b = _venue_range(con, k, vid, vname, today - dt.timedelta(days=90), today + dt.timedelta(days=180),
-                            today.isoformat())
-        n += m
-        bad += b
-    print(f"샘플 {len(rows)}곳: 공연 {n}건 받음, 실패한 구간 {bad}개", flush=True)
-    return n, bad
+def _find(maps, name, area):
+    by_both, by_name = maps
+    nm = (name or "").strip()
+    sd = SIDO_ALIAS.get(area, area)
+    return by_both.get((nm, sd)) or by_name.get(nm)
 
 
-def load_venues(con, k):
-    have = {r[0] for r in con.execute("SELECT mt10id FROM kopis_venue")}
-    ids, page = [], 1
-    while True:
-        try:
-            root = xml("prfplc", service=k, cpage=page, rows=100)
-        except Blocked:
-            raise
-        except Exception as e:                         # 목록이 중간에 끊기면 이미 받은 공연장으로 계속
-            print(f"  공연장 목록 {page}쪽 실패, 여기까지로 진행: {e}", flush=True)
-            break
+def _windows(start):
+    """회차 시작일 기준 지난 31일 + 앞으로 31일 × 6 (31일씩 WINDOWS구간)."""
+    a = start - dt.timedelta(days=SPAN)
+    return [(a + dt.timedelta(days=SPAN * i), a + dt.timedelta(days=SPAN * (i + 1) - 1)) for i in range(WINDOWS)]
+
+
+def load_changes(con, k, today):
+    """afterdate로 바뀐 공연만 받는다. 회차 진행(after·cycle·win·page)은 kopis_state에 있어 다음 날 이어서 한다."""
+    after = dt.date.fromisoformat(get_state(con, "after", FIRST_AFTER.isoformat()))
+    cycle = get_state(con, "cycle")
+    if cycle is None:                       # 새 회차 시작
+        cycle = today.isoformat()
+        set_state(con, cycle=cycle, win=0, page=1)
+    cycle = dt.date.fromisoformat(cycle)
+    win, page = int(get_state(con, "win", 0)), int(get_state(con, "page", 1))
+    wins = _windows(cycle)
+    maps = _venue_map(con)
+    stamp = today.isoformat()
+    got = kept = miss = 0
+    print(f"바뀐 공연 받기: afterdate {after}, 회차 시작 {cycle}, {win + 1}/{WINDOWS}구간 {page}쪽부터", flush=True)
+    while win < WINDOWS:
+        s, e = wins[win]
+        root = xml("pblprfr", service=k, stdate=s.strftime("%Y%m%d"), eddate=e.strftime("%Y%m%d"),
+                   cpage=page, rows=100, afterdate=after.strftime("%Y%m%d"))
         rows = root.findall("db")
-        if not rows:
-            break
-        ids += [txt(d, "mt10id") for d in rows]
-        page += 1
-    new = [i for i in ids if i and i not in have]
-    print(f"공연장 {len(ids)}곳, 새로 받을 곳 {len(new)}곳", flush=True)
-    today = dt.date.today().isoformat()
-    for n, i in enumerate(new, 1):
-        try:
-            d = xml(f"prfplc/{i}", service=k).find("db")
-        except Blocked:
-            raise
-        except Exception as e:
-            print(f"  {i} 상세 실패: {e}", flush=True)
-            continue
-        if d is None:
-            continue
-        adres = txt(d, "adres")
-        sido, sg = parse_addr(adres)
-        try:
-            seats = int(txt(d, "seatscale").replace(",", "") or 0)
-        except ValueError:
-            seats = 0
-        def num(v):
+        for d in rows:
+            got += 1
+            v = _find(maps, txt(d, "fcltynm"), txt(d, "area"))
+            if v is None:
+                miss += 1
+                con.execute("INSERT INTO kopis_unmatched VALUES(?,?,1,?) ON CONFLICT(name, area) "
+                            "DO UPDATE SET n=n+1, last=excluded.last", (txt(d, "fcltynm"), txt(d, "area"), stamp))
+                continue
+            if v[1] < BIG_SEATS:
+                continue
+            con.execute("INSERT OR REPLACE INTO kopis_perf VALUES(?,?,?,?,?,?,?,?)",
+                        (txt(d, "mt20id"), txt(d, "prfnm"), txt(d, "prfpdfrom").replace(".", "-"),
+                         txt(d, "prfpdto").replace(".", "-"), v[0], txt(d, "fcltynm"), txt(d, "genrenm"), stamp))
+            kept += 1
+        if len(rows) < 100:
+            win, page = win + 1, 1
+        else:
+            page += 1
+        set_state(con, win=win, page=page)
+    # 7구간을 다 끝냄 → 다음 회차는 이 회차 시작일 뒤로 바뀐 것부터
+    set_state(con, after=cycle.isoformat(), cycle=None, win=None, page=None)
+    print(f"회차 끝: 받은 {got}건 중 큰 공연장 {kept}건 쌓음, 공연장 못 찾음 {miss}건 → 다음 afterdate {cycle}", flush=True)
+    return got, kept, miss
+
+
+def load_venues(con, k, today):
+    """공연장 목록은 한 달에 한 번, 남은 호출로 며칠에 나눠 받는다. 새 곳만 상세를 받고, 새 큰 공연장은 공연을 한 번 따로 받음."""
+    month = today.strftime("%Y-%m")
+    if get_state(con, "venue_month") == month:
+        return
+    page = int(get_state(con, "venue_page", 1))
+    queue = json.loads(get_state(con, "venue_new", "[]"))
+    have = {r[0] for r in con.execute("SELECT mt10id FROM kopis_venue")}
+    print(f"공연장 목록({month}): {page}쪽부터, 상세 기다리는 곳 {len(queue)}곳", flush=True)
+    while page:
+        rows = xml("prfplc", service=k, cpage=page, rows=100).findall("db")
+        queue += [i for i in (txt(d, "mt10id") for d in rows) if i and i not in have and i not in queue]
+        page = page + 1 if len(rows) == 100 else 0
+        set_state(con, venue_page=page or None, venue_new=json.dumps(queue))
+    stamp = today.isoformat()
+    while queue:
+        i = queue[0]
+        d = xml(f"prfplc/{i}", service=k).find("db")
+        if d is not None:
+            adres = txt(d, "adres")
+            sido, sg = parse_addr(adres)
             try:
-                return float(v)
+                seats = int(txt(d, "seatscale").replace(",", "") or 0)
             except ValueError:
-                return None
-        con.execute("INSERT OR REPLACE INTO kopis_venue VALUES(?,?,?,?,?,?,?,?,?,?)",
-                    (i, txt(d, "fcltynm"), sido, sg, adres, num(txt(d, "la")), num(txt(d, "lo")),
-                     seats, txt(d, "opende"), today))
-        if n % 100 == 0:
-            con.commit()
-            print(f"  상세 {n}/{len(new)}", flush=True)
-    con.commit()
+                seats = 0
+            def num(v):
+                try:
+                    return float(v)
+                except ValueError:
+                    return None
+            con.execute("INSERT OR REPLACE INTO kopis_venue VALUES(?,?,?,?,?,?,?,?,?,?)",
+                        (i, txt(d, "fcltynm"), sido, sg, adres, num(txt(d, "la")), num(txt(d, "lo")),
+                         seats, txt(d, "opende"), stamp))
+            if seats >= BIG_SEATS:
+                big = json.loads(get_state(con, "venue_big", "[]"))
+                set_state(con, venue_big=json.dumps(big + [i]))
+            print(f"  새 공연장 {txt(d, 'fcltynm')} ({sido} {sg}, {seats}석)", flush=True)
+        queue.pop(0)
+        set_state(con, venue_new=json.dumps(queue))
+    set_state(con, venue_month=month, venue_page=None, venue_new=None)
+    print(f"공연장 목록({month}) 끝", flush=True)
+
+
+def load_new_big(con, k, today):
+    """새로 찾은 큰 공연장의 공연(지난 31일 ~ 앞으로 186일)을 한 번 받는다. 호출이 모자라면 다음 날 그 공연장부터 다시."""
+    big = json.loads(get_state(con, "venue_big", "[]"))
+    while big:
+        vid = big[0]
+        name = (con.execute("SELECT name FROM kopis_venue WHERE mt10id=?", (vid,)).fetchone() or [vid])[0]
+        if MAX_CALLS - _count[0] < WINDOWS:          # 한 곳에 7번 넘게 드니 남은 호출이 모자라면 다음 날
+            return
+        n, bad = _venue_range(con, k, vid, name, today - dt.timedelta(days=SPAN), today + dt.timedelta(days=SPAN * 6),
+                              today.isoformat())
+        print(f"  새 큰 공연장 {name}: 공연 {n}건(실패 구간 {bad})", flush=True)
+        big.pop(0)
+        set_state(con, venue_big=json.dumps(big) if big else None)
 
 
 def _venue_range(con, k, vid, vname, a, z, stamp):
@@ -231,7 +299,7 @@ def _venue_range(con, k, vid, vname, a, z, stamp):
                 if len(rows) < 100:
                     break
                 page += 1
-        except Blocked:
+        except (Blocked, Budget):                      # 막힘·오늘 몫 다 씀은 위로(새 큰 공연장은 다음 날 다시)
             con.commit()
             raise
         except Exception as ex:                        # 한 구간이 실패해도 나머지는 계속 받음
@@ -242,69 +310,26 @@ def _venue_range(con, k, vid, vname, a, z, stamp):
     return n, bad
 
 
-def load_perfs(con, k, full):
-    """최근 석 달~앞으로 여섯 달은 매번 다시 받고, 2023년부터의 지난 자료는 공연장마다 한 번 다 받으면 끝(kopis_backfill).
-    중간에 실패한 공연장은 다음 실행 때 지난 자료를 다시 받는다. 일부 구간만 실패하면 단계는 성공으로 끝내고 건수만 알린다."""
-    big = con.execute("SELECT mt10id, name FROM kopis_venue WHERE seats>=?", (BIG_SEATS,)).fetchall()
-    if full:
-        con.execute("DELETE FROM kopis_backfill")
-    done = {r[0] for r in con.execute("SELECT mt10id FROM kopis_backfill")}
-    today = dt.date.today()
-    recent = today - dt.timedelta(days=90)
-    z = today + dt.timedelta(days=180)
-    stamp = today.isoformat()
-    todo = [v for v in big if v[0] not in done]
-    print(f"큰 공연장 {len(big)}곳(지난 자료 받을 곳 {len(todo)}곳), 최근 기간 {recent} ~ {z}", flush=True)
-    n = bad = 0
-    for vid, vname in big:
-        if vid in done:
-            m, b = _venue_range(con, k, vid, vname, recent, z, stamp)
-        else:
-            m, b = _venue_range(con, k, vid, vname, START, z, stamp)
-            if b == 0:
-                con.execute("INSERT OR REPLACE INTO kopis_backfill VALUES(?,?)", (vid, stamp))
-                con.commit()
-        n += m
-        bad += b
-    print(f"공연 {n}건 받음, 실패해 건너뛴 구간 {bad}개(다음 실행 때 다시 받음)", flush=True)
-    return n, bad
-
-
 def main():
     k = key("KOPIS_KEY")
-    full = "--full" in sys.argv
     con = connect()
     setup(con)
-    sample = state(con) == "fail" and not full
-    state(con, "fail")                     # 끝까지 못 가고 끊겨도(2시간 제한 등) '실패'로 남게 먼저 적음
+    today = dt.date.today()
     try:
-        probe(k)
-        if sample:
-            got, bad = load_sample(con, k)
-        else:
-            load_venues(con, k)
-            got, bad = load_perfs(con, k, full)
-    except Unreachable as e:               # 연결이 안 되면 더 부르지 않고 실패로 끝냄(메일)
-        con.commit()
+        load_changes(con, k, today)        # 바뀐 공연이 먼저
+        load_venues(con, k, today)         # 남은 호출로 공연장 목록(한 달에 한 번)
+        load_new_big(con, k, today)
+    except Budget as e:                    # 오늘 몫을 다 씀 → 다음 날 이어서(실패 아님)
+        print(f"{e} → 다음 날 이어서", flush=True)
+    except Unreachable as e:               # 연결이 안 되면 더 부르지 않고 실패로 끝냄(메일). 진행은 남아 다음 날 이어서
         con.close()
-        sys.exit(f"{e}\n→ 이번 받기를 멈춤(연결 안 됨). KOPIS 차단·KOPIS 점검·우리 서버 쪽 문제 중 무엇인지 모름 → "
+        sys.exit(f"{e}\n→ 이번 받기를 멈춤(연결 안 됨). 다음 날 이어서 함. KOPIS 차단·KOPIS 점검·우리 서버 쪽 문제 중 무엇인지 모름 → "
                  "update.log에서 이번 받기의 앞부분을 보고, Kudu에서 KOPIS와 다른 사이트에 한 번씩 접속해 볼 것")
-    except Blocked as e:                   # 막히면 더 부르지 않고 실패로 끝냄(메일). 30~40분 뒤 풀림, 계속되면 KOPIS에 회신
-        con.commit()
+    except Blocked as e:                   # 막히면 더 부르지 않고 실패로 끝냄(메일). 진행은 남아 다음 날 이어서
         con.close()
-        sys.exit(f"{e}\n→ 이번 받기를 멈춤. KOPIS 차단은 30~40분 뒤 저절로 풀림. 다음 실행에도 막히면 "
-                 "kopis@gokams.or.kr에 회신(아직 차단 중이라고)")
+        sys.exit(f"{e}\n→ 이번 받기를 멈춤. 다음 날 이어서 함. 계속 막히면 '언제·어느 IP·어느 주소·어떤 응답'으로 KOPIS에 한 번만 문의")
     cnt = con.execute("SELECT COUNT(*), MIN(s), MAX(e) FROM kopis_perf").fetchone()
-    print(f"쌓인 공연 {cnt[0]}건 ({cnt[1]} ~ {cnt[2]})", flush=True)
-    if bad and not got:                    # 하나도 못 받고 전부 실패(인증키 만료 등)면 실패로 끝내 메일이 가게
-        con.close()
-        sys.exit(f"공연을 하나도 받지 못함(실패 구간 {bad}개)")
-    if sample:
-        state(con, "sample_ok")
-        con.close()
-        print("샘플이 됨 → 다음 실행 때 전체를 받음", flush=True)
-        sys.exit(PARTIAL)
-    state(con, "ok")
+    print(f"이번 밤 호출 {_count[0]}번. 쌓인 공연 {cnt[0]}건 ({cnt[1]} ~ {cnt[2]})", flush=True)
     con.close()
 
 
