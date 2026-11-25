@@ -18,6 +18,7 @@ from pathlib import Path
 import uvicorn
 
 from server import mcp
+import server  # noqa: E402  (장날 자료 다시 읽기)
 import feedback
 import guard
 import timing
@@ -52,6 +53,10 @@ def _update_loop():
         r = subprocess.run([sys.executable, str(UPDATE)], cwd=UPDATE.parents[1])
         print(f"[update] 끝 (코드 {r.returncode})", flush=True)
         web.warm()                     # 새 자료로 지역·주차 목록 다시 만들기
+        try:
+            server.reload_markets()    # 새 장날 자료(markets 표)
+        except Exception as e:
+            print("[update] 장날 자료 다시 읽기 실패", repr(e), flush=True)
         guard.mark_reload()            # 이 직후 느린 요청은 cold로 표시(속도 모니터링)
         time.sleep(_seconds_to_next_run())
 

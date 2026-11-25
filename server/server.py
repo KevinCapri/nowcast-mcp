@@ -1268,18 +1268,36 @@ def forecast_festival(sido: Sido, sigungu: Sigungu, festival_name: str = "", sta
     return r
 
 
-def _load_markets():
+def _market_rows():
+    """장날 자료: 서버 DB의 markets 표(pipeline/load_markets.py, 27일마다 API로 받음)를 먼저, 없으면 손으로 받은 markets.csv."""
     import csv
-    out = {}
+    try:
+        cur = db.execute("SELECT sido, sigungu, name, cycle, stores FROM markets")
+        rows = [dict(zip(("sido", "sigungu", "name", "cycle", "stores"), r)) for r in cur.fetchall()]
+        if rows:
+            return rows
+    except sqlite3.OperationalError:
+        pass
     with open(Path(__file__).with_name("markets.csv"), encoding="utf-8") as f:
-        for r in csv.DictReader(f):
-            if r["cycle"] != "매일" and r["sido"] and r["sigungu"]:
-                out.setdefault(analysis.canon(r["sido"], r["sigungu"]), []).append(
-                    f"{r['name']}({r['cycle'].replace('+', '·')}, 점포 {int(float(r['stores'] or 0))}개)")
+        return list(csv.DictReader(f))
+
+
+def _load_markets():
+    out = {}
+    for r in _market_rows():
+        if r["cycle"] != "매일" and r["sido"] and r["sigungu"]:
+            out.setdefault(analysis.canon(r["sido"], r["sigungu"]), []).append(
+                f"{r['name']}({r['cycle'].replace('+', '·')}, 점포 {int(float(r['stores'] or 0))}개)")
     return out
 
 
 MARKETS = _load_markets()
+
+
+def reload_markets():
+    """자동 갱신 뒤 새 장날 자료로 바꿔 끼움(server_http._update_loop)."""
+    global MARKETS
+    MARKETS = _load_markets()
 
 
 def _visit_look(sido, sigungu, R=None):
