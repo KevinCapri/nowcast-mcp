@@ -56,7 +56,11 @@ def get(url, params, tries=4, timeout=120, wait=20, retry_codes=(), headers=None
                 return r
             err = f"HTTP {r.status_code}"
             if r.status_code < 500 and r.status_code not in retry_codes:
-                raise RuntimeError(f"{err}: {url} {masked(params)}")
+                body = (r.text or "")[:200]
+                for v in (params or {}).values():          # 응답에 인증키가 되비치면 가림
+                    if isinstance(v, str) and len(v) >= 16:
+                        body = body.replace(v, "***")
+                raise RuntimeError(f"{err}: {url} {masked(params)} 응답: {body!r}")   # 11-25: 400이 차단인지 다른 오류인지 가리려고
         except (requests.Timeout, requests.ConnectionError) as e:
             err = type(e).__name__
         if i == tries:
