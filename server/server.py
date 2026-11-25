@@ -69,7 +69,7 @@ db = _ThreadDB(DB)
 SERVICE = "빅데이터 Insight: 지역별 유입인구"
 # 도구 목록이 바뀌면(추가·삭제·입력값·설명) 세 값을 같이 고친다. 회귀 시험이 TOOLS와 실제 도구가 다르면 잡는다.
 # 결과마다 붙여서, 예전에 연결한 이용자에게도 AI가 '새 도구가 생겼으니 다시 연결'을 알려 주게 한다(claude/변경_관리_원칙.md).
-VERSION = "0.6.5"
+VERSION = "0.6.6"
 TOOLS_CHANGED = "2026-11-25"
 TOOLS = ["get_metadata", "list_regions", "get_movement", "analyze_region_week",
          "find_unusual_regions", "estimate_life_pop", "forecast_festival", "get_datalab_daily", "report_issue",
@@ -1203,27 +1203,46 @@ def find_unusual_regions(week: OneWeek = "", top: Top = 15, start_week: StartWee
 
 
 @mcp.tool(annotations=READ_ONLY)
-def estimate_life_pop(sido: Sido, sigungu: Sigungu, year_month: YearMonth) -> dict:
+def estimate_life_pop(sido: Sido, sigungu: Sigungu, year_month: YearMonth,
+                      end_month: Annotated[str, Field(description="끝 달 'YYYY-MM'. 비우면 year_month 한 달만. "
+                                                      "여러 달·'전체 기간'은 한 번에 넣을 것(최대 36개월)")] = "",
+                      with_estimate: Annotated[bool, Field(description="공표된 달에도 추정값과 공표와의 차이(%)를 함께 "
+                                                           "보여 줄지. 이용자가 원할 때만 켬")] = False) -> dict:
     """생활인구가 아직 공표되지 않은 달의 생활인구를 나우캐스트로 가늠한 '비공식 참고 추정치'(범위)를 돌려준다. 공표된 생활인구가 아니다.
     생활인구 추정 질문에는 반드시 이 도구를 쓸 것. KOSIS 표 등을 조합해 직접 계산하지 말 것.
 
     - 이미 공표된 달이면 공표 값을 돌려준다(추정하지 않음).
+    - 여러 달은 year_month(시작)·end_month(끝)로 한 번에 부를 것(최대 36개월). '전체 기간'·'올해 내내'도 달마다 나눠 부르지 말 것.
+      결과는 공통 안내가 맨 위에 한 번, '달마다'에 달마다 한 줄(공표 값 또는 추정 범위)이다.
+    - with_estimate=True면 공표된 달에도 '그 전 달까지만 알았다면' 낸 추정값과 공표와의 차이(%)를 붙인다. 이용자가 원할 때만 켤 것.
+    - 공표 달과 추정 달을 견줄 때는 공표 값과 추정 범위라는 것을 함께 말하고, 범위가 공표 값을 포함하면 늘었다·줄었다고 단정하지 말 것.
     - 결과의 범위는 '과거 둘 중 한 번은 이 범위 안'이라고 말할 것. '신뢰구간'·'오차범위'라고 부르지 말 것.
     - 공표된 생활인구처럼 말하지 말 것. 반드시 '비공식 참고 추정치'라고 밝힐 것.
     - 공표되지 않은 지역은 타지역 통근 비율 30% 미만이면 공표 지역에서 배운 공식으로 범위를 준다(등급 B, 확인 불가능한 추정).
       30% 이상(대도시 구 등)은 추정하지 않는다.
-    - year_month 형식: 'YYYY-MM'(예: '2026-09')."""
-    ym = year_month.replace("-", "").replace(".", "")[:6]
-    if not (len(ym) == 6 and ym.isdigit()):
-        return {"error": "year_month 형식은 'YYYY-MM'(예: '2026-09')."}
+    - year_month·end_month 형식: 'YYYY-MM'(예: '2026-09')."""
+    fmt = lambda v: v.replace("-", "").replace(".", "")[:6]
+    ym, ye = fmt(year_month), fmt(end_month or "")
+    if not (len(ym) == 6 and ym.isdigit() and 1 <= int(ym[4:]) <= 12) or (
+            ye and not (len(ye) == 6 and ye.isdigit() and 1 <= int(ye[4:]) <= 12)):
+        return {"error": "year_month·end_month 형식은 'YYYY-MM'(예: '2026-09')."}
     # 0.6.4: 목록에 없는 이름이면 다른 Tool처럼 먼저 알려 줌(11-22: '세종특별자치시/세종시'에 '통근 비율 자료 없음'이라는 엉뚱한 이유)
     if not analysis.series(db, sido, sigungu):
         return {"error": "지역을 찾지 못함. list_regions로 시도·시군구 이름을 확인할 것."}
-    r = lifepop.estimate(db, sido, sigungu, ym)
+    src = "생활인구·주민등록인구·등록외국인: 국가데이터처·행정안전부·법무부(KOSIS) / " + SOURCE.removeprefix("출처: ")
+    if (ye and ye != ym) or with_estimate:
+        ye = ye or ym
+        if ye < ym:
+            return {"error": "end_month가 year_month보다 앞선다. 시작 달을 year_month에, 끝 달을 end_month에 넣을 것."}
+        n = len(lifepop.months_between(ym, ye))
+        if n > lifepop.MAX_MONTHS:
+            return {"error": f"한 번에 {lifepop.MAX_MONTHS}개월까지 볼 수 있다({n}개월을 넣음). 기간을 나눠 다시 부를 것."}
+        r = lifepop.estimate_range(db, sido, sigungu, ym, ye, with_estimate)
+    else:
+        r = lifepop.estimate(db, sido, sigungu, ym)
     if "error" not in r:
         r["자료 기준"] = _as_of()
-        return _answer(r, "lifepop", "생활인구·주민등록인구·등록외국인: 국가데이터처·행정안전부·법무부(KOSIS) / "
-                       + SOURCE.removeprefix("출처: "), calc=True)
+        return _answer(r, "lifepop", src, calc=True)
     return r
 
 
