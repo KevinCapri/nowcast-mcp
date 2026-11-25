@@ -10,6 +10,7 @@
   되짚어 본 달이 6개 미만이면 전국 오차(5.3%)를 쓴다.
 - 대상: 생활인구 공표 지역(인구감소·관심지역)만. 타지역 통근 비율 30% 이상이면 신뢰도 낮음.
 """
+import datetime as dt
 import math
 from statistics import mean
 
@@ -23,8 +24,13 @@ MIN_BACKTEST = 6      # 지역별 범위를 쓰려면 되짚어 본 달이 이�
 # 생활인구 공표 일정(국가데이터처 보도계획, 2026-11-14 확인): 분기마다 '○분기 생활인구 산정 결과'
 # 2025년 3분기 → 2026-02-24, 4분기 → 05-28, 2026년 1분기 → 07-30, 2분기 → 10-29, 3분기 → 12-29 (분기 끝나고 3~5개월 뒤)
 SCHEDULE_URL = "https://mods.go.kr/newsPln.es?mid=a10305000000&bid="
-KNOWN_RELEASES = {"2025Q3": "2026-02-24", "2025Q4": "2026-05-28", "2026Q1": "2026-07-30", "2026Q2": "2026-10-29",
+KNOWN_RELEASES = {"2024Q1": "2024-07-25", "2024Q2": "2024-10-31", "2024Q3": "2025-03-27",   # 지난 공표는 실제 공표일
+                  "2025Q1": "2025-09-25", "2025Q2": "2025-12-09",                            # (보도, 2026-11-25 확인)
+                  "2025Q3": "2026-02-24", "2025Q4": "2026-05-28", "2026Q1": "2026-07-30", "2026Q2": "2026-10-29",
                   "2026Q3": "2026-12-29"}   # 2026Q3은 사용자 확인(2026-11-14), 보도계획 12월분에 올라오면 다시 확인
+
+
+ROUGH_RELEASES = {"2024Q4": "2025년 6월 하순"}     # 6-27 보도에 결과가 나옴, 정확한 날은 행안부 게시판으로 확인할 것
 
 
 def release_info(ym):
@@ -33,7 +39,13 @@ def release_info(ym):
     q = (m - 1) // 3 + 1
     key = f"{y}Q{q}"
     if key in KNOWN_RELEASES:
-        return {"분기": f"{y}년 {q}분기", "공표일": KNOWN_RELEASES[key], "근거": "국가데이터처 공표 일정(바뀔 수 있음)"}
+        d = KNOWN_RELEASES[key]
+        done = d <= dt.date.today().isoformat()
+        return {"분기": f"{y}년 {q}분기", "공표일": d,
+                "근거": "실제 공표일(행정안전부·국가데이터처 보도)" if done else "국가데이터처 공표 일정(바뀔 수 있음)"}
+    if key in ROUGH_RELEASES:
+        return {"분기": f"{y}년 {q}분기", "공표일": ROUGH_RELEASES[key],
+                "근거": "실제 공표 시기(보도로 확인, 정확한 날짜는 확인 전)"}
     end = y * 12 + q * 3          # 분기 마지막 달(1부터 센 달 번호)
     a, b = end + 3, end + 5
     fmt = lambda t: f"{(t - 1) // 12}년 {(t - 1) % 12 + 1}월"
@@ -157,8 +169,8 @@ def _latest_le(d, key):
     return d[max(ks)] if ks else None
 
 
-def estimate(db, sido, sigungu, ym):
-    """ym: 'YYYYMM'"""
+def estimate(db, sido, sigungu, ym, force=False):
+    """ym: 'YYYYMM'. force=True면 이미 공표된 달도 그 전 달까지만 알았다고 보고 추정한다(여러 달 보기의 with_estimate)."""
     lp_codes = _codes(db, sido, sigungu, "life_pop")
     if not lp_codes:
         return estimate_unpublished(db, sido, sigungu, ym)
@@ -166,7 +178,7 @@ def estimate(db, sido, sigungu, ym):
     jumin = _by_period(db, "kosis_reg_pop", _codes(db, sido, sigungu, "reg_pop"))
     frn = _by_period(db, "kosis_foreigners", _codes(db, sido, sigungu, "foreigners"))
     nc = _nc_month(db, sido, sigungu)
-    if ym in live:
+    if ym in live and not force:
         return {"지역": f"{sido} {sigungu}", "달": ym, "공표된 생활인구": round(live[ym]), "공표": release_info(ym),
                 "안내": "이미 공표된 달이라 추정하지 않는다. 공표 값(국가데이터처 생활인구, KOSIS)을 그대로 쓸 것."}
     if ym not in nc or nc[ym][1] < 3:
@@ -576,3 +588,112 @@ def estimate_unpublished(db, sido, sigungu, ym):
                        "(공표되지 않는 지역, 다른 지역에서 배운 공식으로 계산해 맞았는지 확인할 수 없는 추정, 빅데이터 Insight: 지역별 유입인구 계산)"),
         "주의": notes,
     }
+
+
+# ---------- 여러 달 한 번에(2026-11-25 Kevin 확정) ----------
+MAX_MONTHS = 36
+COMPARE_RULE = ("공표 달과 추정 달을 견줄 때는 한쪽은 공표 값, 한쪽은 추정 범위라고 함께 말할 것. "
+                "추정 범위(둘 중 한 번)가 견주는 공표 값을 포함하면 늘었다·줄었다고 단정하지 말 것"
+                "(예: 6월 공표 19.0만 vs 7월 추정 17~19만 → 늘었는지 줄었는지 말하기 어려움, 22~25만 → 늘었을 가능성이 큼).")
+
+
+def months_between(a, b):
+    """'YYYYMM' a~b(포함) 달 목록."""
+    ya, ma, yb, mb = int(a[:4]), int(a[4:]), int(b[:4]), int(b[4:])
+    out = []
+    t, end = ya * 12 + ma - 1, yb * 12 + mb - 1
+    while t <= end:
+        out.append(f"{t // 12}{t % 12 + 1:02d}")
+        t += 1
+    return out
+
+
+def _dash(ym):
+    return f"{ym[:4]}-{ym[4:]}"
+
+
+def _when(info):
+    return info.get("공표일") or info.get("공표 예상")
+
+
+def estimate_range(db, sido, sigungu, a, b, with_estimate=False):
+    """a~b('YYYYMM') 여러 달을 한 번에. 공통 안내는 맨 위 한 번, 달마다 짧은 줄 하나(왼쪽 공표 값, 오른쪽 추정 범위)."""
+    months = months_between(a, b)
+    head = {"지역": f"{sido} {sigungu}", "기간": f"{_dash(a)} ~ {_dash(b)}({len(months)}개월)"}
+    published = bool(_codes(db, sido, sigungu, "life_pop"))
+    lines, notes, basis, how, methods = [], [], set(), set(), {}
+    for ym in months:
+        r = estimate(db, sido, sigungu, ym)
+        line = {"달": _dash(ym)}
+        if "공표된 생활인구" in r:
+            line["공표 값(명)"] = r["공표된 생활인구"]
+            line["공표일"] = _when(r["공표"])
+            if with_estimate:
+                e = estimate(db, sido, sigungu, ym, force=True)
+                if "참고 추정 생활인구(명)" in e:
+                    line["추정 범위(명, 과거 둘 중 한 번)"] = e["과거 둘 중 한 번은 이 범위 안"]
+                    line["추정값(명)"] = e["참고 추정 생활인구(명)"]
+                    line["추정과 공표 차이(%)"] = round((e["참고 추정 생활인구(명)"] / r["공표된 생활인구"] - 1) * 100, 1)
+                else:
+                    line["추정"] = "못 함(" + str(e.get("error") or e.get("이유") or "자료 부족") + ")"
+        elif "과거 둘 중 한 번은 이 범위 안" in r:
+            line["추정 범위(명, 과거 둘 중 한 번)"] = r["과거 둘 중 한 번은 이 범위 안"]
+            line["넓은 범위(명, 열 번 중 여덟 번)"] = r["과거 열 번 중 여덟 번은 이 범위 안"]
+            if published:
+                line["공표 예정"] = _when(r["이 달 생활인구 공표"])
+                basis.add(r["범위를 정한 근거"])
+                how.add(r["추정에 쓴 비율"])
+                if any("연휴가 많은 달" in n for n in r["주의"]):
+                    line["주의"] = "연휴가 많은 달이라 범위를 넓게 볼 것"
+                notes.extend(n for n in r["주의"] if "연휴가 많은 달" not in n and n not in notes)
+            else:
+                line["쓴 방법"] = r["쓴 방법"]
+                methods.setdefault(r["쓴 방법"], r)
+                notes.extend(n for n in r["주의"] if n not in notes)
+        elif not published and str(r.get("추정", "")).startswith("하지 않음"):
+            # 등급 C·통근 자료 없음: 달마다 같으므로 한 번만 돌려줌(의견 보내기 줄 포함)
+            return {**{k: v for k, v in r.items() if k != "달"}, "기간": head["기간"]}
+        else:
+            line["추정"] = "못 함(" + str(r.get("error", "자료 부족")) + ")"
+        lines.append(line)
+    out = dict(head)
+    if published:
+        out["등급"] = "A(공표 지역)"
+        out["추정 방법"] = ("체류인구 = 이 지역의 과거 '체류인구 ÷ 나우캐스트 관외 유입' 비율 × 그 달 관외 유입. "
+                         "생활인구 = 체류인구 + 주민등록인구 + 등록외국인")
+        if how:
+            out["추정에 쓴 비율"] = sorted(how)
+        if basis:
+            out["범위를 정한 근거"] = sorted(basis)
+    else:
+        out["공표"] = "이 지역은 생활인구 공표 대상(인구감소·관심지역)이 아니다."
+        out["등급"] = "B(미공표 지역, 다른 지역에서 배운 공식)"
+        out["맞혀 본 결과"] = [
+            f"{m}: 생활인구가 공표된 지역 {_n_regions(F)}곳을 같은 방법으로 하나씩 빼고 맞혀 보니, "
+            f"둘 중 한 번은 바깥에서 와 머문 사람(체류인구) 몫이 ±{_pct_from(F)}% 안이었어요."
+            for m, F in methods.items()]
+        out["추정 방법"] = sorted({F["추정 방법"] for F in methods.values()})
+    out["달마다"] = lines
+    out["견줄 때 지킬 것"] = COMPARE_RULE
+    if with_estimate and published:
+        out["추정과 공표 차이 읽는 법"] = ("공표된 달에 붙인 추정은 그 전 달까지만 알았다고 보고 같은 방법으로 낸 값이다. "
+                                   "이 차이로 이 지역에서 추정이 얼마나 맞는지 직접 볼 수 있다.")
+    out["주의"] = notes
+    return out
+
+
+def _n_regions(r):
+    import re
+    m = re.search(r"공표 지역 (\d+)곳", r["범위를 정한 근거"])
+    return m.group(1) if m else "여러"
+
+
+def _pct_from(r):
+    """미공표 결과의 범위(둘 중 한 번)에서 체류인구 기준 ±%."""
+    lo, hi = r["과거 둘 중 한 번은 이 범위 안"]
+    add = r.get("출근 인원(명, 인구총조사 2020 통근 유입)", 0)       # 출근 인원은 공식 밖에서 더한 몫이라 뺌
+    stay = r["참고 추정 체류인구(명, 비공식)"] - add
+    base = r["참고 추정 생활인구(명, 비공식)"] - stay
+    if stay <= 0:
+        return None
+    return round(((hi - base) / stay - 1) * 100)

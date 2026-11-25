@@ -36,5 +36,7 @@ jobs:
         run: python tests/test_moves_memory.py
       - name: 미공표 지역 생활인구 공식 시험(0.6.5)
         run: python tests/test_lifepop_065.py
+      - name: 생활인구 여러 달 한 번에 시험(0.6.6)
+        run: python tests/test_lifepop_range.py
       - name: KOPIS afterdate 받기 시험(가짜 KOPIS로 며칠 밤)
         run: python tests/test_kopis_afterdate.py

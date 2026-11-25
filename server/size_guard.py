@@ -24,6 +24,7 @@ PERIOD = {
     "get_movement": ("week", "start_week", "end_week"),
     "get_region_calendar": ("date", "start", "end"),
     "get_datalab_daily": ("date", "start_date", "end_date"),
+    "estimate_life_pop": ("month", "year_month", "end_month"),
 }
 COUNT = {
     "find_unusual_regions": "top",
@@ -61,6 +62,16 @@ def _date(s):
         return None
 
 
+def _month(s):
+    m = re.match(r"\s*(\d{4})\D?(\d{1,2})", str(s or ""))
+    if not m:
+        return None
+    try:
+        return dt.date(int(m.group(1)), int(m.group(2)), 1)
+    except ValueError:
+        return None
+
+
 def advice(name, kwargs, length):
     """넘었을 때 돌려줄 안내."""
     ratio = LIMIT / length * MARGIN
@@ -68,11 +79,15 @@ def advice(name, kwargs, length):
            "결과 길이(자)": length, "한도(자)": LIMIT}
     if name in PERIOD:
         kind, a, b = PERIOD[name]
-        conv = _week_date if kind == "week" else _date
+        conv = {"week": _week_date, "month": _month}.get(kind, _date)
         d0, d1 = conv(kwargs.get(a)), conv(kwargs.get(b))
         if d0 and d1 and d1 >= d0:
             days = (d1 - d0).days + (7 if kind == "week" else 1)
-            if kind == "week":
+            if kind == "month":
+                months = (d1.year - d0.year) * 12 + d1.month - d0.month + 1
+                n = max(1, math.floor(months * ratio))
+                want = f"{n}개월"
+            elif kind == "week":
                 n = max(1, math.floor(days / 7 * ratio))
                 want = f"{n}주"
             else:
