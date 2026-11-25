@@ -3,7 +3,7 @@
 - 나우캐스트: 매일 확인(파일 이름이 바뀌었을 때만 받으므로 가벼움)
 - 데이터랩(최근 3개월 다시 받기): 6일마다 / 날씨: 매일 오전 WEATHER_HOUR시 뒤에만
 - KOPIS: 매일, 새벽 정기 받기에서만(NIGHT_ONLY, 11-25 afterdate 방식)
-- KOSIS·공휴일·지역 연결표: 27일마다(KOSIS는 보도계획의 생활인구 공표일부터 새 달이 들어올 때까지 매일)
+- KOSIS·공휴일·지역 연결표·전통시장 장날: 27일마다(KOSIS는 보도계획의 생활인구 공표일부터 새 달이 들어올 때까지 매일)
 - 생활인구 공표일(국가데이터처 보도계획): 매일
 - 날짜가 아니라 '마지막 성공'을 기준으로 하므로, 서버가 꺼져 하루 건너뛰어도 다음 실행 때 따라잡는다.
 - 결과는 /home/data/update_status.json(단계별 마지막 시도·성공·오류)에 남고, 출력은 update.log에 쌓인다.
@@ -50,6 +50,7 @@ STEPS = [
     ("kosis", ["load_kosis.py"], 27, 3600),     # 생활인구 공표일부터 새 달이 들어올 때까지는 매일(lifepop_waiting)
     ("region_map", ["build_region_map.py"], 27, 3600),
     ("rhythm", ["build_rhythm.py"], 27, 3600),
+    ("markets", ["load_markets.py"], 27, 600),  # 11-25: 전국전통시장표준데이터 API(장날)
     ("kopis", ["load_kopis.py"], 1, 7200),       # 11-25 afterdate 방식: 매일, 새벽 정기 받기에서만(NIGHT_ONLY)
     ("tourism", ["load_tourism.py"], 1, 7200),   # 스스로 판단: 최근 달 27일마다, 빈 옛 달은 매일 조금씩
 ]
@@ -151,6 +152,8 @@ SOURCES = [
     ("주요 유료관광지 방문객(한국문화관광연구원)", "tourism",
      "월, 약 5개월 늦게 나옴. latest는 관광지가 대부분 들어온 마지막 달이고, 그 뒤 달은 일부만 있을 수 있음",
      lambda con: tourism_latest(con)),
+    ("전통시장 장날(소상공인시장진흥공단 전국전통시장표준데이터)", "markets", "연(기관 자료를 매월 초 합쳐 올림)",
+     "SELECT MAX(base_date) FROM markets"),
     ("큰 공연장 공연(KOPIS)", "kopis",
      "날짜, 발권 기준. latest는 받아 온 날까지 시작한 공연 가운데 가장 늦은 시작일(예정 공연은 따로 있음)",
      "SELECT MAX(s) FROM kopis_perf WHERE s <= date('now', 'localtime')"),
