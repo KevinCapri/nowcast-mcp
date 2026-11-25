@@ -27,17 +27,33 @@ SCHEDULE_URL = "https://mods.go.kr/newsPln.es?mid=a10305000000&bid="
 KNOWN_RELEASES = {"2024Q1": "2024-07-25", "2024Q2": "2024-10-31", "2024Q3": "2025-03-27",   # 지난 공표는 실제 공표일
                   "2025Q1": "2025-09-25", "2025Q2": "2025-12-09",                            # (보도, 2026-11-25 확인)
                   "2025Q3": "2026-02-24", "2025Q4": "2026-05-28", "2026Q1": "2026-07-30", "2026Q2": "2026-10-29",
-                  "2026Q3": "2026-12-29"}   # 2026Q3은 사용자 확인(2026-11-14), 보도계획 12월분에 올라오면 다시 확인
+                  "2026Q3": "2026-12-28"}   # 2026Q3: 보도계획 12월분 12-28(2026-11-25 확인, 전엔 12-29로 적혀 있었음)
 
 
 ROUGH_RELEASES = {"2024Q4": "2025년 6월 하순"}     # 6-27 보도에 결과가 나옴, 정확한 날은 행안부 게시판으로 확인할 것
 
 
-def release_info(ym):
-    """그 달이 든 분기의 생활인구가 언제쯤 공표되는지(알려진 날짜 또는 과거 간격으로 어림)."""
+def _planned(db, key):
+    """국가데이터처 보도계획에서 읽어 둔 공표일(pipeline/load_release_plan.py → release_plan 표). 없으면 None."""
+    if db is None:
+        return None
+    try:
+        r = db.execute("SELECT date FROM release_plan WHERE key=?", (key,)).fetchone()
+        return r[0] if r else None
+    except Exception:
+        return None
+
+
+def release_info(ym, db=None):
+    """그 달이 든 분기의 생활인구가 언제쯤 공표되는지(보도계획 → 적어 둔 날짜 → 과거 간격으로 어림)."""
     y, m = int(ym[:4]), int(ym[4:])
     q = (m - 1) // 3 + 1
     key = f"{y}Q{q}"
+    plan = _planned(db, key)
+    if plan:
+        done = plan <= dt.date.today().isoformat()
+        return {"분기": f"{y}년 {q}분기", "공표일": plan,
+                "근거": "실제 공표일(행정안전부·국가데이터처 보도)" if done else "국가데이터처 보도계획(바뀔 수 있음)"}
     if key in KNOWN_RELEASES:
         d = KNOWN_RELEASES[key]
         done = d <= dt.date.today().isoformat()
@@ -179,7 +195,7 @@ def estimate(db, sido, sigungu, ym, force=False):
     frn = _by_period(db, "kosis_foreigners", _codes(db, sido, sigungu, "foreigners"))
     nc = _nc_month(db, sido, sigungu)
     if ym in live and not force:
-        return {"지역": f"{sido} {sigungu}", "달": ym, "공표된 생활인구": round(live[ym]), "공표": release_info(ym),
+        return {"지역": f"{sido} {sigungu}", "달": ym, "공표된 생활인구": round(live[ym]), "공표": release_info(ym, db),
                 "안내": "이미 공표된 달이라 추정하지 않는다. 공표 값(국가데이터처 생활인구, KOSIS)을 그대로 쓸 것."}
     if ym not in nc or nc[ym][1] < 3:
         return {"error": "그 달의 나우캐스트 주 자료가 3주 미만이라 추정할 수 없다."}
@@ -267,7 +283,7 @@ def estimate(db, sido, sigungu, ym, force=False):
                        f"약 {rng(e50)[0] / 10000:.1f}만~{rng(e50)[1] / 10000:.1f}만 명(과거 둘 중 한 번 범위, "
                        "빅데이터 Insight: 지역별 유입인구 계산, 공표 전 값)"),
         "가장 최근 공표 달": pub[-1],
-        "이 달 생활인구 공표": release_info(ym),
+        "이 달 생활인구 공표": release_info(ym, db),
         "주의": notes + [
             "이 값은 서비스가 계산한 비공식 참고 추정치다. 공표된 생활인구가 아니다. 공표되면 공표 값을 쓸 것"
             "('이 달 생활인구 공표'의 날짜를 함께 알려 줄 것).",

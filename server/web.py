@@ -373,7 +373,7 @@ def _official(sido, sigungu, start_wo, end_wo):
     if b > latest:
         y, m = int(latest[:4]), int(latest[4:])
         nxt = f"{y + (m == 12)}{(m % 12) + 1:02d}"
-        rel = lifepop.release_info(nxt)
+        rel = lifepop.release_info(nxt, _conn())
         day = rel.get("공표일") or rel.get("공표 예상")
         if day:
             try:
