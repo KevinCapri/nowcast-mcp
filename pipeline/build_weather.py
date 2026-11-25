@@ -146,6 +146,10 @@ def main():
     print("전부 받기" if full else "최근분만", start, "~", end, flush=True)
     new = fetch(key, start, end)
     new["date"] = new["date"].dt.strftime("%Y-%m-%d")
+    # 11-25: 전날 값이 몇 시에 채워지는지 관찰용(며칠 모아 WEATHER_HOUR가 맞는지 봄)
+    n_y = int((new["date"] == end.isoformat()).sum())
+    print(f"전날({end}) 값: {n_y}개 지점, 받은 시각 {dt.datetime.now(dt.timezone(dt.timedelta(hours=9))):%H:%M}",
+          flush=True)
     with con:
         con.execute("DELETE FROM weather_daily WHERE date >= ?", (start.isoformat(),))
         new[["date", "stn", "ta_avg", "ta_max", "ta_min", "rn_day", "sd_max"]].to_sql(
