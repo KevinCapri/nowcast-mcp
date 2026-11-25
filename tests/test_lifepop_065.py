@@ -61,8 +61,9 @@ L.commute_share = lambda db, sd, sg: 20.0 if (sd, sg) in PUB or (sd, sg) in (TAR
 L._reg = lambda db, sd, sg: ({"200001": (PUB.get((sd, sg)) or T)["jf"]}, {"2000": 0.0})
 L._nc_month = lambda db, sd, sg: ({m: (r["nc"], 4) for m, r in PUB[(sd, sg)]["rows"].items()} if (sd, sg) in PUB
                                    else {"202605": (2e4, 4), "202609": (2e4, 4)})
-L._dl_month = lambda db, sd, sg, months=None: ({m: r["dl"] for m, r in PUB[(sd, sg)]["rows"].items()} if (sd, sg) in PUB
-                                  else dict(DL_T))
+# 진짜처럼 months를 주면 그 달만 돌려줌(#116 뒤 이 점을 안 따라 '다시 계산' 안내가 빠진 걸 못 잡았음, 11-25)
+_dl_all = lambda sd, sg: ({m: r["dl"] for m, r in PUB[(sd, sg)]["rows"].items()} if (sd, sg) in PUB else dict(DL_T))
+L._dl_month = lambda db, sd, sg, months=None: {m: v for m, v in _dl_all(sd, sg).items() if months is None or m in months}
 L._commute_in = lambda sd, sg: (PUB.get((sd, sg)) or T)["cm"]
 L._wd_ratio = lambda db, ym: 21 / 30
 L.A.canon = lambda sd, sg: (sd, sg)
