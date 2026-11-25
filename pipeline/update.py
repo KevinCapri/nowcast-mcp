@@ -7,7 +7,7 @@
 - 생활인구 공표일(국가데이터처 보도계획): 매일
 - 날짜가 아니라 '마지막 성공'을 기준으로 하므로, 서버가 꺼져 하루 건너뛰어도 다음 실행 때 따라잡는다.
 - 결과는 /home/data/update_status.json(단계별 마지막 시도·성공·오류)에 남고, 출력은 update.log에 쌓인다.
-- 여러 개가 동시에 돌지 않게 잠금 파일을 쓴다.
+- 여러 개가 동시에 돌지 않게 '받는 중' 표시 파일(update.running, O_EXCL)과 잠금 파일을 쓴다(11-25: 배포 때 두 서버가 같이 써서 DB 손상).
 - 실패한 단계가 있으면 운영자에게 메일(notify.py).
 - 단계가 종료 코드 3(PARTIAL)으로 끝나면 '일부만 함'(KOPIS 샘플 받기): 성공으로 치지 않아 다음 실행 때 다시 돌고,
   실패도 아니라 메일을 보내지 않는다. 직전 실패 기록(last_error)은 전체가 성공할 때까지 그대로 둔다.
@@ -209,8 +209,48 @@ def manual_alert(st):
     save_status(st)
 
 
+RUNNING = DATA / "update.running"
+STALE = 3 * 3600     # 이보다 오래된 '받는 중' 표시는 죽은 것으로 보고 치움(가장 긴 단계 KOPIS 2시간)
+
+
+def acquire():
+    """'받는 중' 표시 파일을 새로 만들어 잡는다(11-25 DB 손상 뒤).
+    Azure 저장소(/home)에서는 fcntl 잠금이 서버(컨테이너) 사이에 먹지 않아, 배포 때 옛 서버·새 서버가 같은 DB에
+    동시에 써서 weather_week가 깨졌음. 파일을 '없을 때만 만들기'(O_EXCL)는 둘이 동시에 해도 한쪽만 성공한다."""
+    for _ in range(2):
+        try:
+            fd = os.open(RUNNING, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, f"{os.uname().nodename} {os.getpid()} {now().isoformat(timespec='seconds')}\n".encode())
+            os.close(fd)
+            return True
+        except FileExistsError:
+            try:
+                age = dt.datetime.now().timestamp() - RUNNING.stat().st_mtime
+            except FileNotFoundError:
+                continue
+            if age < STALE:
+                return False
+            print(f"오래된 '받는 중' 표시({int(age // 60)}분) 치움", flush=True)
+            RUNNING.unlink(missing_ok=True)
+    return False
+
+
 def main():
     DATA.mkdir(parents=True, exist_ok=True)
+    if not acquire():
+        try:
+            who = RUNNING.read_text().strip()
+        except Exception:
+            who = "?"
+        print(f"다른 서버·갱신이 받는 중({who}) → 건너뜀", flush=True)
+        return 0
+    try:
+        return _main()
+    finally:
+        RUNNING.unlink(missing_ok=True)
+
+
+def _main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     with open(LOCK, "w") as lk:
         try:

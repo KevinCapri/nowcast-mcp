@@ -47,7 +47,7 @@ def _seconds_to_next_run(hour=None):
 
 
 def _update_loop():
-    time.sleep(300)  # 켜진 직후 한 번(밀린 단계만 따라잡음). 배포 직후 바로 돌지 않게 5분 뒤
+    time.sleep(900)  # 켜진 직후 한 번(밀린 단계만 따라잡음). 배포 때 옛 서버가 완전히 내려간 뒤 돌게 15분 뒤(11-25 DB 손상)
     while True:
         print("[update] 시작", flush=True)
         r = subprocess.run([sys.executable, str(UPDATE)], cwd=UPDATE.parents[1])
