@@ -43,7 +43,7 @@ PARTIAL = 3     # 단계가 '일부만 함'으로 끝났을 때의 종료 코드
 STEPS = [
     ("nowcast", ["fetch_nowcast.py"], 1, 3600),
     ("datalab", ["load_datalab.py"], 6, 3600),
-    ("weather", ["build_weather.py"], 6, 3600),
+    ("weather", ["build_weather.py"], 1, 3600),  # 11-25: 매일, 오전 WEATHER_HOUR시 뒤에만(LATE_ONLY)
     ("holidays", ["load_holidays.py"], 27, 600),
     ("kosis", ["load_kosis.py"], 27, 3600),
     ("region_map", ["build_region_map.py"], 27, 3600),
@@ -61,6 +61,12 @@ PAUSED = {s.strip() for s in os.environ.get("PAUSE_STEPS", "").split(",") if s.s
 NIGHT_ONLY = {"kopis"}
 UPDATE_HOUR = int(os.environ.get("UPDATE_HOUR", 5))
 NIGHT_HOURS = range(UPDATE_HOUR, UPDATE_HOUR + 4)
+
+# 오전 WEATHER_HOUR시(한국 시간) 뒤에만 돌 단계(11-25 Kevin 확정). 기상청 일자료는 전날 값이 오전에 채워져서
+# 새벽 5시 정기 받기에서는 건너뛰고, 서버가 매일 WEATHER_HOUR시에 이 단계만 따로 돌린다(server_http._late_loop).
+# 배포로 다시 켜질 때 도는 받기에서도 그 시각 전이면 건너뜀.
+LATE_ONLY = {"weather"}
+WEATHER_HOUR = int(os.environ.get("WEATHER_HOUR", 11))
 
 
 def now():
@@ -205,6 +211,9 @@ def main():
                     continue
                 if not args and name in NIGHT_ONLY and now().hour not in NIGHT_HOURS:
                     log.write(f"\n===== {now():%Y-%m-%d %H:%M} {name} 건너뜀(새벽 정기 받기에서만) =====\n")
+                    continue
+                if not args and name in LATE_ONLY and now().hour < WEATHER_HOUR:
+                    log.write(f"\n===== {now():%Y-%m-%d %H:%M} {name} 건너뜀(오전 {WEATHER_HOUR}시 뒤에만) =====\n")
                     continue
                 s = st.setdefault(name, {})
                 s["last_try"] = now().isoformat(timespec="seconds")

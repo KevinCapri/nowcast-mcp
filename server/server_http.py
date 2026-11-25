@@ -32,13 +32,14 @@ STATELESS = os.environ.get("MCP_STATELESS", "1") == "1"
 # Azure '항상 설정(Always On)'이 꺼져 있으면 요청이 없을 때 서버가 잠들어 갱신도 멈춘다
 AUTO_UPDATE = os.environ.get("AUTO_UPDATE", "1" if os.environ.get("WEBSITE_SITE_NAME") else "0") == "1"
 UPDATE_HOUR = int(os.environ.get("UPDATE_HOUR", 5))
+WEATHER_HOUR = int(os.environ.get("WEATHER_HOUR", 11))   # 날씨만 따로 받는 시각(pipeline/update.py LATE_ONLY와 같게)
 KST = dt.timezone(dt.timedelta(hours=9))
 UPDATE = Path(__file__).resolve().parents[1] / "pipeline" / "update.py"
 
 
-def _seconds_to_next_run():
+def _seconds_to_next_run(hour=None):
     n = dt.datetime.now(KST)
-    t = n.replace(hour=UPDATE_HOUR, minute=0, second=0, microsecond=0)
+    t = n.replace(hour=UPDATE_HOUR if hour is None else hour, minute=0, second=0, microsecond=0)
     if t <= n:
         t += dt.timedelta(days=1)
     return (t - n).total_seconds()
@@ -53,6 +54,16 @@ def _update_loop():
         web.warm()                     # 새 자료로 지역·주차 목록 다시 만들기
         guard.mark_reload()            # 이 직후 느린 요청은 cold로 표시(속도 모니터링)
         time.sleep(_seconds_to_next_run())
+
+
+def _late_loop():
+    """매일 WEATHER_HOUR시에 날씨 단계만 받는다(11-25). 기상청 일자료는 전날 값이 오전에 채워짐.
+    날씨 표는 요청마다 DB에서 읽으므로 web.warm()은 하지 않음(낮 시간 부담을 줄임)."""
+    while True:
+        time.sleep(_seconds_to_next_run(WEATHER_HOUR))
+        print("[update] 날씨 시작", flush=True)
+        r = subprocess.run([sys.executable, str(UPDATE), "weather"], cwd=UPDATE.parents[1])
+        print(f"[update] 날씨 끝 (코드 {r.returncode})", flush=True)
 
 
 def _summary(body: bytes) -> str:
@@ -176,5 +187,6 @@ def build_app():
 if __name__ == "__main__":
     if AUTO_UPDATE:
         threading.Thread(target=_update_loop, daemon=True).start()
+        threading.Thread(target=_late_loop, daemon=True).start()
     web.warm()                         # 지역 목록을 첫 방문 전에 미리 만들어 둠(처음엔 40초 넘게 걸림)
     uvicorn.run(RequestLog(build_app()), host="0.0.0.0", port=PORT, log_level="info", lifespan="on")
