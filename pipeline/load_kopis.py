@@ -29,6 +29,9 @@ import xml.etree.ElementTree as ET
 from common import connect, get, key
 
 BASE = "http://www.kopis.or.kr/openApi/restful"
+# 2026-11-25: KOPIS 크롤러 차단이 User-Agent가 python-requests인 요청만 400 'Request Blocked'로 막음
+# (GitHub Actions 새 IP에서 시험: python-requests 400, 우리 이름·curl·브라우저 200). IP 차단이 아니었음 → 우리 이름을 밝힘
+HEADERS = {"User-Agent": "nowcast-mcp (+https://nowcast-mcp.azurewebsites.net)"}
 BIG_SEATS = 3000
 MIN_GAP = 0.25          # 호출 사이 최소 간격(초). KOPIS 한도는 IP당 초당 10번
 SPAN = 31               # 공연 목록 한 번에 요청하는 날 수(개발가이드 최대 31일)
@@ -59,7 +62,7 @@ def xml(path, _tries=4, _wait=10, **params):
     if gap > 0:
         time.sleep(gap)
     try:
-        r = get(f"{BASE}/{path}", params=params, tries=_tries, timeout=60, wait=_wait)   # 400은 다시 시도하지 않음(막힘)
+        r = get(f"{BASE}/{path}", params=params, tries=_tries, timeout=60, wait=_wait, headers=HEADERS)   # 400은 다시 시도하지 않음(막힘)
     except RuntimeError as e:
         if "HTTP 400" in str(e) or "HTTP 429" in str(e):
             raise Blocked(f"KOPIS가 요청을 막음({path}): {e}") from None

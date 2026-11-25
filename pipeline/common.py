@@ -45,13 +45,13 @@ def masked(params):
     return {k: ("***" if k in SECRET_PARAMS else v) for k, v in (params or {}).items()}
 
 
-def get(url, params, tries=4, timeout=120, wait=20, retry_codes=()):
+def get(url, params, tries=4, timeout=120, wait=20, retry_codes=(), headers=None):
     """외부 API 호출. 응답이 없거나 서버 오류(5xx)면 잠시 쉬었다가 다시 시도한다(공공데이터포털이 가끔 멈춤).
     retry_codes: 4xx 중에서도 다시 시도할 코드(예: KOPIS는 호출이 몰리면 잠깐 400을 돌려줌).
     오류 메시지에는 인증키를 가린 값만 남긴다."""
     for i in range(1, tries + 1):
         try:
-            r = requests.get(url, params=params, timeout=timeout)
+            r = requests.get(url, params=params, timeout=timeout, headers=headers)
             if r.status_code < 400:
                 return r
             err = f"HTTP {r.status_code}"
