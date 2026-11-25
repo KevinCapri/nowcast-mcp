@@ -1,9 +1,10 @@
 """자료 자동 갱신: 단계마다 '마지막 성공'에서 정해진 날짜가 지났으면 다시 돌린다.
 
 - 나우캐스트: 매일 확인(파일 이름이 바뀌었을 때만 받으므로 가벼움)
-- 데이터랩(최근 3개월 다시 받기)·날씨: 6일마다
+- 데이터랩(최근 3개월 다시 받기): 6일마다 / 날씨: 매일 오전 WEATHER_HOUR시 뒤에만
 - KOPIS: 매일, 새벽 정기 받기에서만(NIGHT_ONLY, 11-25 afterdate 방식)
-- KOSIS·공휴일·지역 연결표: 27일마다
+- KOSIS·공휴일·지역 연결표: 27일마다(KOSIS는 보도계획의 생활인구 공표일부터 새 달이 들어올 때까지 매일)
+- 생활인구 공표일(국가데이터처 보도계획): 매일
 - 날짜가 아니라 '마지막 성공'을 기준으로 하므로, 서버가 꺼져 하루 건너뛰어도 다음 실행 때 따라잡는다.
 - 결과는 /home/data/update_status.json(단계별 마지막 시도·성공·오류)에 남고, 출력은 update.log에 쌓인다.
 - 여러 개가 동시에 돌지 않게 잠금 파일을 쓴다.
@@ -45,7 +46,8 @@ STEPS = [
     ("datalab", ["load_datalab.py"], 6, 3600),
     ("weather", ["build_weather.py"], 1, 3600),  # 11-25: 매일, 오전 WEATHER_HOUR시 뒤에만(LATE_ONLY)
     ("holidays", ["load_holidays.py"], 27, 600),
-    ("kosis", ["load_kosis.py"], 27, 3600),
+    ("release_plan", ["load_release_plan.py"], 1, 300),   # 11-25: 생활인구 공표일(국가데이터처 보도계획)
+    ("kosis", ["load_kosis.py"], 27, 3600),     # 생활인구 공표일부터 새 달이 들어올 때까지는 매일(lifepop_waiting)
     ("region_map", ["build_region_map.py"], 27, 3600),
     ("rhythm", ["build_rhythm.py"], 27, 3600),
     ("kopis", ["load_kopis.py"], 1, 7200),       # 11-25 afterdate 방식: 매일, 새벽 정기 받기에서만(NIGHT_ONLY)
@@ -91,6 +93,26 @@ def due(st, name, days):
     if not ok:
         return True
     return now() - dt.datetime.fromisoformat(ok) >= dt.timedelta(days=days) - dt.timedelta(hours=2)
+
+
+def lifepop_waiting():
+    """보도계획의 생활인구 공표일이 지났는데 그 분기 마지막 달이 아직 KOSIS 표에 없으면 True(11-25 Kevin 확정).
+    KOSIS 표는 보도 다음 날쯤 갱신됨(2026Q2: 보도 10-29, KOSIS 10-30). 표가 없거나 읽기 실패면 False."""
+    try:
+        con = sqlite3.connect(DB, timeout=30)
+        try:
+            plans = con.execute("SELECT key, date FROM release_plan WHERE date <= ?",
+                                (now().date().isoformat(),)).fetchall()
+            latest = con.execute("SELECT MAX(PRD_DE) FROM kosis_life_pop").fetchone()[0]
+        finally:
+            con.close()
+    except Exception:
+        return False
+    for k, _ in plans:
+        y, q = int(k[:4]), int(k[-1])
+        if str(latest or "") < f"{y}{q * 3:02d}":
+            return True
+    return False
 
 
 def run_step(name, cmd, timeout, log):
@@ -208,7 +230,9 @@ def main():
                     log.write(f"\n===== {now():%Y-%m-%d %H:%M} {name} 멈춤(PAUSE_STEPS) =====\n")
                     continue
                 if not args and "--all" not in sys.argv and not due(st, name, days):
-                    continue
+                    if not (name == "kosis" and due(st, name, 1) and lifepop_waiting()):
+                        continue
+                    log.write(f"\n===== {now():%Y-%m-%d %H:%M} kosis 생활인구 공표일이 지나 매일 받기 =====\n")
                 if not args and name in NIGHT_ONLY and now().hour not in NIGHT_HOURS:
                     log.write(f"\n===== {now():%Y-%m-%d %H:%M} {name} 건너뜀(새벽 정기 받기에서만) =====\n")
                     continue
