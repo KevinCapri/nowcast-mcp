@@ -8,7 +8,7 @@
 - 인증키는 환경변수 KOPIS_KEY. 3개월 넘게 안 쓰면 승인이 취소되므로 update.py가 6일마다 돌린다.
 - 호출 한도(2026-11-23 KOPIS 담당자 답변): 같은 IP에서 1초에 10번을 넘으면 그 IP를 30~40분 막고 'Request Blocked'를
   돌려준다(홈페이지 접속도 함께 셈, 서비스키를 여러 개 써도 IP 기준으로 합침). 11-15 첫 받기 때 걸렸고, 막힌 동안에도
-  400을 다시 시도하며 계속 불러 11-21~22 2시간씩 헛돎 → 모든 호출 사이를 MIN_GAP초 이상 띄우고(초당 4번 아래),
+  400을 다시 시도하며 계속 불러 11-21~22 2시간씩 헛돎 → 모든 호출 사이를 MIN_GAP초 이상 띄우고(11-25부터 2초),
   막힘(400·'Request Blocked')이 오면 다시 시도하지 않고 그 자리에서 이번 받기를 멈춘다(실패 메일이 감).
 - 공연 목록(pblprfr)은 개발가이드상 한 번에 31일까지 → 31일씩 요청
 - 연결이 안 될 때(2026-11-23 저녁, 응답 없이 ConnectTimeout만 나며 2시간을 헛돎): 차단 응답이 없으면 위 '막힘'으로
@@ -33,12 +33,13 @@ BASE = "http://www.kopis.or.kr/openApi/restful"
 # (GitHub Actions 새 IP에서 시험: python-requests 400, 우리 이름·curl·브라우저 200). IP 차단이 아니었음 → 우리 이름을 밝힘
 HEADERS = {"User-Agent": "nowcast-mcp (+https://nowcast-mcp.azurewebsites.net)"}
 BIG_SEATS = 3000
-MIN_GAP = 0.25          # 호출 사이 최소 간격(초). KOPIS 한도는 IP당 초당 10번
+MIN_GAP = 2.0           # 호출 사이 최소 간격(초). 11-25: 0.25초(초당 4번)로도 10번쯤에 'Request Blocked'(크롤러 차단 강화) → 2초(10번에 20초, 7배 여유)
 SPAN = 31               # 공연 목록 한 번에 요청하는 날 수(개발가이드 최대 31일)
 SAMPLE = 5              # 직전 받기가 실패였을 때 먼저 받아 볼 큰 공연장 수
 FAIL_RUN = 2            # 연결 실패가 이만큼 이어지면 받기를 멈춤
 PARTIAL = 3             # 샘플만 받고 끝냈을 때의 종료 코드(update.py가 알아봄)
 _last = [0.0]
+_count = [0, None]       # 이번 받기의 호출 수, 첫 호출 시각(막힐 때 기록)
 _fails = [0]            # 이어진 연결 실패 수
 
 
@@ -57,15 +58,24 @@ START = dt.date(2023, 1, 1)
 SIDO_ALIAS = {"강원도": "강원특별자치도", "전라북도": "전북특별자치도"}
 
 
+def _where():
+    """막힌 때: 이번 받기의 몇 번째 호출, 첫 호출부터 몇 초(11-25 — 차단 기준을 숫자로 찾으려고)."""
+    t = time.monotonic() - _count[1] if _count[1] is not None else 0
+    return f"{_count[0]}번째 호출, 첫 호출부터 {t:.0f}초, 간격 {MIN_GAP}초"
+
+
 def xml(path, _tries=4, _wait=10, **params):
     gap = MIN_GAP - (time.monotonic() - _last[0])
     if gap > 0:
         time.sleep(gap)
+    if _count[1] is None:
+        _count[1] = time.monotonic()
+    _count[0] += 1
     try:
         r = get(f"{BASE}/{path}", params=params, tries=_tries, timeout=60, wait=_wait, headers=HEADERS)   # 400은 다시 시도하지 않음(막힘)
     except RuntimeError as e:
         if "HTTP 400" in str(e) or "HTTP 429" in str(e):
-            raise Blocked(f"KOPIS가 요청을 막음({path}): {e}") from None
+            raise Blocked(f"KOPIS가 요청을 막음({path}, {_where()}): {e}") from None
         if _conn_fail(e):
             _fails[0] += 1
             if _fails[0] >= FAIL_RUN:
@@ -76,7 +86,7 @@ def xml(path, _tries=4, _wait=10, **params):
     _fails[0] = 0
     r.encoding = "utf-8"
     if "Request Blocked" in r.text[:500]:
-        raise Blocked(f"KOPIS가 요청을 막음({path}): Request Blocked")
+        raise Blocked(f"KOPIS가 요청을 막음({path}, {_where()}): Request Blocked")
     return ET.fromstring(r.text)
 
 
