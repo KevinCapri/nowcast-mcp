@@ -1503,7 +1503,7 @@ def get_region_calendar(sido: Sido, sigungu: Sigungu, start: str, end: str = "")
     - sido·sigungu는 list_regions로 확인한 이름."""
     r = regioncal.region_calendar(db, sido, sigungu, start, end)
     return _answer(r, "calendar", "일정: 한국천문연구원 특일 정보, 문화체육관광부 지역축제 개최 계획, 언론 보도, 한국야구위원회(KBO) 경기 기록, 한국문화관광연구원 관광자원통계, "
-                   "기상청 계절관측·종관기상관측, 공연예술통합전산망(KOPIS), 정부·주최 측 발표 / " + SOURCE.removeprefix("출처: "),
+                   "기상청 계절관측·종관기상관측, (재)예술경영지원센터 공연예술통합전산망(www.kopis.or.kr), 정부·주최 측 발표 / " + SOURCE.removeprefix("출처: "),
                    calc=True)
 
 
