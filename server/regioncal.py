@@ -110,7 +110,7 @@ def region_calendar(db, sido, sigungu, start, end=""):
         for f in safe.call("축제(일정)", festival.in_week, sido, sigungu, mon, hd_all, default=[]) or []:
             ev.append({"종류": "축제", "이름": f["축제"], "기간": f["계획 기간"], "출처": "문화체육관광부 지역축제 개최 계획, 언론 보도"})
         for b in safe.call("대형 행사(일정)", bigevents.in_range, sido, sigungu, mon, sun, default=[]) or []:
-            ev.append({"종류": f"대형 행사({b['종류']})", "이름": b["이름"], "기간": f"{b['시작']}~{b['끝']}",
+            ev.append({"종류": f"대형 행사({b['종류']})", "이름": b["이름"], "기간": f"{b['시작']}–{b['끝']}",
                        "출처": "정부·주최 측 발표와 보도"})
         bl, bc = safe.call("프로야구(일정)", baseball.week, sido, sigungu, mon, default=([], 0))
         if bl:
@@ -134,14 +134,14 @@ def region_calendar(db, sido, sigungu, start, end=""):
             if A.is_suspect(sido, sigungu, wo):
                 inflow["원자료 확인 필요 구간"] = A.SUSPECT_FLAG
                 sus_wos.append(wo)
-        wk = {"주차": P["me"][wo][0] if wo else _label(mon), "기간(월~일)": f"{mon}~{sun}", "일정": ev,
+        wk = {"주차": P["me"][wo][0] if wo else _label(mon), "기간(월–일)": f"{mon}–{sun}", "일정": ev,
               "그 주 유입": inflow}
         if wo in wline:
             wk["그 주 날씨"] = wline[wo]
         weeks.append(wk)
     hist = safe.call("벚꽃·단풍 지난 기록(일정)", season.history, P, sido, sigungu,
                      skip_year=range(a.year, z.year + 1), default=[]) if season.spots(sido, sigungu) else []
-    out = {"지역": f"{sido} {sigungu}", "기간": f"{a}~{z}", "일정 있는 주": n_ev, "주별": weeks,
+    out = {"지역": f"{sido} {sigungu}", "기간": f"{a}–{z}", "일정 있는 주": n_ev, "주별": weeks,
            "자료 기준": {"이동 자료": (P["me"][max(P["me"])][0] if P["me"] else None),
                      "손으로 넣는 자료": [{k: s[k] for k in ("자료", "자료 기준(가장 늦은 날짜)", "받아서 넣은 날")}
                                     for s in safe.call("손 자료 상태(일정)", manual.status, default=[])]},
@@ -181,7 +181,7 @@ def bloom_foliage(db, year, kind):
     have_years = sorted({k[3] for k in D if k[0] in [g for g, _ in KIND[kind]]})
     if year not in have_years:
         st = [s for s in manual.status() if s["자료"].startswith("벚꽃")]
-        return {"error": f"{year}년 {kind} 관측 자료가 이 서비스에 없다(있는 해: {have_years[0]}~{have_years[-1]}). "
+        return {"error": f"{year}년 {kind} 관측 자료가 이 서비스에 없다(있는 해: {have_years[0]}–{have_years[-1]}). "
                          f"자료 기준: {st[0]['자료 기준(가장 늦은 날짜)'] if st else '?'}. "
                          "최신·올해 현황과 예보는 기상청 날씨누리 '봄꽃·단풍'을 안내할 것."}
     # 관측 지점 → 연결된 명소 시군구

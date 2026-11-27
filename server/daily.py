@@ -6,7 +6,7 @@
 - 하루 나누기: 그 지역 요일 몫(최근 52주 평범한 주, KT 구간 주도 씀), 평일 공휴일은 일요일 몫. 합은 주 평균 × 7에 맞춤.
 - 날짜별로 나누지 않는 주(하루 값 범위가 ±20%를 넘는 종류): 설·추석 주, 연말연시 주, 샌드위치가 낀 주, 크게 튄 주(관외 유입이 직전 12주
   가운데값보다 30% 넘게 많음). 이런 주는 그 주 하루 평균 범위만.
-- 범위 폭: Backtest '열 번 중 여덟 번' 값(log 대칭: 추정 ÷ (1+w) ~ 추정 × (1+w)).
+- 범위 폭: Backtest '열 번 중 여덟 번' 값(log 대칭: 추정 ÷ (1+w) – 추정 × (1+w)).
 - 평소 같은 요일: 그 날 앞쪽 같은 요일 데이터랩 실제 값 8개의 가운데값(공휴일·샌드위치·연휴 주·연말연시 주·그 지역 축제·행사 날 뺌,
   12주까지만 거슬러 감, 4개보다 적으면 내지 않음, 수준이 바뀐 경계 2025-05-01·2026-05-01을 넘지 않음).
 기능 끄기: Azure 앱 설정 PAUSE_FEATURES에 daily_estimate가 있으면 추정 범위를 붙이지 않음(데이터랩 값은 그대로).
@@ -78,7 +78,7 @@ def ko_num(v):
 
 def rng(est, w):
     lo, hi = est / (1 + w), est * (1 + w)
-    return lo, hi, f"약 {ko_num(lo)}~{ko_num(hi)} 명"
+    return lo, hi, f"약 {ko_num(lo)}–{ko_num(hi)} 명"
 
 
 def week_name(W, hol):
@@ -507,7 +507,7 @@ def weather_days(db, stn, a, b):
     for d, lo, hi, rn, sd in rows:
         if lo is None or hi is None:
             continue
-        t = f"{round(lo)}~{round(hi)}℃"
+        t = f"{round(lo)}–{round(hi)}℃"
         if rn is not None and rn >= 1:
             t += f", {'비·눈' if (lo + hi) / 2 < 3 else '비'} {round(rn)}mm"
         if sd is not None and sd > 0:

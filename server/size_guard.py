@@ -94,11 +94,11 @@ def advice(name, kwargs, length):
                 n = max(1, math.floor(days * ratio))
                 want = f"{n}일"
             out["error"] += f"기간을 {want} 이하로 줄여 나눠서 다시 물을 것."
-            out["줄일 것"] = f"기간({a}~{b})"
+            out["줄일 것"] = f"기간({a}–{b})"
             out["권장"] = want + " 이하"
         else:
             out["error"] += "기간을 지금의 절반 이하로 줄여 나눠서 다시 물을 것."
-            out["줄일 것"] = f"기간({a}~{b})"
+            out["줄일 것"] = f"기간({a}–{b})"
         return out
     if name in COUNT:
         p = COUNT[name]

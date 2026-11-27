@@ -33,7 +33,7 @@ def _load():
 
 
 def in_range(sido, sigungu, a, b):
-    """a~b 사이에 이 지역에서 문을 열거나 닫은 시설."""
+    """a–b 사이에 이 지역에서 문을 열거나 닫은 시설."""
     key = analysis.canon(sido, sigungu)
     out = []
     for r in _load():

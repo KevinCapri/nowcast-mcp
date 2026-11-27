@@ -84,7 +84,7 @@ def breakdown(db, direction, category, a, b):
     out["data"] = data
     if len(ms) > 1:
         prev = ms[-2]
-        out["한 번에 보여 주는 길이"] = (f"자료가 많아서 나눠 보기는 한 번에 한 달씩만 돼요. {month_ko(ms[0])}~{month_ko(show)} 중 "
+        out["한 번에 보여 주는 길이"] = (f"자료가 많아서 나눠 보기는 한 번에 한 달씩만 돼요. {month_ko(ms[0])}–{month_ko(show)} 중 "
                                 f"{month_ko(show)}을 먼저 보여 드렸어요. 이어서 {month_ko(prev)}을 보여 드릴까요?(이용자에게 이렇게 물을 것)")
         share = {}
         for m in ms:
@@ -171,7 +171,7 @@ def rank(db, direction, a, b, top, rank_from, area, pop_of):
                              "옛 이름은 그 이름으로 흐름을 따로 볼 수 있어요.")
     if start - 1 + top < len(lst):
         nxt = start + top
-        out["이어서"] = (f"{len(lst)}곳 가운데 {start}~{start - 1 + len(part)}위를 보여 드렸어요. 이어서 {nxt}~{min(nxt + top - 1, len(lst))}위를 "
+        out["이어서"] = (f"{len(lst)}곳 가운데 {start}–{start - 1 + len(part)}위를 보여 드렸어요. 이어서 {nxt}–{min(nxt + top - 1, len(lst))}위를 "
                        f"보여 드릴까요?(이용자가 원하면 rank_from={nxt}로 다시 부를 것)")
     return out
 
