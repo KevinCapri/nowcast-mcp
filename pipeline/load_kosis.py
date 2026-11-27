@@ -52,8 +52,12 @@ def fetch(k, spec):
         r = get(URL, p)
         j = r.json()
         if isinstance(j, dict):     # 오류나 자료 없음은 dict로 옴
-            print(spec["tblId"], y, j.get("errMsg", j))
-            continue
+            msg = str(j.get("errMsg", j))
+            print(spec["tblId"], y, msg)
+            if str(j.get("err")) == "30" or "존재하지 않" in msg:   # 아직 공표 전인 해 등 '자료 없음'은 넘어감
+                continue
+            # 그 밖의 오류(점검·장애·한도)면 멈춤 → 표를 바꿔 쓰지 않아 받아 둔 자료가 남고, 실패 메일이 감(2026-11-27)
+            raise SystemExit(f"KOSIS 오류로 멈춤({spec['tblId']} {y}년): {msg}")
         out += j
         time.sleep(1)
     df = pd.DataFrame(out)
