@@ -1151,6 +1151,11 @@ def find_unusual_regions(week: OneWeek = "", top: Top = 15, start_week: StartWee
             wo = analysis.latest_inflow_week(db)
     except Exception:
         return {"error": "week 형식은 'YYYY.MM.N주차'(예: '2026.10.5주차')."}
+    # 아직 자료가 없는 주는 전국 계산 전에 돌려보냄(2026-11-27: 없는 주에 91.8초 계산 뒤 오류였음)
+    latest = analysis.latest_inflow_week(db)
+    if latest and wo > latest:
+        return {"error": f"아직 자료가 없는 주다(나우캐스트는 주가 끝나고 약 11일 뒤 나옴). 가장 최근 주는 {_label(latest)}. "
+                         "'지난주'를 물으면 이 주로 다시 부를 것."}
     rows = analysis.rank_week(db, wo)
     if not rows:
         return {"error": "그 주차 자료가 없거나 판정할 수 없다. get_data_status로 최신 주차를 확인할 것."}
