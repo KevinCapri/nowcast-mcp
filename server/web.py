@@ -207,41 +207,63 @@ def _holiday_tip(wo):
     return txt + (full[i:] if i >= 0 else "")
 
 
+_KST = dt.timezone(dt.timedelta(hours=9))
+_REFRESH_LOG_MAX = 200_000
+
+
+def _rlog(*args, **kw):
+    """print와 같되, 다시 계산 단계 시각을 /home/data/refresh.log에도 남김(Azure는 서버 print를 보관하지 않음, 2026-11-27).
+    남기기에 실패해도 다시 계산에는 영향이 없게 모든 오류를 삼킨다."""
+    print(*args, **kw)
+    try:
+        path = Path(_conn()._path).parent / "refresh.log"
+        if path.exists() and path.stat().st_size > _REFRESH_LOG_MAX:
+            tail = path.read_text(encoding="utf-8")[-_REFRESH_LOG_MAX // 2:]
+            path.write_text(tail[tail.find("\n") + 1:], encoding="utf-8")
+        stamp = dt.datetime.now(_KST).strftime("%Y-%m-%d %H:%M:%S")
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(f"{stamp} " + " ".join(str(x) for x in args) + "\n")
+    except Exception:
+        pass
+
+
 def refresh_lists():
     if not _lists_lock.acquire(blocking=False):
         return
+    t_all = time.time()
     try:
+        _rlog("[web] 다시 계산 시작", flush=True)
         _lists.update(regions=_regions(), weeks=_weeks(), at=time.time())
-        print("[web] 지역·주차 목록 준비", flush=True)
+        _rlog("[web] 지역·주차 목록 준비", flush=True)
         t = time.time()
         n = A.load_all(_conn())
         _hol_days.clear()
         _hol_days.update(_load_hol_days())
-        print(f"[web] 지역별 시계열 {n}곳 메모리에 올림 ({time.time() - t:.1f}초)", flush=True)
+        _rlog(f"[web] 지역별 시계열 {n}곳 메모리에 올림 ({time.time() - t:.1f}초)", flush=True)
         # 최신 주차(latest_week 캐시 열쇠)를 여기서 뒤에서 읽어 넣어 둠. 이용자 요청이 표 전체 훑기를 하지 않게(2026-11-24).
         # 전에는 여기서 None으로 지워 다음 요청이 직접 훑었음(밤새 쉰 뒤 11.9초).
         try:
             t = time.time()
             wo = _conn().execute("SELECT MAX(week_order) FROM moves").fetchone()[0]
             A._latest.update(wo=wo, checked=time.monotonic())
-            print(f"[web] 최신 주차 {wo} 확인 ({time.time() - t:.1f}초)", flush=True)
+            _rlog(f"[web] 최신 주차 {wo} 확인 ({time.time() - t:.1f}초)", flush=True)
         except Exception as e:
             A._latest["wo"] = None                   # 못 읽으면 전처럼 다음 요청이 확인
-            print("[web] 최신 주차 확인 실패", repr(e), flush=True)
+            _rlog("[web] 최신 주차 확인 실패", repr(e), flush=True)
         # KOSIS 표(주민·외국인·통근·전입·생활인구)와 지역 연결표도 메모리로(0.6.4). 색인 없는 표를 요청마다 훑던 것
         # (인구감소지역 순위 37~49초, '지역 성격' 2~5초)을 없앰. 실패하면 전처럼 DB에서 읽는다.
         try:
             t = time.time()
             k = lifepop.load_memory(_conn())
-            print(f"[web] KOSIS 표·지역 연결표 {k}개 메모리에 올림 ({time.time() - t:.1f}초)", flush=True)
+            _rlog(f"[web] KOSIS 표·지역 연결표 {k}개 메모리에 올림 ({time.time() - t:.1f}초)", flush=True)
         except Exception as e:
-            print("[web] KOSIS 표 메모리 올리기 실패", repr(e), flush=True)
+            _rlog("[web] KOSIS 표 메모리 올리기 실패", repr(e), flush=True)
         try:                                  # 0.6.5: 미공표 지역 생활인구 공식 미리 맞추기
             t = time.time()
             lifepop.warm_fits(_conn())
-            print(f"[web] 생활인구 공식 미리 맞춤 ({time.time() - t:.1f}초)", flush=True)
+            _rlog(f"[web] 생활인구 공식 미리 맞춤 ({time.time() - t:.1f}초)", flush=True)
         except Exception as e:
-            print("[web] 생활인구 공식 미리 맞추기 실패", repr(e), flush=True)
+            _rlog("[web] 생활인구 공식 미리 맞추기 실패", repr(e), flush=True)
         # find_unusual_regions의 가장 최근 주 전국 순위를 미리 계산해 둠(처음 부를 때 약 3.7초 걸리던 것).
         # rank_week는 (주차, 최신 주차)로 캐시하므로 새 자료가 들어오면 저절로 다시 계산된다.
         try:
@@ -249,17 +271,17 @@ def refresh_lists():
             wo = _conn().execute("SELECT MAX(week_order) FROM moves WHERE direction='유입' AND category='시군구'").fetchone()[0]
             if wo:
                 A.rank_week(_conn(), wo)
-                print(f"[web] 최근 주 전국 순위 미리 계산 ({time.time() - t:.1f}초)", flush=True)
+                _rlog(f"[web] 최근 주 전국 순위 미리 계산 ({time.time() - t:.1f}초)", flush=True)
         except Exception as e:
-            print("[web] 최근 주 전국 순위 미리 계산 실패", repr(e), flush=True)
+            _rlog("[web] 최근 주 전국 순위 미리 계산 실패", repr(e), flush=True)
         # 기간 순위(find_unusual_regions의 start_week·end_week)에 쓰는 전국×전체 주 판정 표도 미리 계산해 둠.
         # 최신 주차로 캐시하므로 새 자료가 들어오면 저절로 다시 계산된다.
         try:
             t = time.time()
             A.period_table(_conn())
-            print(f"[web] 기간 순위 표 미리 계산 ({time.time() - t:.1f}초)", flush=True)
+            _rlog(f"[web] 기간 순위 표 미리 계산 ({time.time() - t:.1f}초)", flush=True)
         except Exception as e:
-            print("[web] 기간 순위 표 미리 계산 실패", repr(e), flush=True)
+            _rlog("[web] 기간 순위 표 미리 계산 실패", repr(e), flush=True)
         # 날짜별 방문자의 '날마다 들쭉날쭉한 정도' 전국 비교표(0.6.0). 새 자료가 들어오면 다시 계산.
         try:
             import daily
@@ -267,12 +289,13 @@ def refresh_lists():
             daily.clear()
             daily._WOBBLE.update(at=0, busy=True)
             daily._build_wobble(_conn())
-            print(f"[web] 날짜별 방문자 전국 비교표 미리 계산 ({time.time() - t:.1f}초)", flush=True)
+            _rlog(f"[web] 날짜별 방문자 전국 비교표 미리 계산 ({time.time() - t:.1f}초)", flush=True)
         except Exception as e:
-            print("[web] 날짜별 방문자 전국 비교표 미리 계산 실패", repr(e), flush=True)
+            _rlog("[web] 날짜별 방문자 전국 비교표 미리 계산 실패", repr(e), flush=True)
     except Exception as e:
-        print("[web] 목록 만들기 실패", repr(e), flush=True)
+        _rlog("[web] 목록 만들기 실패", repr(e), flush=True)
     finally:
+        _rlog(f"[web] 다시 계산 끝 (전체 {time.time() - t_all:.1f}초)", flush=True)
         _lists_lock.release()
 
 
