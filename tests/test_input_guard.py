@@ -30,7 +30,7 @@ def text(r):
 async def main():
     cases = [
         ("compare_same_week", {"sido": "경상북도", "sigungu": "경주시", "week": "2025.10.2주차", "years_back": 5},
-         "입력값이 받을 수 있는 범위를 벗어났다. years_back은 1~3만 받는다(받은 값: 5). 고쳐서 다시 물을 것."),
+         "입력값이 받을 수 있는 범위를 벗어났다. years_back은 1–3만 받는다(받은 값: 5). 고쳐서 다시 물을 것."),
         ("get_movement", {"start_week": "2025.10.2주차", "direction": "들어옴", "category": "성별"},
          "입력값이 받을 수 있는 범위를 벗어났다. direction은 '유입', '유출' 중 하나만 받는다(받은 값: '들어옴'). "
          "고쳐서 다시 물을 것."),
@@ -39,7 +39,7 @@ async def main():
         ("find_unusual_regions", {"top": "많이"},
          "top은 숫자로 넣을 것(받은 값: '많이')."),
         ("find_unusual_regions", {"top": 0},
-         "입력값이 받을 수 있는 범위를 벗어났다. top은 1~30만 받는다(받은 값: 0). 고쳐서 다시 물을 것."),
+         "입력값이 받을 수 있는 범위를 벗어났다. top은 1–30만 받는다(받은 값: 0). 고쳐서 다시 물을 것."),
     ]
     for name, args, want in cases:
         r = await S.mcp.call_tool(name, args)

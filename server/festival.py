@@ -1,16 +1,16 @@
 """축제 참고 예측: "올해(다음) 축제 주에 관외 유입이 평소보다 얼마나 늘까"를 범위로 답한다.
 
 방법:
-- 축제 일정: 문체부 연도별 지역축제 개최 계획(2023~2026, 계획 일정)에서 같은 축제를 이어 붙인 표(festivals.csv)
+- 축제 일정: 문체부 연도별 지역축제 개최 계획(2023–2026, 계획 일정)에서 같은 축제를 이어 붙인 표(festivals.csv)
 - 회차마다 '주된 주'(행사 일수·주말이 가장 많이 든 주)의 상승률
   · 평소 대비 = ln(그 주 관외 유입 / 직전 8주 중앙값)
   · 비교군 대비 = 평소 대비 − 같은 주 '비슷하면서 100km 밖' 10곳의 평소 대비 중앙값
 - 예측 조건: 지난 회차 1번 이상, 지난 회차 평소 대비 평균이 평소 출렁임의 2배 초과
 - 예측 기준 = 지난 회차 비교군 대비 상승률의 평균(되돌림은 쓰지 않음)
 - 범위(같은 묶음 축제들의 다음 회차 변화, 68건 채점):
-  · 2~3.5배 묶음: 둘 중 한 번 −4~+5%, 열 중 여덟 −12~+11%
-  · 3.5배 초과: 둘 중 한 번 −8~+2%, 열 중 여덟 −11~+5%
-  · 지난 회차 3번 이상이면 '열 중 여덟'에 자기 최소~최대를 합침
+  · 2–3.5배 묶음: 둘 중 한 번 −4–+5%, 열 중 여덟 −12–+11%
+  · 3.5배 초과: 둘 중 한 번 −8–+2%, 열 중 여덟 −11–+5%
+  · 지난 회차 3번 이상이면 '열 중 여덟'에 자기 최소–최대를 합침
 """
 import csv
 import datetime as dt
@@ -24,7 +24,7 @@ import feedback
 import safe
 
 CSV = Path(__file__).with_name("festivals.csv")
-BANDS = {"2~3.5배": ((-0.04, 0.05), (-0.12, 0.11)), "3.5배 초과": ((-0.08, 0.02), (-0.11, 0.05))}
+BANDS = {"2–3.5배": ((-0.04, 0.05), (-0.12, 0.11)), "3.5배 초과": ((-0.08, 0.02), (-0.11, 0.05))}
 
 
 def _load():
@@ -102,7 +102,7 @@ def _comp_series(db, sido, sigungu):
 
 
 def in_week(sido, sigungu, monday, holidays=()):
-    """그 주(월~일)에 걸친 축제(문체부 계획): 이름, 계획 기간, 그 주에 든 행사 일수, 그중 주말·공휴일 일수."""
+    """그 주(월–일)에 걸친 축제(문체부 계획): 이름, 계획 기간, 그 주에 든 행사 일수, 그중 주말·공휴일 일수."""
     c = A.canon(sido, sigungu)
     sun = monday + dt.timedelta(days=6)
     out, seen = [], set()
@@ -118,14 +118,14 @@ def in_week(sido, sigungu, monday, holidays=()):
         seen.add(r["name"])
         days = [monday + dt.timedelta(days=i) for i in range(7) if s <= monday + dt.timedelta(days=i) <= e]
         off = sum(1 for d in days if d.weekday() >= 5 or d.isoformat() in holidays)
-        out.append({"축제": r["name"], "계획 기간": f"{r['s']}~{r['e']}", "이 주에 든 행사 일수": len(days),
+        out.append({"축제": r["name"], "계획 기간": f"{r['s']}–{r['e']}", "이 주에 든 행사 일수": len(days),
                     "그중 주말·공휴일": off})
     return out
 
 
 def first_time(db, sido, sigungu):
     """지난 회차가 없는 축제: 비슷한 지역 10곳에서 열린 축제들의 '주된 주' 평소 대비 상승률 분포(낮은 신뢰도 참고 범위).
-    모의시험(한 지역): 112건, −4~+30%, 중앙값 +7%, 평소 출렁임 2배 초과 14%. 개별 축제 오차 약 20%."""
+    모의시험(한 지역): 112건, −4–+30%, 중앙값 +7%, 평소 출렁임 2배 초과 14%. 개별 축제 오차 약 20%."""
     hol = A.holidays(db)
     vals, strong = [], 0
     for a, b in A.PEERS.get(A.canon(sido, sigungu), []):
@@ -144,7 +144,7 @@ def first_time(db, sido, sigungu):
         return None
     vals.sort()
     q = lambda p: vals[min(len(vals) - 1, int(p * len(vals)))]
-    return {"근거 축제 수": len(vals), "근거": "인구·주변 인구가 비슷한 지역 10곳에서 열린 축제(문체부 계획 2023~2026)의 주된 주",
+    return {"근거 축제 수": len(vals), "근거": "인구·주변 인구가 비슷한 지역 10곳에서 열린 축제(문체부 계획 2023–2026)의 주된 주",
             "평소 대비 상승률 중앙값(%)": A._pct(median(vals)),
             "열 번 중 여덟 번은 이 안(%)": [A._pct(q(0.1)), A._pct(q(0.9))],
             "평소 출렁임 2배 넘게 크게 늘어난 비율(%)": round(strong / len(vals) * 100)}
@@ -174,7 +174,7 @@ def forecast(db, sido, sigungu, name="", start_date="", end_date=""):
         listed = sorted({r["name"] for r in find(sido, sigungu)})
         ref = first_time(db, sido, sigungu)
         out = {"축제": name or None, "지역": f"{sido} {sigungu}", "예측": "하지 않음",
-               "이유": "이 지역에서 그 축제의 지난 회차를 찾지 못했다(문체부 개최 계획 2023~2026 기준). "
+               "이유": "이 지역에서 그 축제의 지난 회차를 찾지 못했다(문체부 개최 계획 2023–2026 기준). "
                      "처음 여는 축제이거나 계획에 이름이 다르게 올랐을 수 있다.",
                "이 지역 축제(문체부 계획)": listed[:30]}
         feedback.cant(out, "축제 지난 회차 없음")
@@ -208,7 +208,7 @@ def forecast(db, sido, sigungu, name="", start_date="", end_date=""):
             continue
         raw = me[wo][3]
         c = common(wo)
-        rec.append({"y": r["y"], "name": r["name"], "기간": f"{r['s']}~{r['e']}", "주차": me[wo][0],
+        rec.append({"y": r["y"], "name": r["name"], "기간": f"{r['s']}–{r['e']}", "주차": me[wo][0],
                     "wo": wo, "raw": raw, "comp": None if c is None else raw - c,
                     "long_hol": A.is_long_holiday(hol.get(wo)), "sus": A.is_suspect(sido, sigungu, wo)})
     use = [x for x in rec if not x["long_hol"] and x["comp"] is not None]
@@ -247,7 +247,7 @@ def forecast(db, sido, sigungu, name="", start_date="", end_date=""):
                       "이 자료로는 축제 효과가 잡히지 않아 예측할 것이 없다(전국 축제의 약 83%가 이렇다).")
         base["주의"] = sus_notes + common_notes
         return base
-    group = "3.5배 초과" if ratio > 3.5 else "2~3.5배"
+    group = "3.5배 초과" if ratio > 3.5 else "2–3.5배"
     (a1, b1), (a2, b2) = BANDS[group]
     lvl = math.exp(mean(x["comp"] for x in use))
     r1 = [round((lvl * (1 + a1) - 1) * 100), round((lvl * (1 + b1) - 1) * 100)]
@@ -263,7 +263,7 @@ def forecast(db, sido, sigungu, name="", start_date="", end_date=""):
         "참고: 예상 관외 유입(일평균 건수)": _count_hint(use, me),
         "묶음": f"지난 회차 효과 {group}",
         "범위 근거": "같은 묶음 축제들의 다음 회차 변화(68건 채점, 비교군 대비 기준 오차 중앙값 약 4%)"
-                  + (" + 이 축제의 지난 회차 최소~최대" if len(use) >= 3 else ""),
+                  + (" + 이 축제의 지난 회차 최소–최대" if len(use) >= 3 else ""),
     })
     notes = []
     if start_date and end_date:

@@ -218,7 +218,7 @@ def speak_short(w):
 # 같은 시도 합계는 그대로이거나 이웃 구가 반대로 움직였으며, 데이터랩 외지인에는 변화가 없었던 경우.
 SUSPECT = [
     (("대전광역시", "중구"), 2025111, 2025115, "2025년 11월: 중구만 크게 늘고 대전 전체는 그대로, 이웃 구가 그만큼 줄었고 데이터랩 외지인은 변화 없음"),
-    (("경상남도", "창원시 의창구"), 2024011, 2024025, "2024년 1~2월: 의창구만 크게 튀고 이웃 구가 반대로 움직임"),
+    (("경상남도", "창원시 의창구"), 2024011, 2024025, "2024년 1–2월: 의창구만 크게 튀고 이웃 구가 반대로 움직임"),
     (("경기도", "가평군"), 2025071, 2099125, "2025년 하반기부터: 데이터랩 등 다른 자료와 수준이 어긋남"),
     (("광주", "남구"), 2025091, 2099125, "2025년 9월부터: 남구와 북구가 서로 반대로 크게 움직임(행정구역 배정 착오 가능성)"),
     (("광주", "북구"), 2025091, 2099125, "2025년 9월부터: 남구와 북구가 서로 반대로 크게 움직임(행정구역 배정 착오 가능성)"),
@@ -259,7 +259,7 @@ def is_suspect(sido, sigungu, wo):
 
 
 def week_dates(wo):
-    """주차 번호 → '2026-10-26~2026-11-01'(월~일). 목요일이 속한 달로 세고 2022년만 수요일."""
+    """주차 번호 → '2026-10-26–2026-11-01'(월–일). 목요일이 속한 달로 세고 2022년만 수요일."""
     import datetime as dt
     y, m, n = wo // 1000, (wo // 10) % 100, wo % 10
     k = 2 if y == 2022 else 3
@@ -267,19 +267,19 @@ def week_dates(wo):
     while d.weekday() != k:
         d += dt.timedelta(days=1)
     mon = d - dt.timedelta(days=k)
-    return f"{mon}~{mon + dt.timedelta(days=6)}"
+    return f"{mon}–{mon + dt.timedelta(days=6)}"
 
 
 def date_ko(wo):
-    """주차 번호 → '2025년 11월 10일~16일'(이용자에게 말하는 날짜, TEST_수정안_20261120.md 8번).
-    달이 바뀌면 '2025년 9월 29일~10월 5일', 해가 바뀌면 '2025년 12월 29일~2026년 1월 4일'."""
+    """주차 번호 → '2025년 11월 10일–16일'(이용자에게 말하는 날짜, TEST_수정안_20261120.md 8번).
+    달이 바뀌면 '2025년 9월 29일–10월 5일', 해가 바뀌면 '2025년 12월 29일–2026년 1월 4일'."""
     import datetime as dt
-    a, b = (dt.date.fromisoformat(x) for x in week_dates(wo).split("~"))
+    a, b = (dt.date.fromisoformat(x) for x in week_dates(wo).split("–"))
     if a.year != b.year:
-        return f"{a.year}년 {a.month}월 {a.day}일~{b.year}년 {b.month}월 {b.day}일"
+        return f"{a.year}년 {a.month}월 {a.day}일–{b.year}년 {b.month}월 {b.day}일"
     if a.month != b.month:
-        return f"{a.year}년 {a.month}월 {a.day}일~{b.month}월 {b.day}일"
-    return f"{a.year}년 {a.month}월 {a.day}일~{b.day}일"
+        return f"{a.year}년 {a.month}월 {a.day}일–{b.month}월 {b.day}일"
+    return f"{a.year}년 {a.month}월 {a.day}일–{b.day}일"
 
 
 def holidays(db):
@@ -302,7 +302,7 @@ _NAMES = None     # list_regions용: {"sgg": [(시도, 시군구)] 정렬, "sido
 
 def load_all(db):
     """시군구 관외 유입·유출과 지역 이름 목록을 한 번에 읽어 둔다. 자료가 바뀌면 다시 부른다.
-    유출·이름 목록은 2026-11-23에 더함: 유출 순위가 긴 기간이면 표를 통째로 읽어 9~43초, list_regions가 3.6초 걸렸음."""
+    유출·이름 목록은 2026-11-23에 더함: 유출 순위가 긴 기간이면 표를 통째로 읽어 9–43초, list_regions가 3.6초 걸렸음."""
     global _ALL, _ALL_OUT, _NAMES
     out = {}
     for sd, sg, wo, wk, v in db.execute("SELECT sido, item, week_order, week, outside FROM moves "
@@ -552,7 +552,7 @@ def analyze(db, sido, sigungu, week_order, P=None):
         return {"error": "지역을 찾지 못함. list_regions로 시도·시군구 이름을 확인할 것."}
     rows, me, peers, pdev = P["rows"], P["me"], P["peers"], P["pdev"]
     if week_order not in me:
-        return {"error": f"그 주차 자료가 없음(이 지역 자료: {rows[0][1]} ~ {rows[-1][1]})."}
+        return {"error": f"그 주차 자료가 없음(이 지역 자료: {rows[0][1]} – {rows[-1][1]})."}
     with timing.step("analysis.judge_week(판정)"):
         J = judge_week(P, week_order)
     if J is None:
@@ -580,7 +580,7 @@ def analyze(db, sido, sigungu, week_order, P=None):
     return {
         "지역": f"{sido} {sigungu}",
         "주차": wk,
-        "기간(월~일)": week_dates(week_order),
+        "기간(월–일)": week_dates(week_order),
         "관외 유입(일평균 건수)": v,
         "평소 값(직전 8주 중앙값, 연휴 주 제외)": round(base),
         "평소 대비 변화(%)": _pct(dev),
@@ -630,7 +630,7 @@ LATEST_TTL = 6 * 3600   # 초. 자료는 새벽 자동 갱신 때만 바뀌고, 
 
 def latest_week(db):
     """moves의 최신 주차(캐시 열쇠용). 'SELECT MAX(week_order) FROM moves'는 색인을 못 타 표 전체를 훑어,
-    저장소에서 읽을 때는 한 번에 몇 초씩 걸린다(2026-11-21 저녁: 비교 지역 10곳마다 불러 한 번 판정에 20~85초).
+    저장소에서 읽을 때는 한 번에 몇 초씩 걸린다(2026-11-21 저녁: 비교 지역 10곳마다 불러 한 번 판정에 20–85초).
     그래서 10분에 한 번만 실제로 확인했는데, 밤새 쉰 뒤 처음 훑는 한 번이 11.9초까지 걸려(2026-11-24 속도 측정)
     서버 시작·자동 갱신 뒤 web.refresh_lists가 뒤에서 미리 읽어 넣어 두고, 여기서는 6시간에 한 번만 다시 확인한다."""
     import time

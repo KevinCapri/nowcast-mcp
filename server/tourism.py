@@ -78,11 +78,11 @@ def share(db, sido, sigungu):
     return {"관광지 방문객 몫(%)": pct,
             "설명": f"하루 관광지 방문객이 관외 유입의 약 {pct}%(주요: {', '.join(top)}). 이 지역 관외 유입은 관광지 방문과 "
                   "함께 움직이는 편이다(관광지 때문이라고 단정하지 말 것).",
-            "기준": f"{ok[0][:4]}.{ok[0][4:]}~{ok[-1][:4]}.{ok[-1][4:]} 주요 유료관광지 방문객(한국문화관광연구원)"}
+            "기준": f"{ok[0][:4]}.{ok[0][4:]}–{ok[-1][:4]}.{ok[-1][4:]} 주요 유료관광지 방문객(한국문화관광연구원)"}
 
 
 def months(db, sido, sigungu, a, b):
-    """a~b(date) 달마다 그 지역 주요 유료관광지 방문객 상위 5곳."""
+    """a–b(date) 달마다 그 지역 주요 유료관광지 방문객 상위 5곳."""
     yf, yt = f"{a.year}{a.month:02d}", f"{b.year}{b.month:02d}"
     rows, city, g = _rows(db, sido, sigungu, yf, yt)
     try:

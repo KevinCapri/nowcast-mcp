@@ -153,7 +153,7 @@ def input_check():
                 raw = line[5:]
         res = json.loads(raw).get("result") or {}
         txt = "".join(c.get("text", "") for c in res.get("content") or [])
-        if res.get("isError") or "1~3만 받는다" not in txt:
+        if res.get("isError") or "1–3만 받는다" not in txt:
             return [f"범위 밖 입력 안내가 나오지 않음: {txt[:200]}"]
     except Exception as e:  # noqa: BLE001
         return [f"범위 밖 입력 확인: {type(e).__name__}: {e}"]

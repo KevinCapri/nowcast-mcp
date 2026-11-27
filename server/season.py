@@ -1,6 +1,6 @@
 """벚꽃 만발·단풍 절정(기상청 계절관측)과 관외 유입.
 
-- 자료: kma_season.csv(기상청 기상자료개방포털 > 계절관측, 2019~). 봄·가을에 한 번씩 손으로 갱신.
+- 자료: kma_season.csv(기상청 기상자료개방포털 > 계절관측, 2019–). 봄·가을에 한 번씩 손으로 갱신.
   유명산 단풍은 자료에 관측 지점 이름만 있어 산 이름을 붙였다(2026년 첫 단풍 보도 날짜와 맞춰 봄).
 - 2026-11 검증(claude/벚꽃_단풍_유입효과_시험.md): 관광형 시군구에서 단풍 절정 주(21곳 중 17곳 증가, 중앙값 +9.8%),
   벚꽃 만발 주(14곳 중 12곳 증가, 중앙값 +12.6%)에 관외 유입이 늘었다. 효과가 보인 곳만 SPOTS에 넣었다.
@@ -123,7 +123,7 @@ def history(P, sido, sigungu, skip_year=None):
         if pk and ot:
             word = "만발" if kind == "벚꽃" else "절정"
             res.append({"명소": name, "종류": f"{kind} {word}",
-                        "지난 기록": f"{min(years)}~{max(years)}년 {len(pk)}번의 {kind} {word} 주에 같은 계절 다른 주보다 "
+                        "지난 기록": f"{min(years)}–{max(years)}년 {len(pk)}번의 {kind} {word} 주에 같은 계절 다른 주보다 "
                                      f"평균 {round((mean(pk) - mean(ot)) * 100):+d}%",
                         "평균 차이(%)": round((mean(pk) - mean(ot)) * 100, 1)})
     return res

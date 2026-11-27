@@ -69,8 +69,8 @@ db = _ThreadDB(DB)
 SERVICE = "빅데이터 Insight: 지역별 유입인구"
 # 도구 목록이 바뀌면(추가·삭제·입력값·설명) 세 값을 같이 고친다. 회귀 시험이 TOOLS와 실제 도구가 다르면 잡는다.
 # 결과마다 붙여서, 예전에 연결한 이용자에게도 AI가 '새 도구가 생겼으니 다시 연결'을 알려 주게 한다(claude/변경_관리_원칙.md).
-VERSION = "0.6.6"
-TOOLS_CHANGED = "2026-11-25"
+VERSION = "0.6.7"
+TOOLS_CHANGED = "2026-11-28"
 TOOLS = ["get_metadata", "list_regions", "get_movement", "analyze_region_week",
          "find_unusual_regions", "estimate_life_pop", "forecast_festival", "get_datalab_daily", "report_issue",
          "get_region_calendar", "get_bloom_foliage", "get_data_status", "compare_same_week"]
@@ -85,7 +85,7 @@ READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotent
 SENDS = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True)
 Sido = Annotated[str, Field(description="시도 이름. list_regions로 확인한 표기(예: '경상북도', '서울특별시')")]
 Sigungu = Annotated[str, Field(description="시군구 이름. list_regions로 확인한 표기(예: '경주시', '수원시 장안구')")]
-Week = Annotated[str, Field(description="주차 'YYYY.MM.N주차'(월~일 한 주, 그 주 목요일이 속한 달로 셈. 예: '2025.10.2주차')")]
+Week = Annotated[str, Field(description="주차 'YYYY.MM.N주차'(월–일 한 주, 그 주 목요일이 속한 달로 셈. 예: '2025.10.2주차')")]
 YearMonth = Annotated[str, Field(description="달 'YYYY-MM'(예: '2026-09')")]
 INSTRUCTIONS = (
     f"{SERVICE_FULL}. 국가데이터처 KOBIGS 나우캐스트 '통신 모바일 인구이동량'(시군구·주별 하루 평균 이동 건수)을 조회하고, "
@@ -115,6 +115,9 @@ INSTRUCTIONS = (
     "'왜 늘었나/줄었나', '무슨 행사가 있었나'를 물으면 웹 검색보다 먼저 analyze_region_week로 그 주를 판정하고, "
     "'이 자료로는 원인을 확정할 수 없다'를 먼저 말한 뒤 같은 시기에 있었던 일은 '같은 시기에 ~가 있었다'로 말하고, 영향이 있었을 '가능성'은 근거(지난 해 같은 시기의 반응·판정 크기·겹친 일정)와 한계를 함께 밝히면 말해도 된다. '~때문에 늘었다'처럼 확정하는 말만 하지 말 것. "
     "물가·고용 같은 일반 통계는 이 서비스 범위 밖이므로 KOSIS 국가통계 MCP를 안내할 것. "
+    "다만 시군구 주민등록인구·등록외국인(공표 값)은 이 서비스에 있으니 estimate_life_pop을 불러 결과의 '공식 인구'로 답할 것"
+    "(생활인구 추정을 하지 않는 지역·달에도 나온다). "
+    "범위·기간은 '~' 대신 '–'로 쓸 것(어떤 화면에서는 한 문단의 '~' 두 개 사이가 취소선으로 그어져 숫자가 지워져 보인다). "
     "'그 달 그 지역에 무슨 행사·경기가 있었나', '언제였나'는 get_region_calendar로, '올해(그해) 벚꽃·단풍 언제였나'는 "
     "get_bloom_foliage로 답하고, 결과에 함께 나오는 그 주 유입으로 '그래서 사람이 많이 왔나'까지 이어서 답할 것. "
     "'작년보다 많이 왔나', '올해 추석이 작년 추석보다' 같은 해 비교는 compare_same_week로 답할 것(원값끼리 견주지 말 것). "
@@ -169,7 +172,7 @@ NATURE = {
 }
 MULT = "배수(이용자가 물을 때만 말함)"   # 순위 줄의 '평소 출렁임의 몇 배'(TEST_수정안_20261120.md 3번, 원칙 2의 예외)
 # 주는 날짜로 말하기(TEST_수정안_20261120.md 8번)
-DATE_RULE = ("주는 날짜(월~일)로 말할 것(예: 2025년 9월 29일~10월 5일, 결과에 '날짜' 칸이 있으면 그대로). 주차 이름('2025.10.1주차')은 "
+DATE_RULE = ("주는 날짜(월–일)로 말할 것(예: 2025년 9월 29일–10월 5일, 결과에 '날짜' 칸이 있으면 그대로). 주차 이름('2025.10.1주차')은 "
              "이용자가 주차로 물었을 때만 함께 말할 것. 주차 이름은 그 주 목요일이 속한 달로 세기 때문에 날짜와 달이 어긋날 수 있다.")
 # 2026-11-21 Kevin 요청(TEST 2-2 한국시리즈 날짜): 하루 단위 날짜에는 요일을 날짜 옆에 붙여야 읽기 쉽다. 주 단위는 DATE_RULE.
 DAY_RULE = ("하루 단위 날짜를 말할 때는 '10월 29일(수), 30일(목), 31일(금)'처럼 날짜 바로 옆에 괄호로 요일을 붙일 것"
@@ -270,8 +273,40 @@ RULES = {
 SEOUL_RESIDENTIAL = {"양천구", "관악구", "은평구", "중랑구", "도봉구", "노원구", "강북구", "강동구"}
 
 
+INTENSITY = "외부 유입 강도(관외 유입 ÷ 주민등록인구와 등록외국인, 최근 8주)"
+
+
+def _ym_ko(ym):
+    """'202610' → '2026년 10월'."""
+    return f"{ym[:4]}년 {int(ym[4:6])}월"
+
+
+def _official_pop(sido, sigungu, ym):
+    """0.6.7: 주민등록인구·등록외국인(공표 값)을 생활인구 추정 여부와 상관없이 늘 붙인다(11-28 Kevin:
+    가진 건 알려 줘야 한다 — PlayMCP에서 '강남구 인구'를 '조회할 수 없다'고 답함). ym: 'YYYYMM', 그 달 또는 그 전 가장 최근 값."""
+    try:
+        jumin, frn = lifepop._reg(db, sido, sigungu)
+    except Exception:
+        return None
+    jk = max((k for k in jumin if k <= ym), default=None) or (min(jumin) if jumin else None)
+    fk = max((k for k in frn if k <= ym[:4]), default=None) or (min(frn) if frn else None)
+    if not jk and not fk:
+        return None
+    out = {}
+    if jk:
+        out["주민등록인구(명)"] = round(jumin[jk])
+        out["주민등록인구 기준"] = f"{_ym_ko(jk)} 말"
+    if fk:
+        out["등록외국인(명)"] = round(frn[fk])
+        out["등록외국인 기준"] = f"{fk}년(해 단위)"
+    out["출처"] = "주민등록인구: 행정안전부 주민등록인구통계, 등록외국인: 법무부(KOSIS)"
+    out["읽을 때"] = ("공표된 값이다(추정 아님). 인구를 물으면 이 값과 기준 시점을 그대로 말할 것. "
+                    "물은 달의 값이 아직 없으면 가장 최근 값이므로 그 기준 시점을 밝힐 것.")
+    return out
+
+
 def _profile(sido, sigungu):
-    """지역 성격: 타지역 통근 비율, 외부 유입 강도, 추세 해석 주의."""
+    """지역 성격: 타지역 통근 비율, 주민등록인구·등록외국인, 외부 유입 강도, 추세 해석 주의."""
     out, warn = {}, None
     try:
         share = lifepop.commute_share(db, sido, sigungu)
@@ -286,13 +321,19 @@ def _profile(sido, sigungu):
             from statistics import median as _med
             j = jumin[max(jumin)]
             f = frn[max(frn)] if frn else 0
-            out["외부 유입 강도(관외 유입 ÷ 주민, 최근 8주)"] = round(_med(v for _, _, v in rows if v) / (j + f), 2)
+            # 0.6.7: 나눈 값(주민 수)도 함께 보여 줌. 이름도 실제 계산(주민등록인구 + 등록외국인)대로
+            out["주민등록인구(명, 공표)"] = round(j)
+            out["주민등록인구 기준"] = f"{_ym_ko(max(jumin))} 말"
+            if frn:
+                out["등록외국인(명, 공표)"] = round(f)
+                out["등록외국인 기준"] = f"{max(frn)}년(해 단위)"
+            out[INTENSITY] = round(_med(v for _, _, v in rows if v) / (j + f), 2)
     except Exception:
         pass
-    inten = out.get("외부 유입 강도(관외 유입 ÷ 주민, 최근 8주)")
+    inten = out.get(INTENSITY)
     if (sido == "서울특별시" and sigungu in SEOUL_RESIDENTIAL) or (share is not None and share >= 30 and inten is not None and inten < 0.8):
         warn = ("주거 중심 도시 지역: 주간 오르내림은 맞지만 몇 달에 걸친 추세는 실제 방문 변화와 어긋날 수 있다"
-                "(서울 검증에서 양천·관악·은평 추세 상관 0.01~0.48). 몇 달 추세를 단정하지 말 것(추세 해석 주의).")
+                "(서울 검증에서 양천·관악·은평 추세 상관 0.01–0.48). 몇 달 추세를 단정하지 말 것(추세 해석 주의).")
     elif share is not None and share >= 30:
         warn = "주민 30% 이상이 다른 지역으로 출근하는 지역: 생활인구 추정·몇 달 추세 해석은 신뢰도가 낮다."
     if warn:
@@ -354,6 +395,7 @@ def get_metadata() -> dict:
                 "앞으로 가늠해 보기(같은 주 비교·지역 일정) — \"○○군 올 연말엔 어떨까?\"(지난 해 같은 때와 잡힌 일정으로 가능성만)",
                 "축제 참고 예측 — \"○○축제 기간에 외부 유입이 얼마나 늘까?\"",
                 "생활인구 참고 추정(생활인구 추정) — \"○○군 지난달 생활인구 추정해 줘\"",
+                "인구 보기(생활인구 추정) — \"○○구 주민등록인구는 몇 명이야?\"(주민등록인구·등록외국인 공표 값)",
                 "함께 보는 자료 — 날씨(결과에 함께 붙음), 벚꽃·단풍 관측일(벚꽃·단풍), 자료 최신 시점(자료 현황)",
             ],
             "할 수 없는 일": [
@@ -364,9 +406,10 @@ def get_metadata() -> dict:
                 "여러 해에 걸친 추세 판단",
             ],
             "의견": "틀린 값이나 추가했으면 하는 자료·기능은 \"의견 보낼게\"라고 말하면 개발자에게 전달",
+            "버전": f"{VERSION} ({TOOLS_CHANGED} 업데이트, 시범 운영)",   # 0.6.7: 서버 값이라 늘 지금 버전
             "알림": "지금은 시범 운영 중이라 기준을 다듬고 있어요. 결과가 바뀔 수 있어요.",
             "보여 줄 때": "이용자가 'Insight 소개'·'Hello Insight'·'헬로 인사이트'·'안녕 인사이트'(또는 'Insight 소개 유입인구'·'Hello Insight 유입인구')라고 하거나 할 수 있는 일을 물으면 이 칸을 문구 그대로, 위 순서대로 보여 줄 것. 예시 질문의 ○○은 그대로 둘 것. 다른 '빅데이터 Insight' 서비스도 연결돼 있으면 서비스마다 나눠 보여 줄 것. "
-                     "'할 수 있는 일'과 '할 수 없는 일'만 그대로 보여 주고, 끝에 '알림' 한 줄을 붙일 것. 웹 검색·사진·직접 지은 서비스 설명을 덧붙이지 말 것. "
+                     "'할 수 있는 일'과 '할 수 없는 일'만 그대로 보여 주고, 끝에 '버전'과 '알림'을 한 줄씩 붙일 것(버전도 빼지 말 것). 웹 검색·사진·직접 지은 서비스 설명을 덧붙이지 말 것. "
                      "이 서비스가 원인을 찾아 준다거나 축제 효과·성과를 잰다고 소개하지 말 것.",
         },
         "정의": {
@@ -375,7 +418,7 @@ def get_metadata() -> dict:
             "유출": "그 지역에서 나간 이동 건수 (지역 기준: 거주지).",
             "관내": "거주하는 시군구 안의 다른 행정동으로 간 이동.",
             "관외": "거주하는 시군구 밖의 행정동으로 간 이동.",
-            "거주지": "한 달 동안 0~6시에 가장 오래 머문 기지국 위치.",
+            "거주지": "한 달 동안 0–6시에 가장 오래 머문 기지국 위치.",
             "입지유형": "상업지역(상권면적 70% 이상), 관광지(문체부 100선), 대형아울렛, 사무지역(직장인구 비율 상위 30%), 레저스포츠, 주거지등. 한 행정동에 여러 유형이 겹치면 이 순서대로 하나만 배정.",
         },
         "값의 단위": "주차별 일평균 이동 건수. 사람 수가 아니라 건수다. 한 사람이 하루에 여러 번 이동하면 여러 건으로 잡힌다.",
@@ -386,7 +429,7 @@ def get_metadata() -> dict:
             "성별 합계는 전국 합계보다 약간 작다(성별 미상). 차이를 오류로 해석하지 말 것.",
             "전국 단위에서는 유입과 유출이 같다. 전국 순유입은 의미가 없다.",
             "유입은 2019년 1월 1주차부터, 유출은 2023년 1월 1주차부터 있다. 2023년 이전 순유입(유입-유출)은 계산할 수 없다.",
-            "한 주는 월~일. 주차는 'YYYY.MM.N주차' 형식이고 그 주의 목요일이 속한 달로 센다(2022년만 수요일). 설·추석 연휴가 끼면 연휴 효과를 먼저 의심할 것.",
+            "한 주는 월–일. 주차는 'YYYY.MM.N주차' 형식이고 그 주의 목요일이 속한 달로 센다(2022년만 수요일). 설·추석 연휴가 끼면 연휴 효과를 먼저 의심할 것.",
             "대구 군위군은 2023년 7월 경상북도에서 대구광역시로 편입됐다. 시군구 시계열은 시도가 바뀌어 두 줄로 나뉜다.",
             "SK텔레콤 가입자 기준을 가중치로 전체 인구로 추정한 값이다.",
         ],
@@ -411,7 +454,7 @@ def get_metadata() -> dict:
         "판정 방식 변경 이력": [
             "2026-11 서비스 시작: 평소 값 = 직전 8주(연휴 주 제외) 중앙값, 비교군(비슷한 지역 10곳) 대비, "
             "평소 출렁임 = 2023년 3월 이후 평범한 주의 MAD×1.4826, 1·2·3배 기준 판정.",
-            "2026-11 평일 공휴일이 하루 든 주: 비교군 대비 대신 '평소 대비 − 그 지역 공휴일 하루당 반응'으로 판정(검증에서 오판 12% → 4~5%).",
+            "2026-11 평일 공휴일이 하루 든 주: 비교군 대비 대신 '평소 대비 − 그 지역 공휴일 하루당 반응'으로 판정(검증에서 오판 12% → 4–5%).",
             "2026-11-15 비교 지역이 이 지역과 반대로 크게 움직인 주를 표시만 함(판정은 그대로).",
             "2026-11-15 프로야구 홈경기 몫 추정과 '야구 몫 뺀 판정(참고)'을 더함(판정은 그대로).",
             "2026-11-15 벚꽃 만발·단풍 절정과 지역별 지난 기록을 더함(판정은 그대로).",
@@ -430,15 +473,15 @@ def get_metadata() -> dict:
         ],
         "함께 보여 주는 일정과 검증(2026-11)": {
             "원칙": "판정은 실제로 들어온 양 그대로다. 아래 일정은 '같은 시기에 있었던 일'로 붙이며 원인으로 확정하지 않는다(영향 가능성은 근거와 한계를 밝히면 말할 수 있다).",
-            "프로야구 홈경기(KBO)": "구장이 있는 9개 시군구에서 2023~2026년 해마다 관중이 많은 주일수록 관외 유입이 많았다. "
-                                "'프로야구 홈경기 몫 추정(%)'은 그 주 관중이 시즌 평균과 다른 만큼의 추정치(2023~2024로 계수를 구하고 "
-                                "2025~2026에서 확인: 몫을 빼면 평소 출렁임 21% 감소).",
+            "프로야구 홈경기(KBO)": "구장이 있는 9개 시군구에서 2023–2026년 해마다 관중이 많은 주일수록 관외 유입이 많았다. "
+                                "'프로야구 홈경기 몫 추정(%)'은 그 주 관중이 시즌 평균과 다른 만큼의 추정치(2023–2024로 계수를 구하고 "
+                                "2025–2026에서 확인: 몫을 빼면 평소 출렁임 21% 감소).",
             "벚꽃 만발·단풍 절정(기상청 계절관측)": "관광형 시군구에서 단풍 절정 주(21곳 중 17곳 증가, 중앙값 +9.8%), "
-                                          "벚꽃 만발 주(14곳 중 12곳 증가, 중앙값 +12.6%)에 관외 유입이 늘었다(2023~2026). "
+                                          "벚꽃 만발 주(14곳 중 12곳 증가, 중앙값 +12.6%)에 관외 유입이 늘었다(2023–2026). "
                                           "효과가 확인된 명소 지역에만 '그 주 만발·절정'과 '이 지역 지난 기록'을 붙인다.",
             "대형 행사·축제·공연": "전국체전·국제행사(정부·주최 측 발표), 문체부 축제 계획, KOPIS 큰 공연장 공연을 같은 방식으로 붙인다.",
             "관광지 방문객(한국문화관광연구원)": "주요 유료관광지 월별 방문객이 관외 유입의 약 4% 이상인 지역은 달마다 유입과 함께 "
-                                         "움직였다(2023.01~2026.05, 15곳 중 대부분 상관 0.6 이상). 2% 미만 지역은 안 보였다. "
+                                         "움직였다(2023.01–2026.05, 15곳 중 대부분 상관 0.6 이상). 2% 미만 지역은 안 보였다. "
                                          "그런 지역에만 '지역 성격'에 몫을 붙이고, 일정 도구에는 달별 상위 관광지를 정보로 보여 준다. 약 5개월 늦게 나온다.",
             "대형 시설 개점·폐점": "보도로 확인한 9곳을 시험해 스타필드 수원(2024.01)만 드러났다(개점 주 4.6배, 뒤로 관외 유입 약 30% 계단). "
                             "효과가 확인된 큰 개점만 판정에 '개점 뒤 8주' 안내를 붙이고, 나머지는 일정에 시험 결과와 함께 보여 준다.",
@@ -446,7 +489,7 @@ def get_metadata() -> dict:
         "검토했지만 쓰지 않는 자료와 방법": {
             "안내": "아래는 이 서비스가 '주간 외부 유입 변화'를 보는 데 써 보려고 시험한 것들이다. 이 목적에는 맞지 않았다는 뜻이고, "
                     "다른 목적에는 쓸모가 있을 수 있다. 이용자가 이 자료들로 유입 변화를 설명하려 하면 시험 결과를 알려 줄 것.",
-            "유가·환율": "휘발유 값이 전년보다 20% 넘게 오른 달(2026년 4~6월)에도 전국 관외 유입은 -0.3~+2.1%로 변화가 없었다. "
+            "유가·환율": "휘발유 값이 전년보다 20% 넘게 오른 달(2026년 4–6월)에도 전국 관외 유입은 -0.3–+2.1%로 변화가 없었다. "
                           "엔·달러 환율과 강원·제주 유입의 관계도 약했다(상관 0.2 안팎).",
             "폭염": "최고기온 35도 이상인 날에도 방문은 줄지 않았다(휴가철과 겹친다). 큰비·폭설·추위에는 줄었다.",
             "지자체 집계 해수욕장 이용객 수": "여름 유입 증가와 거의 맞지 않았다(순위상관 0.36). 지자체마다 세는 방식이 다르다.",
@@ -466,10 +509,10 @@ def get_metadata() -> dict:
         },
         "생활인구 관련 외부 연구(인용용)": {
             "안내": "생활인구 정책·의견을 물으면 아래 연구를 근거로 인용할 수 있다. 인용할 때는 기관·보고서·저자·연도를 함께 밝히고, "
-                    "연구 결과이지 이 서비스의 계산이나 의견이 아님을 분명히 할 것. 대부분 2024~2025년 자료 기준이므로 "
+                    "연구 결과이지 이 서비스의 계산이나 의견이 아님을 분명히 할 것. 대부분 2024–2025년 자료 기준이므로 "
                     "최신 결과는 원문과 국가데이터처 공표를 확인하도록 안내할 것.",
             "방문객 수보다 재방문·체류시간": "생활인구 1인당 카드 소비에는 체류인구 수보다 재방문율과 평균 체류시간의 영향이 더 컸다"
-                                          "(한국농촌경제연구원 R2025-03, 박형호 외, 2025. 2024~2025년 생활인구 패널 분석).",
+                                          "(한국농촌경제연구원 R2025-03, 박형호 외, 2025. 2024–2025년 생활인구 패널 분석).",
             "지역 유형마다 다른 정책": "생활인구 특성으로 인구감소지역 89곳을 5유형(한국지방행정연구원 2025-06, 박진경 외, 2025), "
                                      "카드 소비로 4유형(한국지방행정연구원 2025-07, 김민영·박진경, 2025)으로 나누었고, "
                                      "전국 252개 시군구를 집중성·방향성·자족성으로 6유형으로 나누었다(국토연구원 기본 25-17, 안소현 외, 2025). "
@@ -482,7 +525,7 @@ def get_metadata() -> dict:
                             "(한국보건사회연구원 2025-24, 장인수 외, 2025).",
             "제도 과제": "생활인구는 인구감소지역 89곳만 공표되어 전국 분석에 쓰기 어렵고(국토연구원 기본 25-17, 안소현 외, 2025), "
                        "시군구보다 작은 읍면동·생활권 단위 통계가 필요하다는 제안이 있다(한국농촌경제연구원 R2025-03, 박형호 외, 2025). "
-                       "한 달에 11일 이상 머문 체류인구가 주민등록인구의 평균 33%(지역별 14~85%)라는 분석도 있다"
+                       "한 달에 11일 이상 머문 체류인구가 주민등록인구의 평균 33%(지역별 14–85%)라는 분석도 있다"
                        "(국토연구원 국토정책 Brief 1012, 안소현 외, 2025).",
             "통계를 읽을 때 주의": "체류인구는 통신 3사 비가입자와 가명결합 실패로 빠진 부분을 보정한 값이라 실제와 차이가 날 수 있다"
                                  "(국회입법조사처 NARS 입법·정책 169호, 하혜영, 2025. 나우캐스트 생활인구 사용자가이드 인용). "
@@ -538,7 +581,7 @@ def _week_range(start_week, end_week, direction):
     return max(a, lo), b
 
 
-RankTop = Annotated[int, Field(description="시군구 순위에서 몇 곳까지(1~100, 기본 20)", ge=1, le=100)]
+RankTop = Annotated[int, Field(description="시군구 순위에서 몇 곳까지(1–100, 기본 20)", ge=1, le=100)]
 RankFrom = Annotated[int, Field(description="시군구 순위를 몇 위부터 보여 줄지(기본 1, 이어서 볼 때 결과의 안내대로)", ge=1)]
 Area = Annotated[Literal["전체", "인구감소지역", "인구활력+지역", "인구감소관심지역"],
                  Field(description="시군구 순위의 지역 범위. 행정안전부 2026-10 재지정 목록. '인구감소지역'은 관심지역을 포함한 110곳"
@@ -564,7 +607,7 @@ def get_movement(
     ② 전국을 한 기준(성별·연령·입지유형·시도)으로 나눈 건수·비중: item을 비움 — "지난달 외부 유입은 어느 연령이 많았어?".
     ③ 시군구 '많이 오는 곳' 순위(관외 이동 하루 평균 건수 순): category='시군구'에 item을 비움 — "외부에서 가장 많이 오는 시군구는? 인구감소지역 중에서는?"(area).
 
-    - item: 전국 '계' / 성별 '남성'·'여성' / 연령 '20대 미만'~'70대 이상' / 입지유형 '상업지역'·'관광지'·'대형아울렛'·'사무지역'·'레저스포츠'·'주거지등' /
+    - item: 전국 '계' / 성별 '남성'·'여성' / 연령 '20대 미만'–'70대 이상' / 입지유형 '상업지역'·'관광지'·'대형아울렛'·'사무지역'·'레저스포츠'·'주거지등' /
       시도 이름 / 시군구 이름(sido도 함께, list_regions로 확인). 성별·연령·입지유형은 전국 값만 있다. 지역 사이 이동(어디서 어디로)은 없다.
     - 한 번에 주는 길이: 흐름은 1년(52주), 나눠 보기는 한 달, 순위는 20곳(top으로 100곳까지). 더 길면 최근부터 주고 이어서 볼 묶음을 결과에서 안내한다.
     - 많이 오는 곳은 이동이 '많은' 곳이다. 평소보다 '늘어난' 곳은 find_unusual_regions, 한 주가 평소와 다른지는 analyze_region_week,
@@ -582,7 +625,7 @@ def get_movement(
         item = "계"
     if area != "전체" and (category != "시군구" or item):
         return {"error": "area(인구감소지역 등)는 시군구 순위(category='시군구', item 비움)에서만 쓴다."}
-    asked = f"{analysis.label(a)} ~ {analysis.label(b)}"
+    asked = f"{analysis.label(a)} – {analysis.label(b)}"
     if not item:
         if category == "시군구":
             if daily.paused("movement_rank"):
@@ -640,8 +683,8 @@ def get_movement(
         prev_end = rows[-len(shown) - 1][4]
         prev_start = rows[max(0, len(rows) - 2 * len(shown))][4]
         out["한 번에 보여 주는 길이"] = (f"자료가 많아서 주 단위 흐름은 한 번에 1년(52주)씩 보여 드려요. {analysis.label(first_shown)}부터 "
-                                f"{analysis.label(shown[-1][4])}까지를 먼저 보여 드렸어요. 이어서 {analysis.date_ko(prev_start).split('~')[0]}부터 "
-                                f"{analysis.date_ko(prev_end).split('~')[0]}이 든 주까지 보여 드릴까요?(이용자에게 이렇게 물을 것)")
+                                f"{analysis.label(shown[-1][4])}까지를 먼저 보여 드렸어요. 이어서 {analysis.date_ko(prev_start).split('–')[0]}부터 "
+                                f"{analysis.date_ko(prev_end).split('–')[0]}이 든 주까지 보여 드릴까요?(이용자에게 이렇게 물을 것)")
     if category == "시군구" and len(rows) >= 8:
         def _summary():
             table = analysis.period_table(db)
@@ -659,7 +702,7 @@ def get_movement(
             r = table.get(analysis.canon(sido, item))
             strong = analysis._strong([w for w in (r or {}).get("weeks", []) if lo <= w["wo"] <= hi], True)
             rep = analysis.repeats([w["wo"] for w in strong]) if strong else False
-            sm = {"판정한 기간": f"{analysis.label(lo)} ~ {analysis.label(hi)}",
+            sm = {"판정한 기간": f"{analysis.label(lo)} – {analysis.label(hi)}",
                   "평소보다 특히 많았던 주(상위 5개, 연휴 주 뺌)": rows_ or "없음",
                   "해마다 같은 때 되풀이": "있음(서로 다른 두 해 이상 같은 때 '많음' 이상)" if rep else "없음",
                   "읽는 법": "여러 해의 이동 건수 원값으로 순위를 매기지 않는다(해마다 바탕이 다름). 평소 대비 판정으로만 골랐다. "
@@ -717,7 +760,7 @@ def _addons(r, sido, sigungu, wo, mon, hd, light=False):
         r["그 주 프로야구 홈경기(KBO, 원인 단정 금지)"] = {"경기": bl, "관중 합계(명)": bc}
     if r.get("프로야구 홈경기 몫 추정(%)") is not None:
         r["프로야구 안내"] = ("판정은 야구로 들어온 이동까지 포함한 실제 변화다. '프로야구 홈경기 몫 추정'은 그 주 관중이 "
-                          "시즌 평균보다 많거나 적어서 생긴 몫의 추정치(2023~2026 검증)이고, '야구 몫 뺀 판정'은 야구 말고 "
+                          "시즌 평균보다 많거나 적어서 생긴 몫의 추정치(2023–2026 검증)이고, '야구 몫 뺀 판정'은 야구 말고 "
                           "다른 일이 있었는지 볼 때만 참고할 것. '같은 주에 홈경기 N경기가 있었고 그 몫이 약 X%로 추정된다'처럼 "
                           "말하고, 야구 때문이라고 단정하지 말 것.")
     else:
@@ -842,7 +885,7 @@ def _label(wo):
 
 
 def _same_weeks(wo, years_back):
-    """해마다 견줄 주: 기본은 52주 전(월~일 같음), 설·추석 주는 그 해 설·추석 주끼리."""
+    """해마다 견줄 주: 기본은 52주 전(월–일 같음), 설·추석 주는 그 해 설·추석 주끼리."""
     mon = dt.date.fromisoformat(analysis.week_dates(wo)[:10])
     hol = analysis.holidays(db)
     h = hol.get(wo)
@@ -852,7 +895,7 @@ def _same_weeks(wo, years_back):
     out = []
     for k in range(1, years_back + 1):
         base = mon - dt.timedelta(days=364 * k)
-        w, how = _wo_of_monday(base), "52주 전(월~일 같음)"
+        w, how = _wo_of_monday(base), "52주 전(월–일 같음)"
         if tag:
             best = None
             for c, (_, lunar, names) in hol.items():
@@ -869,11 +912,11 @@ def _same_weeks(wo, years_back):
 
 @mcp.tool(annotations=READ_ONLY)
 def compare_same_week(sido: Sido, sigungu: Sigungu, week: Week,
-                      years_back: Annotated[int, Field(description="몇 해 전까지 견줄지(1~3)", ge=1, le=3)] = 2) -> dict:
+                      years_back: Annotated[int, Field(description="몇 해 전까지 견줄지(1–3)", ge=1, le=3)] = 2) -> dict:
     """한 시군구의 한 주를 지난 해 같은 주와 '평소 대비 변화'끼리 견준다(원값끼리 견주지 않음).
     - '작년보다 사람 많이 왔어?', '올해 추석이 작년 추석보다?' 같은 해 비교 질문에 쓴다.
-    - 같은 주는 52주 전(월~일이 같음). 설·추석 주는 그 해 설·추석 주끼리 맞춘다.
-    - 한 주 판정은 analyze_region_week, 축제 회차 비교는 forecast_festival, 몇 주~몇 달 흐름은 get_movement로. 여러 해 추세(몇 년 새 늘었나)는 이 서비스로 판단하지 않는다.
+    - 같은 주는 52주 전(월–일이 같음). 설·추석 주는 그 해 설·추석 주끼리 맞춘다.
+    - 한 주 판정은 analyze_region_week, 축제 회차 비교는 forecast_festival, 몇 주–몇 달 흐름은 get_movement로. 여러 해 추세(몇 년 새 늘었나)는 이 서비스로 판단하지 않는다.
     - 해마다 이동 건수 원값을 직접 견주지 말 것(통신사 가입자 등 바탕이 해마다 다름). 결과의 '평소 대비'와 판정끼리 말할 것.
     - 차이의 원인을 확정하지 말고, 해마다 '그 주에 있었던 일'은 판단 재료로 말하되 영향 가능성은 근거와 한계를 밝혀 말해도 된다.
     - 아직 자료가 없는 앞으로의 주도 넣을 수 있다: 지난 해들 같은 주와 그 주에 잡힌 일을 돌려줘 '연말엔 어떨까' 같은 앞날 추론의 근거로 쓴다(결과의 '앞날 참고'를 따를 것)."""
@@ -883,7 +926,7 @@ def compare_same_week(sido: Sido, sigungu: Sigungu, week: Week,
     except Exception:
         return {"error": "week 형식은 'YYYY.MM.N주차'(예: '2026.01.3주차')."}
     years_back = max(1, min(3, int(years_back)))
-    keep = ("기간(월~일)", "판정", "평소 대비 변화(%)", "비교군 대비 변화(%)", "공휴일 보정(%)", "최종 변화(%)",
+    keep = ("기간(월–일)", "판정", "평소 대비 변화(%)", "비교군 대비 변화(%)", "공휴일 보정(%)", "최종 변화(%)",
             MULT, "관외 유입(일평균 건수)", "프로야구 홈경기 몫 추정(%)")
 
     sus_lines = []
@@ -965,7 +1008,7 @@ def _same_time(sido, sigungu, wo, h, hd):
     for f in safe.call("축제", festival.in_week, sido, sigungu, mon, hd, default=[]) or []:
         out.append(f"축제: {f['축제']}(문체부 계획 {f['계획 기간']})")
     for e in safe.call("대형 행사", bigevents.in_range, sido, sigungu, mon, end, default=[]) or []:
-        out.append(f"대형 행사: {e['이름']}({e['시작']}~{e['끝']})")
+        out.append(f"대형 행사: {e['이름']}({e['시작']}–{e['끝']})")
     games, crowd = safe.call("프로야구", baseball.week, sido, sigungu, mon, default=([], 0))
     if games:
         out.append(f"프로야구 홈경기: {', '.join(games)}(관중 합계 {crowd:,}명)")
@@ -981,7 +1024,7 @@ def _same_time(sido, sigungu, wo, h, hd):
 
 def _week_row(w):
     # 줄 모양(TEST_수정안_20261120.md 3+5번): 판정 바로 아래 '판정 풀이', 배수는 맨 아래 '물을 때만' 칸
-    row = {"주차": analysis.label(w["wo"]), "기간(월~일)": analysis.week_dates(w["wo"]),
+    row = {"주차": analysis.label(w["wo"]), "기간(월–일)": analysis.week_dates(w["wo"]),
            "날짜": analysis.date_ko(w["wo"]),
            "평소 대비(%)": analysis._pct(w["dev"]), "최종 변화(%)": analysis._pct(w["final"]),
            "평소 출렁임(%)": analysis._pct(w["s"]), "판정": w["verdict"],
@@ -1003,11 +1046,11 @@ def _period_answer(a, b, top, sido, sigungu, asked):
         return {"error": "start_week가 end_week보다 늦다."}
     lo, hi = max(a0, first), min(b0, last)
     if lo > hi:
-        return {"error": f"물어본 기간({analysis.label(a0)} ~ {analysis.label(b0)})에는 판정한 주가 없다. "
+        return {"error": f"물어본 기간({analysis.label(a0)} – {analysis.label(b0)})에는 판정한 주가 없다. "
                          f"이 서비스는 {analysis.label(first)}부터 {analysis.label(last)}까지 판정한다."}
     y, m = first // 1000, (first // 10) % 100
     head = {
-        "판정한 기간": f"{analysis.label(lo)} ~ {analysis.label(hi)}",
+        "판정한 기간": f"{analysis.label(lo)} – {analysis.label(hi)}",
         "물어본 기간": asked,
         "안내": (f"이 서비스는 {y}년 {m}월부터 판정한다(코로나 시기를 뺀 기준). "
                "물어본 기간이 그보다 앞서면 앞부분은 빠졌다고 이용자에게 먼저 말할 것."),
@@ -1027,7 +1070,7 @@ def _period_answer(a, b, top, sido, sigungu, asked):
         hd, hol = _hol_day_set(), analysis.holidays(db)
         out = {**head, "지역": f"{r['sido']} {r['sigungu']}"}
         if ws and (ws[0]["wo"] > lo or ws[-1]["wo"] < hi):
-            out["이 지역 판정한 기간"] = f"{analysis.label(ws[0]['wo'])} ~ {analysis.label(ws[-1]['wo'])}"
+            out["이 지역 판정한 기간"] = f"{analysis.label(ws[0]['wo'])} – {analysis.label(ws[-1]['wo'])}"
         rw = analysis.new_start(r["sido"], r["sigungu"])
         if rw and r["weeks"]:
             out["판정 시작"] = analysis.start_note(r["weeks"][0]["wo"], rw)
@@ -1109,7 +1152,7 @@ def _period_answer(a, b, top, sido, sigungu, asked):
     }, "rank", SOURCE, calc=True)
 
 
-Top = Annotated[int, Field(description="늘어난 곳·줄어든 곳 각각 몇 곳까지(1~30, 기본 15)", ge=1, le=30)]
+Top = Annotated[int, Field(description="늘어난 곳·줄어든 곳 각각 몇 곳까지(1–30, 기본 15)", ge=1, le=30)]
 OneWeek = Annotated[str, Field(description="한 주 순위의 주차 'YYYY.MM.N주차'(예: '2026.10.5주차'). 비우면 가장 최근 주차. "
                                            "start_week·end_week·sigungu와 함께 쓰지 않음")]
 StartWeek = Annotated[str, Field(description="기간 결과의 시작 주 'YYYY.MM.N주차'(예: '2023.06.1주차'). 비우면 판정할 수 있는 "
@@ -1146,7 +1189,7 @@ def find_unusual_regions(week: OneWeek = "", top: Top = 15, start_week: StartWee
     if a or b or sigungu:
         if week:
             return {"error": "week(한 주 순위)와 start_week·end_week·sigungu(기간 결과)는 함께 쓰지 말 것."}
-        asked = f"{start_week or '처음'} ~ {end_week or '최신'}"
+        asked = f"{start_week or '처음'} – {end_week or '최신'}"
         return _period_answer(a, b, top, sido, sigungu, asked)
     try:
         if week:
@@ -1198,7 +1241,7 @@ def find_unusual_regions(week: OneWeek = "", top: Top = 15, start_week: StartWee
         notes.append(f"연휴 주({h[2]})라 지역마다 연휴 반응이 달라 판정이 흔들린다. 순위는 참고만 할 것.")
     n_strong = sum(1 for x in rows if abs(x["배수"]) > 2)
     return _answer({
-        "주차": f"{wo // 1000}.{(wo // 10) % 100:02d}.{wo % 10}주차", "기간(월~일)": analysis.week_dates(wo),
+        "주차": f"{wo // 1000}.{(wo // 10) % 100:02d}.{wo % 10}주차", "기간(월–일)": analysis.week_dates(wo),
         "날짜": analysis.date_ko(wo),
         "판정한 지역 수": len(rows), "평소 출렁임 2배 넘게 달라진 지역 수": n_strong,
         "평소보다 늘어난 곳": up, "평소보다 줄어든 곳": down,
@@ -1217,7 +1260,8 @@ def estimate_life_pop(sido: Sido, sigungu: Sigungu, year_month: YearMonth,
                                                       "여러 달·'전체 기간'은 한 번에 넣을 것(최대 36개월)")] = "",
                       with_estimate: Annotated[bool, Field(description="공표된 달에도 추정값과 공표와의 차이(%)를 함께 "
                                                            "보여 줄지. 이용자가 원할 때만 켬")] = False) -> dict:
-    """생활인구가 아직 공표되지 않은 달의 생활인구를 나우캐스트로 가늠한 '비공식 참고 추정치'(범위)를 돌려준다. 공표된 생활인구가 아니다.
+    """시군구 주민등록인구·등록외국인(공표 값)을 물을 때도 이 도구를 쓸 것(결과의 '공식 인구', 추정을 하지 않는 지역·달에도 나옴).
+    생활인구가 아직 공표되지 않은 달의 생활인구를 나우캐스트로 가늠한 '비공식 참고 추정치'(범위)를 돌려준다. 공표된 생활인구가 아니다.
     생활인구 추정 질문에는 반드시 이 도구를 쓸 것. KOSIS 표 등을 조합해 직접 계산하지 말 것.
 
     - 이미 공표된 달이면 공표 값을 돌려준다(추정하지 않음).
@@ -1249,6 +1293,13 @@ def estimate_life_pop(sido: Sido, sigungu: Sigungu, year_month: YearMonth,
         r = lifepop.estimate_range(db, sido, sigungu, ym, ye, with_estimate)
     else:
         r = lifepop.estimate(db, sido, sigungu, ym)
+    # 0.6.7: 공식 인구는 늘 붙임. 추정을 못 한 경우도 오류로 끝내지 않고 공식 인구와 못 한 이유를 함께
+    pop = safe.call("공식 인구", _official_pop, sido, sigungu, ye or ym)
+    if pop:
+        if "error" in r:
+            r = {"지역": f"{sido} {sigungu}", "생활인구 추정": "못 함 — " + str(r["error"]),
+                 **{k: v for k, v in r.items() if k != "error"}}
+        r = {"공식 인구(공표 값, 추정 아님)": pop, **r}
     if "error" not in r:
         r["자료 기준"] = _as_of()
         return _answer(r, "lifepop", src, calc=True)
@@ -1360,7 +1411,7 @@ def _daily_summary(R, a, b):
                                                   for v, d in [(x * 100, y) for x, y in ups]],
            "가장 많이 온 날(방문자 수)": [f"{d.year}년 {tag(d)}: {daily.ko_num(R.vis[d])} 명" for d in top]}
     if a <= dt.date(2026, 4, 30) and b >= dt.date(2025, 5, 1):
-        out["읽을 때"] = ("2025년 5월~2026년 4월은 관광공사 값이 다른 자료보다 높게 나온 구간이라, 가장 많이 온 날 순위는 그 구간에 몰릴 수 "
+        out["읽을 때"] = ("2025년 5월–2026년 4월은 관광공사 값이 다른 자료보다 높게 나온 구간이라, 가장 많이 온 날 순위는 그 구간에 몰릴 수 "
                        "있어요. '평소보다 늘어난 날'을 먼저 보여 줄 것.")
     return out
 
@@ -1425,8 +1476,8 @@ def get_datalab_daily(sido: Sido, sigungu: Sigungu, start_date: str, end_date: s
     if show_a > full_a:
         prev_b = show_a - dt.timedelta(days=1)
         prev_a = max(full_a, prev_b - dt.timedelta(days=daily.MAX_DAYS - 1))
-        out["한 번에 보여 주는 길이"] = (f"자료가 많아서 날짜별 값은 한 번에 한 달(31일)씩만 보여 드려요. {show_a.year}년 {daily.date_ko(show_a)}~"
-                                f"{daily.date_ko(full_b)}을 먼저 보여 드렸어요. 이어서 {prev_a.year}년 {daily.date_ko(prev_a)}~{daily.date_ko(prev_b)}을 "
+        out["한 번에 보여 주는 길이"] = (f"자료가 많아서 날짜별 값은 한 번에 한 달(31일)씩만 보여 드려요. {show_a.year}년 {daily.date_ko(show_a)}–"
+                                f"{daily.date_ko(full_b)}을 먼저 보여 드렸어요. 이어서 {prev_a.year}년 {daily.date_ko(prev_a)}–{daily.date_ko(prev_b)}을 "
                                 f"보여 드릴까요?(이용자에게 이렇게 물을 것)")
         if R:
             sm = safe.call("기간 요약", _daily_summary, R, full_a, min(full_b, last))
@@ -1468,7 +1519,7 @@ def get_datalab_daily(sido: Sido, sigungu: Sigungu, start_date: str, end_date: s
                 if not any(w["주"] == mon for w in weeks_unsplit):
                     lo, hi, txt = daily.rng(W["est"], daily.W_WEEK[W["kind"]])
                     sun = mon + dt.timedelta(days=6)
-                    weeks_unsplit.append({"주": mon, "기간": f"{daily.date_ko(mon)}~{daily.date_ko(sun)}", "종류": W["kind"],
+                    weeks_unsplit.append({"주": mon, "기간": f"{daily.date_ko(mon)}–{daily.date_ko(sun)}", "종류": W["kind"],
                                           "하루 평균 추정 범위(이 서비스, 명)": txt,
                                           "결과 문장": f"{daily.week_name(W, R.hol)} 하루 평균 {txt}으로 추정. 추정 범위가 넓어 날짜별로 나누지 않음",
                                           "이용자가 날짜별 값을 찾을 때 알려 줄 이유": daily.REASON[W["kind"]]})
@@ -1503,7 +1554,7 @@ def get_datalab_daily(sido: Sido, sigungu: Sigungu, start_date: str, end_date: s
     if wx:
         out["날씨 관측소"] = f"{st[1]}({st[0]}), {st[2]}. 관측소 값이라 산간·해안은 실제와 다를 수 있음"
     if a <= dt.date(2026, 4, 30) and b >= dt.date(2025, 5, 1):
-        notes.append("2025년 5월~2026년 4월은 관광공사 값이 다른 자료보다 8~13%p 높게 나왔다. 이 기간을 걸친 전년 대비 비교는 하지 말 것.")
+        notes.append("2025년 5월–2026년 4월은 관광공사 값이 다른 자료보다 8–13%p 높게 나왔다. 이 기간을 걸친 전년 대비 비교는 하지 말 것.")
     out["주의"] = notes
     out["출처"] = ("한국관광공사 한국관광 데이터랩 지역별 방문자 수(KT·SKT 통신자료 기반 추정)"
                  "; 정기장 목록: 소상공인시장진흥공단 전국전통시장표준데이터(공공데이터포털)"

@@ -60,7 +60,7 @@ def message(schema, errors):
             out_of_range = True
             lo, hi = p.get("minimum"), p.get("maximum")
             if lo is not None and hi is not None:
-                parts.append(f"{_topic(name)} {lo}~{hi}만 받는다(받은 값: {_shown(got)}).")
+                parts.append(f"{_topic(name)} {lo}–{hi}만 받는다(받은 값: {_shown(got)}).")
             elif hi is not None:
                 parts.append(f"{_topic(name)} {hi} 이하만 받는다(받은 값: {_shown(got)}).")
             elif lo is not None:
