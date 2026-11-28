@@ -115,7 +115,7 @@ def _one(db, name, sido, sigungu, fn):
             {"주": analysis.week_dates(r["wo"]), "박물관 평소 대비(%)": round((math.exp(r["s"]) - 1) * 100, 1),
              "데이터랩 외지인 평소 대비(%)": None if r["dl"] is None else round((math.exp(r["dl"]) - 1) * 100, 1),
              "이 서비스 평소 대비(%)": None if r["dev"] is None else round((math.exp(r["dev"]) - 1) * 100, 1),
-             "이 서비스 판정": r["verdict"], "평소 출렁임의 몇 배": r["ratio"]} for r in top],
+             "이 서비스 판정": r["verdict"], "평소 등락의 몇 배": r["ratio"]} for r in top],
     }
 
 

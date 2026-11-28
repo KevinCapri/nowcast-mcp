@@ -4,6 +4,7 @@ DB 위치는 환경변수 NOWCAST_DB로 바꿀 수 있다(기본: 저장소의 d
 """
 import datetime as dt
 import json
+import math
 import os
 import sqlite3
 import threading
@@ -69,8 +70,8 @@ db = _ThreadDB(DB)
 SERVICE = "빅데이터 Insight: 지역별 유입인구"
 # 도구 목록이 바뀌면(추가·삭제·입력값·설명) 세 값을 같이 고친다. 회귀 시험이 TOOLS와 실제 도구가 다르면 잡는다.
 # 결과마다 붙여서, 예전에 연결한 이용자에게도 AI가 '새 도구가 생겼으니 다시 연결'을 알려 주게 한다(claude/변경_관리_원칙.md).
-VERSION = "0.6.7"
-TOOLS_CHANGED = "2026-11-28"
+VERSION = "0.7.0"
+TOOLS_CHANGED = "2026-11-29"
 TOOLS = ["get_metadata", "list_regions", "get_movement", "analyze_region_week",
          "find_unusual_regions", "estimate_life_pop", "forecast_festival", "get_datalab_daily", "report_issue",
          "get_region_calendar", "get_bloom_foliage", "get_data_status", "compare_same_week"]
@@ -92,16 +93,16 @@ INSTRUCTIONS = (
     "한 지역·한 주가 평소와 다른지 판정하며, 생활인구 참고 추정과 축제 주 참고 예측을 낸다. "
     "한국의 시군구에 '사람이 많이 왔나·붐볐나·한산했나', '무슨 행사가 있었나', '방문객이 늘었나'처럼 묻는 지난 기간 질문"
     "(외부 유입이라는 말이 없어도)에는 웹 검색보다 먼저 이 도구들을 쓸 것. 축제·행사 기간, 작년과의 비교, '이번 주 어디가 튀었나'도 마찬가지다. "
-    "이용자가 찾는 자료·기능·지역·기간이 이 서비스에 없으면(예: 지역별 출발지, 연령·성별, 시간대, 체류 시간), "
-    "Tool을 부르지 않고 웹 검색이나 다른 방법으로 답했더라도 답 끝에 대화에서 한 번만 "
+    "이용자가 찾는 자료·기능·지역·기간이 이 서비스에 없으면(예: 지역별 출발지, 연령·성별, 시간대, 체류 시간, 방문 목적(귀향·관광·출장 등)), "
+    "Tool을 부르지 않고 웹 검색이나 다른 방법으로 답했더라도, 없는 것을 처음 물은 그 답 끝에 꼭 한 번 "
     "'이런 자료나 기능이 있으면 좋겠다고 개발자에게 전달해 드릴까요? 보내 주신 의견은 서비스를 개선하는 데 참고한다고 합니다'처럼 "
     "부드럽게 물을 것. 그러겠다고 할 때만 report_issue로 보낼 것(자료는 kind='자료 추가 요청', 기능·지역·기간은 kind='제안'). "
     "지역 이름이나 주차 형식을 잘못 넣어 난 오류, 아직 공개되지 않아 때가 되면 들어올 최근 자료에는 묻지 말 것. "
-    "보내는 것은 이용자가 그러겠다고 한 그 건만이고, 같은 대화에서 다시 묻거나 뒤에 나온 건을 대신 보내지 말 것. "
+    "그 뒤로는 같은 대화에서 다시 묻지 말 것. 보내는 것은 이용자가 그러겠다고 한 그 건만이고, 뒤에 나온 건을 대신 보내지 말 것. "
     "주최 측 방문객 수·뉴스 수치는 단위가 다르므로 이 서비스 결과와 섞지 말고, 함께 말할 때는 출처를 나눠 밝힐 것. "
     "축제·행사에 '사람이 몇 명 왔나'를 물으면 지어내지 말고, 그 날짜의 하루 방문자 수(get_datalab_daily: 한국관광공사 값, "
-    "최근 날은 이 서비스의 추정 범위)를 보여 줄 것. 여러 날을 더해 '모두 몇 명'을 만들지 말고 하루 평균으로 말할 것. "
-    "주최 측 발표는 출처와 함께 따로 말할 것. '몇 명 올까'·'연말엔 어떨까'처럼 앞날을 물으면 단정하지 말고, 이 서비스가 찾은 "
+    "최근 날은 이 서비스의 추정 범위)를 보여 줄 것. 기간을 물으면 하루 평균을 먼저 말하고, 결과의 '연인원(같은 사람이 날마다 다시 세어짐)'은 '방문객 ○명'이 아니라 '연인원 ○명'으로 부르며 '모두 몇 명(서로 다른 사람 수)은 아니에요'를 함께 말할 것. 날짜별 값을 직접 더하지 말 것. "
+    "주최 측 발표는 출처와 함께 따로 말하고, 세는 방법이 달라 그대로 견주기 어렵다고 밝힐 것. '몇 명 올까'·'연말엔 어떨까'처럼 앞날을 물으면 단정하지 말고, 이 서비스가 찾은 "
     "반복 패턴을 근거로 추론할 것: ① 지난 해들 같은 시기의 평소 대비(compare_same_week — 아직 자료가 없는 앞으로의 주도 넣을 수 있음) "
     "② 그 기간의 공휴일·축제·대형 행사·벚꽃·단풍·프로야구 일정과 이 지역의 지난 반응(get_region_calendar, analyze_region_week의 "
     "'지난 설·추석'·'지난 기록') ③ 축제 주는 forecast_festival. '지난 3년 같은 주는 모두 평소보다 10% 안팎 많았고 올해도 같은 연휴가 "
@@ -125,7 +126,7 @@ INSTRUCTIONS = (
     "start_week·end_week(한 지역이면 sido·sigungu도)를 넣어 답할 것. analyze_region_week를 주마다 여러 번 불러 직접 찾지 말 것. "
     "'○○ 인구 유입 분석'처럼 이사인지 방문인지 모호한 포괄 질문은 KOSIS 이사 통계만으로 답하지 말고, 이 서비스의 방문·통근 유입"
     "(최근 흐름·평소와 다른 주·작년 같은 주)도 함께 보여 줄 것. 둘이 다른 자료라는 것을 한 줄로 밝힐 것. 이 서비스에는 지역별 "
-    "출발지·연령·성별·시간대·체류 시간이 없으니, 분석 항목을 미리 약속할 때도 이런 항목을 넣지 말 것. "
+    "출발지·연령·성별·시간대·체류 시간·방문 목적이 없으니, 분석 항목을 미리 약속할 때도 이런 항목을 넣지 말 것. "
     "'2019년부터 해마다', '몇 년 새 늘었나'처럼 여러 해 추세를 물으면, 이 서비스로 몇 년 사이 외부 유입이 늘었다·줄었다를 "
     "판단하지 말 것(해마다 원값은 통신사 가입자 등 바탕이 달라 견줄 수 없고, 전국 대비 몫의 변화도 다른 방문 자료와 방향이 "
     "잘 맞지 않음). 대신 이 서비스로는 compare_same_week로 같은 주·명절의 해마다 평소 대비 판정을 보여 주고, 장기 추세는 "
@@ -145,7 +146,10 @@ INSTRUCTIONS = (
     "이용자가 'Insight 소개'·'Hello Insight'(또는 '헬로 인사이트'·'안녕 인사이트')라고 하거나 이 서비스로 무엇을 할 수 있는지 물으면, 도구 목록이나 도구 이름을 보고 직접 요약하지 말고 반드시 get_metadata를 먼저 불러 '할 수 있는 일'을 그대로 보여 줄 것. "
     "'Insight 소개'·'Hello Insight'에는 다른 '빅데이터 Insight' 서비스가 함께 연결돼 있으면 각각 불러 함께 소개하고, 'Insight 소개 유입인구'·'Hello Insight 유입인구'처럼 서비스 이름을 붙이면 그 서비스만 소개할 것."
 )
+from mcp.types import Icon   # noqa: E402  0.7.0: 서버 정보에 유이 로고(AI 앱 연결 목록에 보임)
 mcp = MCPServer("nowcast-mobility", title=SERVICE, instructions=INSTRUCTIONS, version=VERSION,
+                website_url="https://nowcast-mcp.azurewebsites.net/",
+                icons=[Icon(src="https://nowcast-mcp.azurewebsites.net/og.png", mime_type="image/png", sizes=["600x600"])],
                 log_level=os.environ.get("LOG_LEVEL", "INFO"))
 
 SOURCE = "출처: 국가데이터처 KOBIGS 나우캐스트, 통신 모바일 인구이동량(SK텔레콤 통신자료 기반 추정)"
@@ -161,7 +165,7 @@ NATIONAL_RULE = "연령·성별·입지유형 결과는 '전국 기준'이라고
 NATURE = {
     "nowcast": "이동 건수는 국가데이터처가 공표한 실험적 통계(SK텔레콤 통신자료 기반 추정)다. "
                "이 서비스가 계산한 값이 아니므로 '비공식 추정'이라고 부르지 말 것.",
-    "judge": "이동 건수와 평소 값은 국가데이터처 공표 통계, 판정·비교군 대비·평소 출렁임과 그 배수는 이 서비스의 비공식 계산이다. 둘을 구분해 말할 것.",
+    "judge": "이동 건수와 평소 값은 국가데이터처 공표 통계, 판정·비교 지역 몫 보정·평소 등락과 그 배수는 이 서비스의 비공식 계산이다. 둘을 구분해 말할 것.",
     "lifepop": "주민등록인구·등록외국인·공표된 생활인구는 공식 공표 값, 추정 생활인구와 체류인구는 이 서비스의 비공식 참고 추정치다.",
     "festival": "예측 값은 이 서비스의 비공식 참고 예측이다. 지난 회차 값의 바탕인 이동 건수는 국가데이터처 공표 통계다.",
     "datalab": "'방문자(관광공사)' 칸은 한국관광공사가 통신자료로 추정해 공개한 값(하루 단위 사람 수)이고, '추정 범위(이 서비스)' 칸과 "
@@ -170,7 +174,7 @@ NATURE = {
     "calendar": "일정은 각 기관 자료(천문연구원·문체부·KBO·기상청·KOPIS·정부 발표)이고, 이동 건수는 국가데이터처 공표 통계, "
                 "그 주 판정·야구 몫 추정·지난 기록은 이 서비스의 비공식 계산이다. 셋을 구분해 말할 것.",
 }
-MULT = "배수(이용자가 물을 때만 말함)"   # 순위 줄의 '평소 출렁임의 몇 배'(TEST_수정안_20261120.md 3번, 원칙 2의 예외)
+MULT = "배수(이용자가 물을 때만 말함)"   # 순위 줄의 '평소 등락의 몇 배'(TEST_수정안_20261120.md 3번, 원칙 2의 예외)
 # 주는 날짜로 말하기(TEST_수정안_20261120.md 8번)
 DATE_RULE = ("주는 날짜(월–일)로 말할 것(예: 2025년 9월 29일–10월 5일, 결과에 '날짜' 칸이 있으면 그대로). 주차 이름('2025.10.1주차')은 "
              "이용자가 주차로 물었을 때만 함께 말할 것. 주차 이름은 그 주 목요일이 속한 달로 세기 때문에 날짜와 달이 어긋날 수 있다.")
@@ -191,7 +195,7 @@ RULES = {
     "judge": [COUNT_RULE,
               "첫 문장부터 판정 말(평소 대비 몇 %, '평소 수준'·'조금 많음' 같은 단계)로 시작할 것. '사람이 더 왔다·덜 왔다'처럼 "
               "사람 수로 바꾸거나 단정하는 말로 시작하지 말 것.",
-              "판정은 결과의 '판정 말하는 법' 문장대로 말할 것: % 먼저, '배수'(평소 출렁임의 몇 배)는 숫자 대신 판정 단계별 말로 "
+              "판정은 결과의 '판정 말하는 법' 문장대로 말할 것: % 먼저, '배수'(평소 등락의 몇 배)는 숫자 대신 판정 단계별 말로 "
               "('3.5배'는 '3.5배로 늘었다'로 잘못 읽힌다). 이용자가 배수를 직접 물을 때만 결과 값을 소수 한 자리 그대로 말할 것"
               "(1.9를 '약 2배'로 반올림하면 판정 기준과 어긋나 보인다).",
               "'그 주 프로야구 홈경기'가 있으면 경기 수와 '프로야구 홈경기 몫 추정'을 함께 말할 것. 벚꽃·단풍 '지난 기록'이 있으면 견줘 말할 것.",
@@ -211,7 +215,7 @@ RULES = {
                  "건수를 명으로 바꾸거나 둘의 관계로 방문객을 보정하자고 제안하지 말 것.",
                  "'참고: 예상 관외 유입'은 가운데 값만 말하지 말고 범위와 함께 말할 것.","건수로 물으면 '참고: 예상 관외 유입(일평균 건수)'를 그대로 쓰고 직접 계산하지 말 것. 반드시 '하루 평균 이동 건수'라고 말하고 '명'으로 바꾸지 말 것.",
                  "예측을 말할 때 '과거 채점에서 예측 대상 축제도 셋 중 하나는 그해 크게 늘지 않았다'를 반드시 함께 말할 것.",
-                 "'작년보다 늘었나'는 '지난 회차' 표의 상승률(비교군 대비·평소 대비)끼리 견줄 것. "
+                 "'작년보다 늘었나'는 '지난 회차' 표의 상승률(100km 밖 비교 지역 몫 뺀 값·평소 대비)끼리 견줄 것. "
                  "이동 건수 원값을 해마다 직접 견주지 말 것(통신사 가입자 수 등 바탕이 해마다 달라짐)."],
     "rank": [COUNT_RULE,
              "'평소보다 늘어난 곳'과 '평소보다 줄어든 곳'은 따로 보여 줄 것. 두 목록을 하나로 합치거나 다시 줄 세우지 말고, "
@@ -243,8 +247,9 @@ RULES = {
                  "일정은 '같은 시기에 ~가 있었다'로 말하고, 영향 가능성은 근거와 한계를 밝혀 말해도 되지만 원인으로 확정하지 말 것.",
                  daily.WEATHER_RULE,
                  DAY_RULE],
-    "datalab": ["여러 날의 방문자 수를 더한 숫자는 '같은 사람이 날마다 다시 세어진 연인원이며 모두 몇 명이 아니다'라고 밝힐 때만 보여 줄 것(밝히지 않으면 '모두 몇 명'처럼 읽힌다). "
-                "기간은 하루 평균으로 말할 것.",
+    "datalab": ["기간은 하루 평균을 먼저 말할 것. 여러 날을 직접 더하지 말고, 결과의 '연인원(같은 사람이 날마다 다시 세어짐)'을 쓰되 '방문객 ○명'이 아니라 "
+                "'연인원 ○명'으로 부르고 '모두 몇 명(서로 다른 사람 수)은 아니에요'를 함께 말할 것. 연인원은 관광공사 값이 있는 날만 더한 것이고, "
+                "빠진 날이 있으면 결과의 그 문장도 전할 것. 주최 측 발표와 견줄 때는 출처를 나누고 세는 방법이 달라 그대로 견주기 어렵다고 말할 것.",
                 OUTSIDER_RULE,
                 "'추정 범위(이 서비스)' 칸은 늘 범위 그대로 말하고 가운데 값 하나로 줄이지 말 것. '읽는 법'이 있으면 왜 관광공사 값과 추정이 "
                 "이어져 나오는지 그 문장으로 전할 것. 표로 보여 줄 때도 관광공사 값과 추정 범위를 다른 칸에 둘 것.",
@@ -351,6 +356,11 @@ def _answer(r, kind, source, calc=False):
     if not isinstance(r, dict) or "error" in r:
         return r
     lines = ["출처: " + source.removeprefix("출처: ")] + ([CALC] if calc else [])
+    # 0.7.0 C1: 날씨가 붙은 결과면 출처 줄에 기상청(11-27·28 TEST: 날씨로 답해도 기상청을 안 밝힘)
+    if "기상청" not in source:
+        txt = json.dumps(r, ensure_ascii=False, default=str)
+        if "날씨 관측소" in txt or "그 주 날씨" in txt:
+            lines.insert(1, "날씨: 기상청 종관기상관측(ASOS) 관측값")
     head = {"값의 성격": NATURE[kind],
             "답할 때 지킬 것": RULES.get(kind, []) + [
                 "답 끝에 아래 '답 끝에 적을 출처'를 줄마다 그대로 적을 것(그래프·표로 답할 때도, 짧은 답에도). "
@@ -359,9 +369,9 @@ def _answer(r, kind, source, calc=False):
                 "판정·비교·추정을 말할 때는 '빅데이터 Insight의 추정으로는', '빅데이터 Insight 판정으로는'처럼 계산한 곳을 밝혀 말할 것. "
                 "이 값은 AI가 계산한 것이 아니므로 '제가 계산한' 같은 말을 쓰지 말 것. 나우캐스트는 국가데이터처 원자료 이름이므로, "
                 "'나우캐스트 MCP', '나우캐스트 분석'처럼 나우캐스트를 붙여 이 서비스를 부르지도 말 것(커넥터 이름이 nowcast-mcp여도).",
-                "'평소 출렁임'을 '변동 폭'·'변동성'으로 바꿔 말하지 말 것(변동 폭은 최고·최저 차이로 읽혀 배수가 부풀려 보인다). "
+                "'평소 등락'을 '변동 폭'·'변동성'·'최고·최저 차이'로 바꿔 말하지 말 것(평소 등락은 평범한 주에 보통 오르내리는 정도다. 최고·최저 차이로 읽으면 배수가 부풀려 보인다). "
                 "'통계적으로 유의하다·두드러진다'는 말도 쓰지 말 것(검정을 한 것이 아니다).",
-                "이 서비스 자료에는 지역별 출발지·연령·성별·시간대·체류 시간이 없다. 그런 분석을 이 서비스로 할 수 있다고 "
+                "이 서비스 자료에는 지역별 출발지·연령·성별·시간대·체류 시간·방문 목적(귀향·관광·출장 등)이 없다(예: 귀향객만 따로 셀 수 없다). 그런 분석을 이 서비스로 할 수 있다고 "
                 "말하거나 다음 단계로 제안하지 말 것(데이터랩 등 다른 자료가 필요하면 그 출처를 밝혀 안내할 것).",
                 CALC_BASIS_RULE],
             "답 끝에 적을 출처": lines}
@@ -402,7 +412,7 @@ def get_metadata() -> dict:
                 "축제·행사 방문객 수(명) 예측 — 이동 건수는 사람 수가 아님. 최근 한 달쯤의 하루 방문자 수만 범위로 추정",
                 "늘거나 준 원인 확정 — 같은 시기에 있었던 일과 지난 반응을 근거로 가능성까지만 말함",
                 "날씨·사고 같은 돌발상황을 내다보기",
-                "지역별 출발지·연령·성별·시간대·체류 시간",
+                "지역별 출발지·연령·성별·시간대·체류 시간·방문 목적(귀향·관광·출장 등)",
                 "여러 해에 걸친 추세 판단",
             ],
             "의견": "틀린 값이나 추가했으면 하는 자료·기능은 \"의견 보낼게\"라고 말하면 개발자에게 전달",
@@ -452,30 +462,34 @@ def get_metadata() -> dict:
             "지난 날의 하루 단위는 get_datalab_daily(구 단위, 약 한 달 늦게 나옴)로 볼 것.",
         ],
         "판정 방식 변경 이력": [
-            "2026-11 서비스 시작: 평소 값 = 직전 8주(연휴 주 제외) 중앙값, 비교군(비슷한 지역 10곳) 대비, "
-            "평소 출렁임 = 2023년 3월 이후 평범한 주의 MAD×1.4826, 1·2·3배 기준 판정.",
-            "2026-11 평일 공휴일이 하루 든 주: 비교군 대비 대신 '평소 대비 − 그 지역 공휴일 하루당 반응'으로 판정(검증에서 오판 12% → 4–5%).",
+            "2026-11 서비스 시작: 평소 값 = 직전 8주(연휴 주 제외) 중앙값, 비교 지역(그때 고른 10곳) 몫 보정, "
+            "평소 등락 = 2023년 3월 이후 평범한 주의 MAD×1.4826, 1·2·3배 기준 판정.",
+            "2026-11 평일 공휴일이 하루 든 주: 비교 지역 몫 보정 대신 '평소 대비 − 그 지역 공휴일 하루당 반응'으로 판정(검증에서 오판 12% → 4–5%).",
             "2026-11-15 비교 지역이 이 지역과 반대로 크게 움직인 주를 표시만 함(판정은 그대로).",
             "2026-11-15 프로야구 홈경기 몫 추정과 '야구 몫 뺀 판정(참고)'을 더함(판정은 그대로).",
             "2026-11-15 벚꽃 만발·단풍 절정과 지역별 지난 기록을 더함(판정은 그대로).",
-            "2026-11-19 축제 주를 평소 값에서 뺄지 정하는 기준의 평소 출렁임도 '그 주 전 자료만'으로 계산(자료가 쌓여도 지난 판정이 "
+            "2026-11-19 축제 주를 평소 값에서 뺄지 정하는 기준의 평소 등락도 '그 주 전 자료만'으로 계산(자료가 쌓여도 지난 판정이 "
             "바뀌지 않게, 판정 쪽과 같은 방식). 이 수정으로 지난 판정 일부가 조금 바뀜.",
             "2026-11-19 전국 순위: '늘어난 곳'은 평소 대비 +1% 넘게 늘어난 곳만, '줄어든 곳'은 −1% 넘게 줄어든 곳만 넣고, 판정과 실제 "
             "방향이 엇갈린 곳은 따로 짧은 목록으로 보여 줌(판정은 그대로). 기간 순위(2023년 6월쯤부터)와 한 지역의 기간 결과를 더함.",
             "2026-11-20 기간 순위: 설·추석 같은 연휴 주(평일 공휴일 이틀 이상 포함)는 '가장 크게 튄 주'로 고르지 않고 '많음' 이상 "
-            "횟수·되풀이에서도 뺌(연휴 주는 비슷한 지역들이 크고 제각각 움직여 배수가 부풂). 한 지역 결과는 연휴 주도 목록에 그대로 두고 "
+            "횟수·되풀이에서도 뺌(연휴 주는 비교 지역들이 크고 제각각 움직여 배수가 부풂). 한 지역 결과는 연휴 주도 목록에 그대로 두고 "
             "횟수만 따로 셈. 한 주 판정·한 주 순위는 그대로.",
             "2026-11-22 날짜별 방문자: 관광공사 값이 아직 없는 최근 약 한 달(외지인)을 이동 자료로 추정해 범위로 이어 붙임"
             "(지역마다 최근 평범한 주 12개의 '관광공사 방문자 ÷ 관외 유입' 비율, 날짜별로는 그 지역 요일 몫으로 나눔. 설·추석·연말연시·"
             "샌드위치가 낀 주·크게 튄 주는 날짜별로 나누지 않고 그 주 하루 평균 범위만). 날마다 '평소 같은 요일 대비'(그 날 앞쪽 같은 요일 "
             "8개의 가운데값, 공휴일·연휴·그 지역 축제 날 뺌)를 더함. 주 판정은 그대로.",
+            "2026-12 결과 칸 이름을 바꿈(판정·숫자는 그대로): 평소 대비(%)·평소 대비 변화(%) → 평소 유입 대비 증감률(%), "
+            "최종 변화(%) → 보정한 증감률(%), 평소 출렁임(%) → 평소 등락(%), 비교군 대비 변화(%) → (비교 지역 몫 뺀) 보정한 증감률(%), "
+            "공휴일 보정(%) → 이 지역 공휴일 반응(%), 비슷한 지역 10곳의 같은 주 변화(%) → 같은 주 비교 지역 증감률(%), "
+            "관외 유입(일평균 건수) → 그 주 하루 평균 유입 건수, 평소 값 → 평소 하루 평균 유입 건수. '비슷한 지역'·'비교군'은 '비교 지역'으로 부름.",
             "판정 방식이 바뀌면 이 목록에 날짜와 함께 적는다. 예전에 인용된 판정과 지금 판정이 다르면 이 이력과 원자료 소급 수정을 먼저 의심할 것.",
         ],
         "함께 보여 주는 일정과 검증(2026-11)": {
             "원칙": "판정은 실제로 들어온 양 그대로다. 아래 일정은 '같은 시기에 있었던 일'로 붙이며 원인으로 확정하지 않는다(영향 가능성은 근거와 한계를 밝히면 말할 수 있다).",
             "프로야구 홈경기(KBO)": "구장이 있는 9개 시군구에서 2023–2026년 해마다 관중이 많은 주일수록 관외 유입이 많았다. "
                                 "'프로야구 홈경기 몫 추정(%)'은 그 주 관중이 시즌 평균과 다른 만큼의 추정치(2023–2024로 계수를 구하고 "
-                                "2025–2026에서 확인: 몫을 빼면 평소 출렁임 21% 감소).",
+                                "2025–2026에서 확인: 몫을 빼면 평소 등락 21% 감소).",
             "벚꽃 만발·단풍 절정(기상청 계절관측)": "관광형 시군구에서 단풍 절정 주(21곳 중 17곳 증가, 중앙값 +9.8%), "
                                           "벚꽃 만발 주(14곳 중 12곳 증가, 중앙값 +12.6%)에 관외 유입이 늘었다(2023–2026). "
                                           "효과가 확인된 명소 지역에만 '그 주 만발·절정'과 '이 지역 지난 기록'을 붙인다.",
@@ -501,7 +515,8 @@ def get_metadata() -> dict:
             "큰 관광지 한 곳의 일별 입장객": "국립중앙박물관 관람객은 용산구 관외 유입의 약 2.6%라, 관람객이 평소의 2배인 주에도 구 전체 유입은 거의 그대로였다. "
                                               "하루 방문객이 그 지역 관외 유입의 5% 이상은 되어야 주간 값에 드러난다.",
             "스키장": "스키장이 있는 11개 시군구 가운데 겨울 유입이 뚜렷이 느는 곳은 무주·평창·태백·정선뿐이었다.",
-            "사건·사고와 하루짜리 행사": "국내 주요 사건 약 100건을 대조했더니 시군구·주 단위에서 뚜렷이 보인 것은 20여 건이었다. "
+            "사건·사고와 하루짜리 행사": "나무위키 연도별 사건 문서(2023–2026년)에 실린 국내 사건 가운데 날짜와 시군구가 나온 약 100건을 대조했더니 "
+                                          "시군구·주 단위에서 뚜렷이 보인 것은 20여 건이었다. 날짜는 해당 문서를 따랐고 보도로 일일이 확인하지는 않았다. "
                                           "하루짜리 큰 행사(예: 2025년 한국시리즈)도 주 평균에는 잘 드러나지 않았다.",
             "여러 해에 걸친 증감": "전국 유입에서 그 지역이 차지하는 비중의 해마다 변화가 다른 방문 자료와 같은 방향인 비율이 최근 1년 간격에서 51%뿐이었다. 장기 추세 판단에 쓰지 않는다.",
             "비슷한 축제로 예측 보정": "규모·예산·유형이 비슷한 축제를 섞어도 예측이 정확해지지 않았다. 예측은 그 축제 자신의 지난 회차로만 한다.",
@@ -549,13 +564,35 @@ def list_regions(keyword: str = "") -> list:
         return [{"시도": r[0]} for r in rows]
     # 메모리 목록에서 찾음(2026-11-23, 표 전체를 훑어 3.6초). LIKE와 뜻이 달라질 수 있는 글자(%, _, 영문 대소문자)는 전처럼 DB
     if names is not None and not any(ch in keyword for ch in "%_") and keyword == keyword.lower() == keyword.upper():
-        return [{"시도": a, "시군구": b} for a, b in names["sgg"]
+        rows = [(a, b) for a, b in names["sgg"]
                 if (b is not None and keyword in b) or (a is not None and keyword in a)]
-    rows = db.execute(
-        "SELECT DISTINCT sido, sigungu FROM moves WHERE category='시군구' "
-        "AND (sigungu LIKE ? OR sido LIKE ?) ORDER BY sido, sigungu",
-        (f"%{keyword}%", f"%{keyword}%")).fetchall()
-    return [{"시도": a, "시군구": b} for a, b in rows]
+    else:
+        rows = db.execute(
+            "SELECT DISTINCT sido, sigungu FROM moves WHERE category='시군구' "
+            "AND (sigungu LIKE ? OR sido LIKE ?) ORDER BY sido, sigungu",
+            (f"%{keyword}%", f"%{keyword}%")).fetchall()
+    # 0.7.0 C7: 시도 이름만 바뀐 같은 곳(전라남도 구례군·전남광주통합특별시 구례군 등)은 지금 이름 하나로(11-28 TEST: 두 곳으로 나와 AI가 되물음).
+    # 옛 이름으로 넣어도 계산은 그대로 된다(canon).
+    out, seen = [], {}
+    for a, b in rows:
+        if b is None:
+            out.append({"시도": a, "시군구": b})
+            continue
+        k = analysis.canon(a, b)
+        cur = analysis.current_name(db, a, b)
+        if k in seen:
+            if (a, b) != cur:
+                seen[k].setdefault("옛 이름", []).append(f"{a} {b}")
+            continue
+        row = {"시도": cur[0], "시군구": cur[1]}
+        if (a, b) != cur:
+            row["옛 이름"] = [f"{a} {b}"]
+        seen[k] = row
+        out.append(row)
+    for row in out:
+        if "옛 이름" in row:
+            row["옛 이름"] = "·".join(sorted(set(row["옛 이름"]))) + "(옛 이름으로 넣어도 같은 곳으로 계산)"
+    return out
 
 
 def _order(week: str) -> int:
@@ -563,14 +600,27 @@ def _order(week: str) -> int:
     return int(y) * 1000 + int(m) * 10 + int(w)
 
 
-def _pop(sido, sigungu):
+def _pop(sido, sigungu, a=None, b=None):
+    """주민등록인구 + 등록외국인. a·b(주차 번호)를 주면 그 기간 달별 주민등록인구 평균 + 그 해 등록외국인(그해 값이 아직 없으면
+    가장 가까운 앞 해), 기간 중간에 생긴 구는 생긴 뒤 달만(0.7.0 A1④, 2026-11-28 Kevin — 그전엔 늘 가장 최근 인구로 나눴음)."""
     try:
         jumin, frn = lifepop._reg(db, sido, sigungu)
-        if jumin:
-            return jumin[max(jumin)] + (frn[max(frn)] if frn else 0)
+        if not jumin:
+            return None
+        if a and b:
+            yms, y, m = [], a // 1000, (a // 10) % 100
+            while y * 100 + m <= b // 10:
+                yms.append(f"{y}{m:02d}")
+                y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+            vals = [(ym, jumin[ym]) for ym in yms if ym in jumin]
+            if vals:
+                def frn_of(year):
+                    ks = [k for k in (frn or {}) if int(k) <= year]
+                    return frn[max(ks)] if ks else (frn[min(frn)] if frn else 0)
+                return sum(v + frn_of(int(ym[:4])) for ym, v in vals) / len(vals)
+        return jumin[max(jumin)] + (frn[max(frn)] if frn else 0)
     except Exception:
         return None
-    return None
 
 
 def _week_range(start_week, end_week, direction):
@@ -581,7 +631,10 @@ def _week_range(start_week, end_week, direction):
     return max(a, lo), b
 
 
-RankTop = Annotated[int, Field(description="시군구 순위에서 몇 곳까지(1–100, 기본 20)", ge=1, le=100)]
+RankTop = Annotated[int, Field(description="시군구 순위에서 몇 곳까지(1–100, 기본 10)", ge=1, le=100)]
+RankOrder = Annotated[Literal["하루 평균 유입 건수", "(주민 1명당) 하루 평균 유입 건수"],
+                      Field(description="시군구 순위 방식. 기본은 하루 평균 유입 건수 순, 주민 수에 비해 많이 오는 곳을 물으면 "
+                                        "'(주민 1명당) 하루 평균 유입 건수'(유출이면 같은 방식으로 유출 건수)")]
 RankFrom = Annotated[int, Field(description="시군구 순위를 몇 위부터 보여 줄지(기본 1, 이어서 볼 때 결과의 안내대로)", ge=1)]
 Area = Annotated[Literal["전체", "인구감소지역", "인구활력+지역", "인구감소관심지역"],
                  Field(description="시군구 순위의 지역 범위. 행정안전부 2026-10 재지정 목록. '인구감소지역'은 관심지역을 포함한 110곳"
@@ -598,18 +651,20 @@ def get_movement(
     start_week: Annotated[str, Field(description="시작 주 'YYYY.MM.N주차'(예: '2026.01.1주차'). 비우면 자료 처음부터")] = "",
     end_week: Annotated[str, Field(description="끝 주 'YYYY.MM.N주차'. 비우면 가장 최근 주차")] = "",
     sido: Sido = "",
-    top: RankTop = 20,
+    top: RankTop = 10,
     rank_from: RankFrom = 1,
     area: Area = "전체",
+    order: RankOrder = "하루 평균 유입 건수",
 ) -> dict:
     """주별 인구이동량(일평균 이동 건수)을 돌려준다. 세 가지로 쓴다.
     ① 한 대상의 주별 흐름: item을 넣음 — "○○시 올해 주별 외부 유입 흐름 보여 줘".
     ② 전국을 한 기준(성별·연령·입지유형·시도)으로 나눈 건수·비중: item을 비움 — "지난달 외부 유입은 어느 연령이 많았어?".
-    ③ 시군구 '많이 오는 곳' 순위(관외 이동 하루 평균 건수 순): category='시군구'에 item을 비움 — "외부에서 가장 많이 오는 시군구는? 인구감소지역 중에서는?"(area).
+    ③ 시군구 '많이 오는 곳' 순위(하루 평균 유입 건수 순, order로 주민 1명당 순): category='시군구'에 item을 비움 — "외부에서 가장 많이 오는 시군구는? 인구감소지역 중에서는?"(area).
 
     - item: 전국 '계' / 성별 '남성'·'여성' / 연령 '20대 미만'–'70대 이상' / 입지유형 '상업지역'·'관광지'·'대형아울렛'·'사무지역'·'레저스포츠'·'주거지등' /
       시도 이름 / 시군구 이름(sido도 함께, list_regions로 확인). 성별·연령·입지유형은 전국 값만 있다. 지역 사이 이동(어디서 어디로)은 없다.
-    - 한 번에 주는 길이: 흐름은 1년(52주), 나눠 보기는 한 달, 순위는 20곳(top으로 100곳까지). 더 길면 최근부터 주고 이어서 볼 묶음을 결과에서 안내한다.
+    - 한 번에 주는 길이: 흐름은 석 달 이상이면 달별로 먼저(한 번에 1년), 한 달을 고르면 주별로. 나눠 보기는 한 달, 순위는 10곳씩(top으로 100곳까지).
+      더 길면 최근부터 주고 이어서 볼 묶음을 결과에서 안내한다. '이어서' 안내가 있으면 답 끝에 이용자에게 바로 묻는다.
     - 많이 오는 곳은 이동이 '많은' 곳이다. 평소보다 '늘어난' 곳은 find_unusual_regions, 한 주가 평소와 다른지는 analyze_region_week,
       해마다 비교는 compare_same_week로. 여러 해에 걸친 증가·감소 판단에는 쓰지 말 것.
     - 단위는 일평균 이동 건수(사람 수 아님). 하루 단위 방문자(사람 수)는 get_datalab_daily로. 유출은 2023년부터."""
@@ -630,7 +685,8 @@ def get_movement(
         if category == "시군구":
             if daily.paused("movement_rank"):
                 return {"error": "시군구 순위는 잠시 쉬는 중이다. 한 지역의 흐름은 item에 시군구 이름을 넣어 볼 것."}
-            r = movement.rank(db, direction, a, b, top, rank_from, area, _pop)
+            r = movement.rank(db, direction, a, b, top, rank_from, area, _pop,
+                              order if order in movement.ORDERS else movement.ORDERS[0])
             if not r:
                 return {"error": "그 기간 자료가 없다. get_data_status로 기간을 확인할 것."}
             r = {"기간": asked, "단위": "일평균 이동 건수", "세는 사람": WHO_COUNTED, **r, "출처": SOURCE}
@@ -676,13 +732,29 @@ def get_movement(
         out["자료 시작"] = ("주 단위 이동은 " + ("2019년 1월(유입)" if direction == "유입" else "2023년 1월(유출)") + "부터, "
                         "평소와 다른지 판정은 2023년 6월쯤부터, 날짜별 방문자(관광공사)는 그보다 뒤부터 있어요(자료마다 시작이 달라요).")
     shown = rows[-movement.FLOW_WEEKS:]
-    out["data"] = [{"week": w, "dates": analysis.week_dates(wo), "within": x, "outside": y, "total": t}
-                   for w, x, y, t, wo in shown]
+    if len(shown) >= movement.MONTHLY_MIN_WEEKS:
+        # 0.7.0 A5: 석 달 이상이면 달별로 먼저(주별 52줄 대신 12줄). 시군구는 주마다 판정한 개수·가장 튄 주도
+        judged = {}
+        if category == "시군구":
+            tb = safe.call("달별 판정 표", analysis.period_table, db, default={}) or {}
+            judged = {w["wo"]: w for w in (tb.get(analysis.canon(sido, item)) or {}).get("weeks", [])}
+        items = []
+        for w, x, y, t, wo in shown:
+            j = judged.get(wo)
+            items.append({"label": w, "mon": analysis.monday(wo), "val": y,
+                          "verdict": j["verdict"] if j else None, "ratio": j["ratio"] if j else None, "dev": j["dev"] if j else None})
+        vname = "하루 평균 유입 건수(관외)" if direction == "유입" else "하루 평균 유출 건수(관외)"
+        out["달별(주차 이름의 달)"] = movement.month_rows(items, vname)
+        out["달별 읽는 법"] = movement.MONTH_NOTE
+        out["주마다 자세히"] = movement.MONTH_PROMPT
+    else:
+        out["data"] = [{"week": w, "dates": analysis.week_dates(wo), "within": x, "outside": y, "total": t}
+                       for w, x, y, t, wo in shown]
     if len(rows) > len(shown):
         first_shown = shown[0][4]
         prev_end = rows[-len(shown) - 1][4]
         prev_start = rows[max(0, len(rows) - 2 * len(shown))][4]
-        out["한 번에 보여 주는 길이"] = (f"자료가 많아서 주 단위 흐름은 한 번에 1년(52주)씩 보여 드려요. {analysis.label(first_shown)}부터 "
+        out["한 번에 보여 주는 길이"] = (f"자료가 많아서 흐름은 한 번에 1년(52주)씩 보여 드려요. {analysis.label(first_shown)}부터 "
                                 f"{analysis.label(shown[-1][4])}까지를 먼저 보여 드렸어요. 이어서 {analysis.date_ko(prev_start).split('–')[0]}부터 "
                                 f"{analysis.date_ko(prev_end).split('–')[0]}이 든 주까지 보여 드릴까요?(이용자에게 이렇게 물을 것)")
     if category == "시군구" and len(rows) >= 8:
@@ -694,7 +766,7 @@ def get_movement(
             hd, hol = _hol_day_set(), analysis.holidays(db)
             rows_ = []
             for w in ws:
-                row = {"날짜": analysis.date_ko(w["wo"]), "평소 대비(%)": analysis._pct(w["dev"]), "판정": w["verdict"],
+                row = {"날짜": analysis.date_ko(w["wo"]), "평소 유입 대비 증감률(%)": analysis._pct(w["dev"]), "판정": w["verdict"],
                        "판정 풀이": analysis.speak_short(w)}
                 ev = _same_time(sido, item, w["wo"], hol.get(w["wo"]), hd)
                 row["같은 시기에 있었던 일"] = ev or "이 서비스 자료에는 없음"
@@ -739,11 +811,19 @@ def get_movement(
     return _answer(out, "nowcast", SOURCE, calc="기간 요약(판정 기간)" in out)
 
 
-def _as_of():
-    """결과에 붙일 자료 기준(나우캐스트 최신 주차·받아 온 날)."""
+def _arrived():
+    """자료 이름 → 새 자료가 들어온 날(0.7.0 A3, pipeline/update.py source_arrived). 표가 아직 없으면 빈 dict."""
     try:
-        r = db.execute("SELECT latest, fetched_ok FROM source_status WHERE name LIKE '나우캐스트%유입%'").fetchone()
-        return {"자료 최신 주차": r[0], "받아 온 날": r[1]} if r else None
+        return {n: a for n, a in db.execute("SELECT name, arrived FROM source_arrived")}
+    except sqlite3.OperationalError:
+        return {}
+
+
+def _as_of():
+    """결과에 붙일 자료 기준(나우캐스트 최신 주차·새 주차가 들어온 날). 0.7.0 A3: 받기 성공 시각이 아니라 최신 주차가 바뀐 날."""
+    try:
+        r = db.execute("SELECT name, latest, fetched_ok FROM source_status WHERE name LIKE '나우캐스트%유입%'").fetchone()
+        return {"자료 최신 주차": r[1], "새 주차가 들어온 날": _arrived().get(r[0]) or r[2]} if r else None
     except sqlite3.OperationalError:
         return None
 
@@ -793,19 +873,25 @@ def _addons(r, sido, sigungu, wo, mon, hd, light=False):
 def analyze_region_week(sido: Sido, sigungu: Sigungu, week: Week) -> dict:
     """한 시군구의 한 주 관외 유입이 '평소와 다른가, 얼마나 다른가'를 판정한다.
 
-    - 평소 값: 직전 8주(연휴 주 제외) 중앙값. 비교군 대비: 같은 주 비슷한 지역 10곳의 변화를 뺀 값.
+    - 평소 값: 직전 8주(연휴 주 제외) 중앙값. 보정한 증감률: 같은 주 비교 지역의 증감률(평일 공휴일 주는 이 지역 공휴일 반응)을 뺀 값.
       평일 공휴일이 하루 든 주는 그 지역의 공휴일 반응을 뺀다.
     - 판정은 결과의 '판정 말하는 법'대로 % 먼저, 배수는 판정 단계별 말로 풀어 말할 것. '판정' 문구는 바꾸지 말 것.
       '신뢰구간'·'유의하다'는 말은 쓰지 말 것.
     - 원인(축제·날씨·행사)은 이 도구가 정하지 않는다. 결과의 그 주 날씨·일정은 판단 재료로 보여 주고, 영향 가능성은 근거와 한계를 밝혀 말하되 확정하지 말 것.
-    - 판정·비교군은 이 서비스(빅데이터 Insight: 지역별 유입인구)의 비공식 계산이다. 국가데이터처 값처럼 말하지 말 것.
+    - 판정·비교 지역 보정은 이 서비스(빅데이터 Insight: 지역별 유입인구)의 비공식 계산이다. 국가데이터처 값처럼 말하지 말 것.
     - 한 지역의 한 주를 평소와 비교할 때 쓴다. 전국에서 어디가 튀었는지, 한 지역이 여러 해 동안 언제 튀었는지는 find_unusual_regions, 여러 주 흐름은 get_movement,
       지난 해 같은 주와 비교는 compare_same_week, 그 기간에 있었던 일 목록은 get_region_calendar로.
     - sido·sigungu는 list_regions로 확인한 이름, week는 'YYYY.MM.N주차'."""
     try:
         wo = _order(week)
+        analysis.week_dates(wo)
     except Exception:
         return {"error": "week 형식은 'YYYY.MM.N주차'(예: '2026.01.3주차')."}
+    # 0.7.0 C3: 아직 자료가 없는 주(11-27 TEST '양평 지난주 분석'에서 오류 문구만 나감) — find_unusual_regions(#135)와 같은 안내
+    latest = analysis.latest_inflow_week(db)
+    if latest and wo > latest:
+        return {"error": f"아직 자료가 없는 주예요(나우캐스트는 주가 끝나고 약 11일 뒤 나옴). 가장 최근 주는 "
+                         f"{analysis.date_ko(latest)}({_label(latest)}). '지난주'를 물으면 이 주로 다시 부를 것."}
     return _analyze_region_week(sido, sigungu, wo)
 
 
@@ -848,11 +934,11 @@ def _analyze_region_week(sido, sigungu, wo, light=False, P=None):
             P = analysis.prepare(db, sido, sigungu)
             past = [(w, hol[w][2], P["raw"].get(w)) for w in sorted(hol) if w != wo and w >= analysis.START
                     and hol[w][1] > 0 and P["raw"].get(w) is not None][-6:]
-            return [{"주차": P["me"][w][0], "공휴일": n, "평소 대비(%)": analysis._pct(v)} for w, n, v in past] or None
+            return [{"주차": P["me"][w][0], "공휴일": n, "평소 유입 대비 증감률(%)": analysis._pct(v)} for w, n, v in past] or None
         with timing.step("지난 설·추석"):
             ph = safe.call("지난 설·추석", _past_holidays)
         if ph:
-            r["이 지역 지난 설·추석 주 평소 대비(%)"] = ph
+            r["이 지역 지난 설·추석 주 평소 유입 대비 증감률(%)"] = ph
         ym = f"{wo // 1000}{(wo // 10) % 100:02d}"
         try:
             with timing.step("같은 달 총전입"):
@@ -913,11 +999,11 @@ def _same_weeks(wo, years_back):
 @mcp.tool(annotations=READ_ONLY)
 def compare_same_week(sido: Sido, sigungu: Sigungu, week: Week,
                       years_back: Annotated[int, Field(description="몇 해 전까지 견줄지(1–3)", ge=1, le=3)] = 2) -> dict:
-    """한 시군구의 한 주를 지난 해 같은 주와 '평소 대비 변화'끼리 견준다(원값끼리 견주지 않음).
+    """한 시군구의 한 주를 지난 해 같은 주와 '평소 유입 대비 증감률'끼리 견준다(원값끼리 견주지 않음).
     - '작년보다 사람 많이 왔어?', '올해 추석이 작년 추석보다?' 같은 해 비교 질문에 쓴다.
     - 같은 주는 52주 전(월–일이 같음). 설·추석 주는 그 해 설·추석 주끼리 맞춘다.
     - 한 주 판정은 analyze_region_week, 축제 회차 비교는 forecast_festival, 몇 주–몇 달 흐름은 get_movement로. 여러 해 추세(몇 년 새 늘었나)는 이 서비스로 판단하지 않는다.
-    - 해마다 이동 건수 원값을 직접 견주지 말 것(통신사 가입자 등 바탕이 해마다 다름). 결과의 '평소 대비'와 판정끼리 말할 것.
+    - 해마다 이동 건수 원값을 직접 견주지 말 것(통신사 가입자 등 바탕이 해마다 다름). 결과의 '평소 유입 대비 증감률'과 판정끼리 말할 것.
     - 차이의 원인을 확정하지 말고, 해마다 '그 주에 있었던 일'은 판단 재료로 말하되 영향 가능성은 근거와 한계를 밝혀 말해도 된다.
     - 아직 자료가 없는 앞으로의 주도 넣을 수 있다: 지난 해들 같은 주와 그 주에 잡힌 일을 돌려줘 '연말엔 어떨까' 같은 앞날 추론의 근거로 쓴다(결과의 '앞날 참고'를 따를 것)."""
     try:
@@ -926,8 +1012,8 @@ def compare_same_week(sido: Sido, sigungu: Sigungu, week: Week,
     except Exception:
         return {"error": "week 형식은 'YYYY.MM.N주차'(예: '2026.01.3주차')."}
     years_back = max(1, min(3, int(years_back)))
-    keep = ("기간(월–일)", "판정", "평소 대비 변화(%)", "비교군 대비 변화(%)", "공휴일 보정(%)", "최종 변화(%)",
-            MULT, "관외 유입(일평균 건수)", "프로야구 홈경기 몫 추정(%)")
+    keep = ("기간(월–일)", "판정", "평소 유입 대비 증감률(%)", "(비교 지역 몫 뺀) 보정한 증감률(%)", "이 지역 공휴일 반응(%)", "보정한 증감률(%)",
+            MULT, "그 주 하루 평균 유입 건수", "프로야구 홈경기 몫 추정(%)")
 
     sus_lines = []
     P = analysis.prepare(db, sido, sigungu)      # 해마다 같은 지역이라 판정 재료는 한 번만(2026-11-23)
@@ -966,15 +1052,15 @@ def compare_same_week(sido: Sido, sigungu: Sigungu, week: Week,
     tag, weeks = _same_weeks(wo, years_back)
     rows = [me] + [one(w, how) if w else {"주차": f"{k}년 전", "없음": "같은 주를 찾지 못함"} for k, w, how in weeks]
     def short(x):
-        return (f"{x['주차']} {x['최종 변화(%)']:+.1f}% {x['판정']}" if "판정" in x and x.get("최종 변화(%)") is not None
+        return (f"{x['주차']} {x['보정한 증감률(%)']:+.1f}% {x['판정']}" if "판정" in x and x.get("보정한 증감률(%)") is not None
                 else f"{x['주차']} 자료 없음")
     out = {
         "지역": f"{sido} {sigungu}",
         "견준 주": rows,
         "요약": " / ".join(short(x) for x in rows),
-        "견주는 법": "해마다 그 해의 평소(직전 8주) 대비 변화와 판정끼리 견준다. '관외 유입(일평균 건수)' 원값은 해마다 "
+        "견주는 법": "해마다 그 해의 평소(직전 8주) 대비 변화와 판정끼리 견준다. '그 주 하루 평균 유입 건수' 원값은 해마다 "
                  "통신사 가입자 등 바탕이 달라 직접 견주지 말 것.",
-        "주의": ["판정은 해마다 그 해 평소 출렁임으로 따로 낸 것이다. 올해가 작년보다 '몇 % 더 왔다'로 바꿔 말하지 말 것.",
+        "주의": ["판정은 해마다 그 해 평소 등락으로 따로 낸 것이다. 올해가 작년보다 '몇 % 더 왔다'로 바꿔 말하지 말 것.",
                "'건'은 사람 수가 아니다. '명'으로 바꿔 말하지 말 것."],
         "출처": SOURCE,
     }
@@ -988,7 +1074,7 @@ def compare_same_week(sido: Sido, sigungu: Sigungu, week: Week,
         out["앞날 참고"] = ["물은 주는 아직 자료가 없다. 지난 해들 같은 주의 평소 대비·판정과 그 주에 잡힌 일을 근거로 "
                          "'~할 가능성이 있다'처럼 말하고, 예측값처럼 단정하지 말 것.",
                          "날씨·사고 같은 돌발상황은 반영하지 못한다. 숫자 범위 예측은 하지 말 것(축제 주는 forecast_festival).",
-                         "해마다 판정 방식(비교군 대비·공휴일 보정)이 다를 수 있으니 '견준 방식'·'판정'을 함께 볼 것."]
+                         "해마다 판정 방식(비교 지역 몫 보정·공휴일 반응 보정)이 다를 수 있으니 '견준 방식'·'판정'을 함께 볼 것."]
     return _answer(out, "judge", SOURCE, calc=True)
 
 
@@ -1022,20 +1108,43 @@ def _same_time(sido, sigungu, wo, h, hd):
     return out
 
 
+def _order_line(order):
+    """결과 맨 위 '이 순위는 ○○ 순서예요'(0.7.0 A1②). 보정 전 값 순서면 판정과 다를 수 있다는 한 줄(E2)."""
+    line = f"이 순위는 '{order}' 순서예요."
+    if order != analysis.ORDERS[0]:
+        line += (" 이 순서는 보정 전 값(평소 유입 대비)이라, 같은 주 비교 지역도 함께 늘어난 몫을 뺀 판정과는 다를 수 있어요"
+                 "(줄마다 '같은 주 비교 지역 증감률'과 '판정 풀이'를 함께 볼 것).")
+    else:
+        line += " 같은 %라도 평소 등락이 작은 지역이 위로 와요(판정이 센 순서)."
+    return line
+
+
+def _more_line(start, top, n):
+    """순위는 10개씩, 끝에 이어 보기(0.7.0 A1①, PP 5장)."""
+    nxt = start + top
+    if n < nxt:
+        return {}
+    return {"이어서": f"{nxt}–{min(n, nxt + top - 1)}위를 이어서 보여 드릴까요? (rank_from={nxt}로 다시 부를 것. 답 끝에 이용자에게 바로 물을 것)"}
+
+
 def _week_row(w):
     # 줄 모양(TEST_수정안_20261120.md 3+5번): 판정 바로 아래 '판정 풀이', 배수는 맨 아래 '물을 때만' 칸
     row = {"주차": analysis.label(w["wo"]), "기간(월–일)": analysis.week_dates(w["wo"]),
            "날짜": analysis.date_ko(w["wo"]),
-           "평소 대비(%)": analysis._pct(w["dev"]), "최종 변화(%)": analysis._pct(w["final"]),
-           "평소 출렁임(%)": analysis._pct(w["s"]), "판정": w["verdict"],
-           "판정 풀이": analysis.speak_short(w), "판정에 쓴 방식": w["method"]}
+           "평소 유입 대비 증감률(%)": analysis._pct(w["dev"]), "보정한 증감률(%)": analysis._pct(w["final"]),
+           "평소 등락(%)": analysis._pct(w["s"]), "판정": w["verdict"],
+           "판정 풀이": analysis.speak_short(w), "판정에 쓴 방식": w["method"],
+           "평소 하루 평균 유입 건수": round(w["v"] / math.exp(w["dev"])),
+           "평소 유입 대비 증감 건수": round(analysis.week_delta(w))}
+    if w.get("com") is not None:
+        row["같은 주 비교 지역 증감률(%)"] = analysis._pct(w["com"])
     if analysis.is_long_holiday(w["hol"]):
         row["연휴 주"] = w["hol"][2]
     row[MULT] = w["ratio"]
     return row
 
 
-def _period_answer(a, b, top, sido, sigungu, asked):
+def _period_answer(a, b, top, sido, sigungu, asked, order=analysis.ORDERS[0], rank_from=1):
     """기간 순위(지역 없음) 또는 한 지역의 기간 내 튄 주 목록(지역 있음). 전국순위_기간확장_작업.md 1·2·9번."""
     table = analysis.period_table(db)
     first, last = analysis.judged_range(table)
@@ -1052,7 +1161,7 @@ def _period_answer(a, b, top, sido, sigungu, asked):
     head = {
         "판정한 기간": f"{analysis.label(lo)} – {analysis.label(hi)}",
         "물어본 기간": asked,
-        "안내": (f"이 서비스는 {y}년 {m}월부터 판정한다(코로나 시기를 뺀 기준). "
+        "안내": (f"이 서비스는 {y}년 {m + 1 if m < 12 else 1}월쯤부터 판정한다(코로나 시기를 뺀 기준, 지역에 따라 그 앞 달 말부터). "
                "물어본 기간이 그보다 앞서면 앞부분은 빠졌다고 이용자에게 먼저 말할 것."),
     }
     span = (analysis.monday(hi) - analysis.monday(lo)).days / 365.25
@@ -1096,6 +1205,7 @@ def _period_answer(a, b, top, sido, sigungu, asked):
                 out["되풀이" + ("('많음' 이상)" if up else "('적음' 이하)")] = repeat_word
         sus = safe.call("원자료 의심 구간", analysis.suspect, r["sido"], r["sigungu"], lo, hi)
         out["판정 기준"] = analysis.JUDGE_RULE
+        out["평소 등락 읽는 법"] = analysis.DEUNGRAK_NOTE
         out["AI에게"] = [
             "이용자가 물은 것만 답할 것(날짜를 물으면 날짜만, 그때 일을 물으면 그것만). 목록을 한꺼번에 다 펼치지 말 것.",
             "'같은 시기에 있었던 일'이 곧 원인은 아니다. '같은 시기에 ~가 있었다'로 말하고, 영향 가능성은 근거와 한계를 밝혀 말해도 된다.",
@@ -1106,16 +1216,17 @@ def _period_answer(a, b, top, sido, sigungu, asked):
         ]
         out["주의"] = (sus or []) + [
             "'건'은 사람 수가 아니다. '명'으로 바꿔 말하지 말 것.",
-            "판정은 주마다 그때까지의 평소 값·평소 출렁임으로 따로 낸 것이다.",
+            "판정은 주마다 그때까지의 평소 값·평소 등락으로 따로 낸 것이다.",
         ]
         out["자료 기준"] = _as_of()
         return _answer(out, "rank", SOURCE, calc=True)
 
-    up, down = analysis.rank_period(table, lo, hi)
+    up, down = analysis.rank_period(table, lo, hi, order)
+    start = max(1, int(rank_from or 1))
 
     def rows(side):
         out = []
-        for i, x in enumerate(side[:top], 1):
+        for i, x in enumerate(side[start - 1:start - 1 + top], start):
             r, w = x["r"], x["best"]
             row = {"순위": i, "지역": f"{r['sido']} {r['sigungu']}", **_week_row(w)}
             row["'많음' 이상 횟수" if side is up else "'적음' 이하 횟수"] = x["n"]
@@ -1133,9 +1244,12 @@ def _period_answer(a, b, top, sido, sigungu, asked):
 
     return _answer({
         **head,
+        "순위 방식": _order_line(order),
         "판정한 지역 수": sum(1 for r in table.values() if any(lo <= w["wo"] <= hi for w in r["weeks"])),
         "평소보다 늘어난 곳": rows(up), "평소보다 줄어든 곳": rows(down),
+        **_more_line(start, top, max(len(up), len(down))),
         "판정 기준": analysis.JUDGE_RULE,
+        "평소 등락 읽는 법": analysis.DEUNGRAK_NOTE,
         "AI에게": [
             "이 결과에는 지역마다 이 기간에 가장 크게 튄 주 하나만 있다('많음' 이상 횟수에는 그 주도 들어 있다).",
             "이용자가 그 지역이 언제 또 튀었는지(날짜)나 그때 있었던 일을 물으면, sido·sigungu를 넣고 같은 기간으로 "
@@ -1144,15 +1258,19 @@ def _period_answer(a, b, top, sido, sigungu, asked):
         ],
         "주의": [
             "원자료 확인 필요 구간인 주는 순위에서 뺐다.",
-            "설·추석 같은 연휴 주(평일 공휴일이 이틀 이상 든 주 포함)는 이 순위에서 뺐다. 연휴 주에는 비슷한 지역들이 크고 "
-            "제각각 움직여 평소 출렁임의 배수가 부풀기 때문이다. 연휴 주에 크게 튄 곳은 week에 그 주를 넣어 한 주 순위로 따로 볼 것.",
+            "설·추석 같은 연휴 주(평일 공휴일이 이틀 이상 든 주 포함)는 이 순위에서 뺐다. 연휴 주에는 비교 지역들이 크고 "
+            "제각각 움직여 평소 등락의 배수가 부풀기 때문이다. 연휴 주에 크게 튄 곳은 week에 그 주를 넣어 한 주 순위로 따로 볼 것.",
             "한 지역에서만 크게 튀고 이웃 지역이 반대로 움직였으면 원자료 처리 오류일 수도 있다. 이용자가 원하면 report_issue로 알릴 수 있다.",
         ],
         "자료 기준": _as_of(),
     }, "rank", SOURCE, calc=True)
 
 
-Top = Annotated[int, Field(description="늘어난 곳·줄어든 곳 각각 몇 곳까지(1–30, 기본 15)", ge=1, le=30)]
+Top = Annotated[int, Field(description="늘어난 곳·줄어든 곳 각각 몇 곳까지(1–30, 기본 10)", ge=1, le=30)]
+UnusualFrom = Annotated[int, Field(description="몇 위부터 보여 줄지(기본 1, 이어서 볼 때 결과의 '이어서' 안내대로)", ge=1)]
+UnusualOrder = Annotated[Literal["평소 등락 대비 (보정) 변화 순", "평소 유입 대비 증감률 순", "평소 유입 대비 증감 건수 순"],
+                         Field(description="순위 방식. 기본은 '평소 등락 대비 (보정) 변화 순'(판정이 센 순서, 그냥 '어디가 튀었나'). "
+                                           "'몇 % 늘었나'를 물으면 '평소 유입 대비 증감률 순', '몇 건 늘었나'를 물으면 '평소 유입 대비 증감 건수 순'")]
 OneWeek = Annotated[str, Field(description="한 주 순위의 주차 'YYYY.MM.N주차'(예: '2026.10.5주차'). 비우면 가장 최근 주차. "
                                            "start_week·end_week·sigungu와 함께 쓰지 않음")]
 StartWeek = Annotated[str, Field(description="기간 결과의 시작 주 'YYYY.MM.N주차'(예: '2023.06.1주차'). 비우면 판정할 수 있는 "
@@ -1161,18 +1279,22 @@ EndWeek = Annotated[str, Field(description="기간 결과의 끝 주 'YYYY.MM.N�
 
 
 @mcp.tool(annotations=READ_ONLY)
-def find_unusual_regions(week: OneWeek = "", top: Top = 15, start_week: StartWeek = "", end_week: EndWeek = "",
+def find_unusual_regions(week: OneWeek = "", top: Top = 10, start_week: StartWeek = "", end_week: EndWeek = "",
                          sido: Annotated[str, Field(description="기간 결과에서 한 지역만 볼 때 시도 이름(sigungu와 함께)")] = "",
                          sigungu: Annotated[str, Field(description="기간 결과에서 한 지역만 볼 때 시군구 이름. 넣으면 "
-                                                                   "그 지역이 이 기간에 튄 주 전부와 같은 시기 일을 돌려줌")] = "") -> dict:
-    """전국 시군구 중 관외 유입이 평소와 가장 크게 달랐던 곳을 '평소 출렁임의 몇 배' 순으로 돌려준다.
+                                                                   "그 지역이 이 기간에 튄 주 전부와 같은 시기 일을 돌려줌")] = "",
+                         order: UnusualOrder = "평소 등락 대비 (보정) 변화 순", rank_from: UnusualFrom = 1) -> dict:
+    """전국 시군구 중 관외 유입이 평소와 가장 크게 달랐던 곳의 순위를 돌려준다(기본: 판정이 센 순서).
     '이번 주 어디가 튀었나', '2023년부터 사람이 가장 갑자기 몰린 지역' 같은 질문에 쓸 것. 직접 여러 지역·여러 주를 조회해 순위를 만들지 말 것.
 
     - 한 주 순위: week(비우면 가장 최근 주차). 형식 'YYYY.MM.N주차'.
     - 기간 순위: start_week·end_week(하나만 넣어도 됨, sigungu만 넣으면 판정한 전체 기간). 지역마다 가장 크게 튄 주 하나와
       '많음' 이상 횟수, 해마다 같은 때 되풀이 여부. 판정은 2023년 6월쯤부터만 된다(결과 맨 위 '판정한 기간').
     - 기간 순위에서 한 지역이 언제 튀었는지·그때 무슨 일이 있었는지는 sido·sigungu를 넣어 다시 부른다.
-    - top은 늘어난 곳·줄어든 곳 각각 몇 곳(최대 30). 순위는 퍼센트가 아니라 평소 출렁임의 배수다. 원인은 정하지 않는다.
+    - order: '평소 등락 대비 (보정) 변화 순'(기본)은 보정한 증감률이 평소 등락의 몇 배인지 순이라, 같은 %라도 평소 등락이 작은 곳이 위다.
+      '평소 유입 대비 증감률 순'은 몇 % 늘었나·줄었나, '평소 유입 대비 증감 건수 순'은 하루 몇 건 늘었나·줄었나(큰 도시가 위) 순이다.
+      뒤의 둘은 보정 전 값이라 판정과 다를 수 있다. 원인은 정하지 않는다.
+    - 늘어난 곳·줄어든 곳 각각 10곳씩(top, 최대 30). 결과의 '이어서' 안내가 있으면 답 끝에 이어서 볼지 바로 묻고, rank_from으로 다음 묶음을 부른다.
     - 연휴 주에는 전국이 함께 움직여 판정이 흔들린다. 기간 순위는 연휴 주를 빼고 매긴다(연휴 주는 week로 그 주 순위를 볼 것).
     - 한 지역의 한 주는 analyze_region_week로."""
     try:
@@ -1183,14 +1305,17 @@ def find_unusual_regions(week: OneWeek = "", top: Top = 15, start_week: StartWee
                 analysis.week_dates(x)
     except Exception:
         return {"error": "start_week·end_week 형식은 'YYYY.MM.N주차'(예: '2023.06.1주차')."}
-    top = max(1, min(int(top or 15), 30))
+    top = max(1, min(int(top or 10), 30))
+    if order not in analysis.ORDERS:
+        order = analysis.ORDERS[0]
+    start = max(1, int(rank_from or 1))
     if bool(sido) != bool(sigungu):
         return {"error": "한 지역을 볼 때는 sido와 sigungu를 함께 넣을 것."}
     if a or b or sigungu:
         if week:
             return {"error": "week(한 주 순위)와 start_week·end_week·sigungu(기간 결과)는 함께 쓰지 말 것."}
         asked = f"{start_week or '처음'} – {end_week or '최신'}"
-        return _period_answer(a, b, top, sido, sigungu, asked)
+        return _period_answer(a, b, top, sido, sigungu, asked, order, start)
     try:
         if week:
             wo = _order(week)
@@ -1209,7 +1334,7 @@ def find_unusual_regions(week: OneWeek = "", top: Top = 15, start_week: StartWee
     # 같은 방향 규칙(4번): 실제로 늘어난/줄어든 곳만 순위에. 엇갈린 곳은 원래 순위 안에 들었던 것만 따로 짧은 목록으로
     def clean(x):
         # 줄 모양(TEST_수정안_20261120.md 3+5번): 판정 바로 아래 '판정 풀이', 배수는 맨 아래 '물을 때만' 칸
-        head = ("지역", "평소 대비(%)", "최종 변화(%)", "평소 출렁임(%)", "판정")
+        head = ("지역", "평소 유입 대비 증감률(%)", "보정한 증감률(%)", "평소 등락(%)", "판정")
         out = {k: x[k] for k in head if k in x}
         out["판정 풀이"] = analysis.speak_short({"verdict": x["판정"], "dev": x["_dev"], "final": x["_final"],
                                               "hol_adj": x["_hol"]})
@@ -1218,13 +1343,21 @@ def find_unusual_regions(week: OneWeek = "", top: Top = 15, start_week: StartWee
         return out
 
     mixed = {}
-    for sign, name in ((1, "비교하면 많았지만, 실제로 늘지는 않은 곳"), (-1, "비교하면 적었지만, 실제로 줄지는 않은 곳")):
-        lines = [analysis.mixed_line(x["지역"], x["배수"], x["_dev"], x["_com"], x["_hol"])
-                 for x in [x for x in rows if x["배수"] * sign > 0][:top] if not analysis.real_dir(x["배수"], x["_dev"])]
-        if lines:
-            mixed[name] = lines
-    up = [clean(x) for x in rows if x["배수"] > 0 and analysis.real_dir(x["배수"], x["_dev"])][:top]
-    down = [clean(x) for x in rows if x["배수"] < 0 and analysis.real_dir(x["배수"], x["_dev"])][:top]
+    if order == analysis.ORDERS[0]:
+        for sign, name in ((1, "비교하면 많았지만, 실제로 늘지는 않은 곳"), (-1, "비교하면 적었지만, 실제로 줄지는 않은 곳")):
+            lines = [analysis.mixed_line(x["지역"], x["배수"], x["_dev"], x["_com"], x["_hol"])
+                     for x in [x for x in rows if x["배수"] * sign > 0][start - 1:start - 1 + top]
+                     if not analysis.real_dir(x["배수"], x["_dev"])]
+            if lines:
+                mixed[name] = lines
+        up_all = [x for x in rows if x["배수"] > 0 and analysis.real_dir(x["배수"], x["_dev"])]
+        down_all = [x for x in rows if x["배수"] < 0 and analysis.real_dir(x["배수"], x["_dev"])]
+    else:   # 0.7.0 A1②: 보정 전 값 순서(실제로 늘어난·줄어든 곳)
+        key = (lambda x: x["_dev"]) if order == analysis.ORDERS[1] else (lambda x: x["_delta"])
+        up_all = sorted([x for x in rows if x["_dev"] > 0], key=key, reverse=True)
+        down_all = sorted([x for x in rows if x["_dev"] < 0], key=key)
+    up = [{"순위": i, **clean(x)} for i, x in enumerate(up_all[start - 1:start - 1 + top], start)]
+    down = [{"순위": i, **clean(x)} for i, x in enumerate(down_all[start - 1:start - 1 + top], start)]
     mon = dt.date.fromisoformat(analysis.week_dates(wo)[:10])
     sus_lines = []
     for x in up + down:
@@ -1243,12 +1376,15 @@ def find_unusual_regions(week: OneWeek = "", top: Top = 15, start_week: StartWee
     return _answer({
         "주차": f"{wo // 1000}.{(wo // 10) % 100:02d}.{wo % 10}주차", "기간(월–일)": analysis.week_dates(wo),
         "날짜": analysis.date_ko(wo),
-        "판정한 지역 수": len(rows), "평소 출렁임 2배 넘게 달라진 지역 수": n_strong,
+        "순위 방식": _order_line(order),
+        "판정한 지역 수": len(rows), "평소 등락 2배 넘게 달라진 지역 수": n_strong,
         "평소보다 늘어난 곳": up, "평소보다 줄어든 곳": down,
+        **_more_line(start, top, max(len(up_all), len(down_all))),
+        "평소 등락 읽는 법": analysis.DEUNGRAK_NOTE,
         **mixed, **({"엇갈린 곳 전하는 법": analysis.MIXED_NOTE} if mixed else {}),
         "판정 기준": analysis.JUDGE_RULE,
         "주의": sus_lines + notes + [
-            "평소 출렁임 2배를 넘는 지역은 평범한 주에도 전국에서 몇 곳씩 나온다(공휴일 없는 주에 위로 약 5%, 아래로 약 3%).",
+            "평소 등락 2배를 넘는 지역은 평범한 주에도 전국에서 몇 곳씩 나온다(공휴일 없는 주에 위로 약 5%, 아래로 약 3%).",
             "한 지역에서만 크게 튀고 이웃 지역이 반대로 움직였으면 원자료 처리 오류일 수도 있다. 이용자가 원하면 report_issue로 알릴 수 있다.",
         ],
     }, "rank", SOURCE, calc=True)
@@ -1308,18 +1444,18 @@ def estimate_life_pop(sido: Sido, sigungu: Sigungu, year_month: YearMonth,
 
 @mcp.tool(annotations=READ_ONLY)
 def forecast_festival(sido: Sido, sigungu: Sigungu, festival_name: str = "", start_date: str = "", end_date: str = "") -> dict:
-    """지역 축제가 열리는 주의 관외 유입 이동 건수가 비교군 대비 얼마나 늘지(상승률 %) '비공식 참고 예측'을 범위로 돌려준다. 방문객 수(명) 예측이 아니다.
+    """지역 축제가 열리는 주의 관외 유입 이동 건수가 100km 밖 비교 지역 몫을 빼고 얼마나 늘지(상승률 %) '비공식 참고 예측'을 범위로 돌려준다. 방문객 수(명) 예측이 아니다.
 
     - 축제 방문객 수(명)를 예측하지 않는다. 관외 유입 이동 건수의 상승률(%)이다. '명'으로 바꿔 말하지 말 것.
     - festival_name을 비우면 그 지역의 축제 목록을 돌려준다. start_date·end_date(YYYY-MM-DD)에 올해 일정을 넣으면
       연휴·공휴일 겹침 경고를 붙인다.
     - 결과의 범위는 '과거 둘 중 한 번'·'열 번 중 여덟 번은 이 안'으로 말하고, '신뢰구간·오차범위'라고 부르지 말 것.
     - '예측: 하지 않음'이면 그 이유를 그대로 전하고 숫자를 지어내지 말 것.
-    - 예측값은 '비교군 대비' 상승률이다. '평소보다 몇 %' 또는 '평소의 몇 배'로 바꿔 말하지 말 것
+    - 예측값은 '100km 밖 비교 지역 몫을 뺀' 상승률이다. '평소보다 몇 %' 또는 '평소의 몇 배'로 바꿔 말하지 말 것
       (평소 대비는 '참고: 지난 회차 평소 대비 평균'을 따로 인용할 것).
-    - 축제 질문에 직접 계산하지 말고 이 도구를 쓸 것. '작년보다 늘었나'처럼 지난 회차끼리 견주는 질문에도 쓸 것
-      (결과의 '지난 회차' 표).
-    - 지난 회차가 없는(처음 여는) 축제면 비슷한 지역 축제들의 '낮은 신뢰도 참고 범위'를 돌려준다."""
+    - 축제 주 외부 유입이 얼마나 늘지·늘었는지(%)를 묻는 질문에 직접 계산하지 말고 이 도구를 쓸 것. '작년보다 늘었나'처럼
+      지난 회차끼리 견주는 질문에도 쓸 것(결과의 '지난 회차' 표). 지난 축제에 방문객이 몇 명 왔나(명)는 get_datalab_daily로.
+    - 지난 회차가 없는(처음 여는) 축제면 비교 지역 축제들의 '낮은 신뢰도 참고 범위'를 돌려준다."""
     r = festival.forecast(db, sido, sigungu, festival_name, start_date, end_date)
     if "error" not in r:
         r["자료 기준"] = _as_of()
@@ -1419,12 +1555,13 @@ def _daily_summary(R, a, b):
 @mcp.tool(annotations=READ_ONLY)
 def get_datalab_daily(sido: Sido, sigungu: Sigungu, start_date: str, end_date: str,
                       kind: Literal["외지인", "현지인", "외국인"] = "외지인") -> dict:
-    """"○○군 지난 토요일 외부에서 몇 명쯤 왔어?"처럼 하루 단위 방문자(사람 수, '명')를 묻는 질문에 쓴다.
+    """"○○축제 때 방문객이 몇 명이었어?", "○○군 지난 토요일 외부에서 몇 명쯤 왔어?"처럼 축제·행사 방문객이나 하루 단위 방문자(사람 수, '명')를 묻는 질문에 쓴다.
     한국관광공사 데이터랩 시군구 일별 방문자 수를 날짜마다 평소 같은 요일과 견줘 돌려주고, 관광공사 값이 아직 없는 최근 약 한 달(외지인)은
     이동 자료로 이 서비스가 미리 추정한 범위를 이어 붙인다. 그날 날씨와 이 지역 평소 방문 모습(주말·평일, 장날, 날마다 들쭉날쭉한 정도)도 함께.
 
     - 방문 지표로는 외지인을 쓸 것. 현지인은 그 지역 상주자(거주·근무·통학)라 방문 지표가 아니다. 외지인에는 근무자가 빠져 있다.
-    - 관광공사 값과 이 서비스의 추정 범위는 칸이 나뉘어 있다. 추정은 늘 범위로 말하고, 여러 날을 더해 '모두 몇 명'을 만들지 말 것.
+    - 관광공사 값과 이 서비스의 추정 범위는 칸이 나뉘어 있다. 추정은 늘 범위로 말할 것. 기간은 하루 평균을 먼저 말하고, 여러 날을 직접 더하지 말고
+      결과의 '연인원(같은 사람이 날마다 다시 세어짐)'을 '연인원'이라고 부르며 쓸 것(모두 몇 명이 아니다).
     - 나우캐스트 이동 건수(주 단위, '건')와 단위가 다르다. 둘을 더하거나 섞지 말 것.
     - start_date·end_date: YYYY-MM-DD. 날짜별 값은 한 번에 한 달(31일)씩 나오고, 더 긴 기간은 최근 한 달과 기간 요약을 준다.
     - 주 단위 이동 흐름은 get_movement, 한 주가 평소와 다른지는 analyze_region_week로."""
@@ -1534,6 +1671,24 @@ def get_datalab_daily(sido: Sido, sigungu: Sigungu, start_date: str, end_date: s
             row["날씨"] = wx[d]
         rows.append(row)
         d += dt.timedelta(days=1)
+    # 0.7.0 A2③·E3: 기간 하루 평균과 연인원은 관광공사 값이 있는 날만(추정 범위와 한 숫자에 섞지 않음)
+    n_days = (full_b - full_a).days + 1
+    have = [d for d in vis if full_a <= d <= full_b]
+    if n_days >= 2 and have:
+        tot = sum(vis[d] for d in have)
+        sm = {"관광공사 값이 있는 날": f"{len(have)}일({daily.date_ko(min(have))}–{daily.date_ko(max(have))})",
+              "하루 평균(명)": round(tot / len(have)),
+              "연인원(같은 사람이 날마다 다시 세어짐, 명)": round(tot),
+              "읽는 법": "하루 평균을 먼저 말할 것. 연인원은 날마다 센 사람 수를 더한 것이라 여러 날 머문 사람은 그 날수만큼 세어져요. "
+                       "'방문객 ○명'이 아니라 '연인원 ○명'으로 말하고, 모두 몇 명(서로 다른 사람 수)은 아니라고 함께 말할 것."}
+        miss = n_days - len(have)
+        if miss > 0 and last and full_b > last:
+            back = full_b + dt.timedelta(days=35)
+            sm["빠진 날"] = (f"나머지 {miss}일은 관광공사 값이 아직 안 나와(보통 한 달쯤 뒤) 뺐어요. "
+                          f"{back.month}월 {back.day}일쯤 다시 물어보시면 전체 연인원을 볼 수 있어요.")
+        elif miss > 0:
+            sm["빠진 날"] = f"나머지 {miss}일은 관광공사 값이 없어 뺐어요."
+        out["기간 하루 평균과 연인원(관광공사 값)"] = sm
     if no_est:
         notes.append(f"{daily.date_ko(last)} 뒤 날짜는 이 지역의 추정을 내지 않았어요(새로 생긴 지역이거나 견줄 평범한 주가 모자람). "
                      "관광공사 값이 나오면 채워져요.")
@@ -1578,9 +1733,9 @@ def report_issue(message: str,
     - region·period·tool에는 문제가 된 지역·기간·도구를 적으면 확인이 빨라진다.
     - 자료 추가 요청·제안: 찾는 자료·기능·지역·기간이 없거나 답하지 못했을 때, 대화에서 한 번만
       '이런 자료나 기능이 있으면 좋겠다고 개발자에게 전달해 드릴까요? 보내 주신 의견은 서비스를 개선하는 데 참고한다고 합니다'처럼
-      묻고, 그러겠다고 할 때만 보낼 것. 자료는 kind='자료 추가 요청'(message에 어떤 자료가 왜 필요한지, link에 그 자료가 있는
+      묻고, 그러겠다고 할 때만 보낼 것(없는 것을 처음 물은 그 답 끝에 꼭 한 번, 그 뒤로는 다시 묻지 않음). 자료는 kind='자료 추가 요청'(message에 어떤 자료가 왜 필요한지, link에 그 자료가 있는
       공개 페이지 주소(http로 시작, 하나), 파일은 받지 않음), 기능·지역·기간은 kind='제안'(message에 무엇을 하고 싶었는지 이용자 말 그대로).
-    - 보낸 뒤에는 '개발자에게 전달했다, 따로 답장은 없고 반영되면 서비스에 바로 적용된다'고만 전할 것."""
+    - 보낸 뒤에는 '개발자에게 전달했어요. 따로 답장은 없고, 반영되면 서비스에 바로 적용돼요.'라고만 전할 것."""
     return feedback.submit(message, kind, region, period, tool, link)
 
 
@@ -1593,6 +1748,7 @@ def get_region_calendar(sido: Sido, sigungu: Sigungu, start: str, end: str = "")
     - 일정 없이 한 주가 평소와 다른지만 물으면 analyze_region_week, 벚꽃·단풍 날짜만 물으면 get_bloom_foliage,
       날짜별 방문자와 그날 날씨는 get_datalab_daily로.
     - start·end는 'YYYY-MM-DD' 또는 'YYYY-MM'. start만 'YYYY-MM'이면 그 달 전체, 날짜 하나면 그 주. 한 번에 1년까지.
+      석 달 이상이면 달별로 먼저(그 달 큰 일정·판정 개수), 한 달을 고르면 주별로.
     - '그 주 유입'은 analyze_region_week와 같은 계산(판정 문구는 그대로 전하고, 배수는 이용자가 물을 때만). 자세한 판정은 그 도구로.
     - 일정은 '같은 시기에 있었던 일'로 말하고, 영향 가능성은 근거와 한계를 밝혀 말해도 되지만 원인으로 확정하지 말 것.
     - 달마다 그 지역 주요 유료관광지 방문객(사람 수, 약 5개월 늦게 나옴)도 함께 준다. 이동 건수와 섞어 계산하지 말 것.
@@ -1618,22 +1774,24 @@ def get_bloom_foliage(year: int, kind: str) -> dict:
 
 @mcp.tool(annotations=READ_ONLY)
 def get_data_status() -> dict:
-    """이 서비스가 가진 자료별 최신 시점과 마지막으로 받아 온 날을 돌려준다.
+    """이 서비스가 가진 자료별 최신 시점과 새 자료가 들어온 날을 돌려준다.
     '언제 자료까지 있나', '최신 주차가 뭐냐'는 질문이나, 다른 도구 결과가 비어 있을 때 기간을 확인하는 데 쓴다.
-    - latest: 자료가 담고 있는 가장 최근 시점(주차·날짜·월·반기·연).
-    - fetched_ok: 이 서비스가 원천에서 마지막으로 받아 오는 데 성공한 시각(한국 시간).
-    - last_failed=1이면 가장 최근 받기 시도가 실패한 상태다. 답할 때 '최신이 아닐 수 있음'을 밝힐 것.
-    - 원자료는 소급 수정될 수 있으므로, 수치를 인용할 때 자료 시점과 받아 온 날을 함께 밝힐 것.
+    - 최신 시점: 자료가 담고 있는 가장 최근 시점(주차·날짜·월·반기·연).
+    - 새 자료가 들어온 날: 최신 시점이 바뀐(새 자료가 실제로 들어온) 시각(한국 시간).
+    - 마지막으로 확인한 시각: 이 서비스가 원천을 마지막으로 확인한(받기에 성공한) 시각. 새 자료가 없어도 바뀐다.
+    - 최근 받기 실패가 참이면 가장 최근 받기 시도가 실패한 상태다. 답할 때 '최신이 아닐 수 있음'을 밝힐 것.
+    - 인용할 때는 자료 시점과 새 자료가 들어온 날을 함께 밝힐 것. 원자료는 나중에 고쳐질 수 있으니 오래된 인용이면 다시 확인할 것.
     - 자료의 정의와 해석 주의는 get_metadata로."""
     try:
         rows = db.execute("SELECT name, unit, latest, fetched_ok, last_failed FROM source_status").fetchall()
     except sqlite3.OperationalError:
         rows = []
+    arr = _arrived()
     import manual
     return {
         "안내": NOTICE,
-        "data": [{"자료": n, "단위": u, "latest": l, "fetched_ok": f, "last_failed": bool(x)}
-                 for n, u, l, f, x in rows],
+        "data": [{"자료": n, "단위": u, "최신 시점": l, "새 자료가 들어온 날": arr.get(n) or f, "마지막으로 확인한 시각": f,
+                  "최근 받기 실패": bool(x)} for n, u, l, f, x in rows],
         "손으로 넣는 자료": safe.call("손 자료 상태", manual.status, default=[]),
         "손으로 넣는 자료 안내": "자동으로 받지 않고 시즌·관측이 끝난 뒤 운영자가 넣는 자료다. '자료 기준' 뒤의 일은 아직 없다. "
                          "그 뒤 일을 물으면 '이 서비스에는 ○○까지 있다'고 말하고 원출처(KBO·기상청 날씨누리 등)를 안내할 것.",

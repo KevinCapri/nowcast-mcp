@@ -89,11 +89,17 @@ def save_status(st):
     tmp.replace(STATUS)
 
 
+# 정해진 시각보다 이만큼 일찍 받았어도 '그날 몫은 받음'으로 침(11-28). 2시간이던 것을 늘림 — 받는 시각을 05시에서
+# 02시로 당긴 첫날(직전 성공 21시간 전)과 배포로 낮에 받은 다음 날(06:51 → 02:00, 19시간)에 매일 단계가 건너뛰어졌음.
+# 12시간이면 밤 10시 배포 뒤 받기(22:15) 다음 새벽 02:00(3.75시간)은 건너뛰고(방금 받음), 그 밖엔 매일 돈다.
+EARLY = dt.timedelta(hours=12)
+
+
 def due(st, name, days):
     ok = (st.get(name) or {}).get("last_ok")
     if not ok:
         return True
-    return now() - dt.datetime.fromisoformat(ok) >= dt.timedelta(days=days) - dt.timedelta(hours=2)
+    return now() - dt.datetime.fromisoformat(ok) >= dt.timedelta(days=days) - EARLY
 
 
 def lifepop_waiting():
@@ -188,6 +194,16 @@ def write_source_status(st):
                 "tried TEXT, last_failed INT)")
     con.execute("DELETE FROM source_status")
     con.executemany("INSERT INTO source_status VALUES (?,?,?,?,?,?)", rows)
+    # 0.7.0 A3: '새 자료가 들어온 날' — 최신 시점(latest)이 바뀐 받기의 시각. source_status에 칸을 더하지 않고 따로 둠
+    # (옛 코드로 되돌려도 source_status INSERT가 깨지지 않게, E6). 처음엔 그때의 받기 성공 시각으로 채움.
+    con.execute("CREATE TABLE IF NOT EXISTS source_arrived(name TEXT PRIMARY KEY, latest TEXT, arrived TEXT)")
+    old = {n: (l, a) for n, l, a in con.execute("SELECT name, latest, arrived FROM source_arrived")}
+    for name, _unit, latest, ok, _try, _fail in rows:
+        if latest is None:
+            continue
+        prev = old.get(name)
+        if prev is None or prev[0] != latest:
+            con.execute("INSERT OR REPLACE INTO source_arrived VALUES (?,?,?)", (name, latest, ok or now().isoformat(timespec="seconds")))
     con.commit()
     con.close()
 

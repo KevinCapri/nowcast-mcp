@@ -117,16 +117,36 @@ def same_as_old(con, wk):
     return (not bad and missing <= len(old) * 0.001), msg
 
 
+def station_names(con, key):
+    """관측소 번호 → 이름. 기상청 관측소 목록이 느리면(2026-11-28 60초 넘어 날씨 단계 전체가 실패) 세 번까지 다시 묻고,
+    그래도 안 되면 지난번에 만든 station_map의 이름을 그대로 씀(관측소는 거의 안 바뀜). 둘 다 없을 때만 실패."""
+    for i in range(3):
+        try:
+            st = requests.get(STN_URL, params={"pageNo": 1, "numOfRows": 200, "dataType": "JSON",
+                                               "year": dt.date.today().year, "month": "09", "authKey": key},
+                              timeout=60).json()
+            st = st["response"]["body"]["items"]["item"][0]["stn_sfc"]["info"]
+            return {s["stn_id"]: s["stn_ko"] for s in st}
+        except (requests.RequestException, ValueError, KeyError, IndexError, TypeError) as ex:
+            print(f"관측소 목록 받기 실패({i + 1}/3): {type(ex).__name__}", flush=True)
+            if i < 2:
+                time.sleep(30)
+    try:
+        rows = con.execute("SELECT DISTINCT stn, stn_name FROM station_map WHERE stn_name IS NOT NULL").fetchall()
+    except sqlite3.Error:
+        rows = []
+    if not rows:
+        raise RuntimeError("기상청 관측소 목록을 받지 못했고 지난 짝 표도 없음")
+    print(f"관측소 목록은 지난 짝 표의 이름 {len(rows)}곳으로 대신함", flush=True)
+    return {str(a): b for a, b in rows} | {a: b for a, b in rows}
+
+
 def main():
     key = os.environ.get("KMA_KEY")
     if not key:
         sys.exit("환경변수 KMA_KEY가 없음")
     con = sqlite3.connect(DB)
-    st = requests.get(STN_URL, params={"pageNo": 1, "numOfRows": 200, "dataType": "JSON",
-                                       "year": dt.date.today().year, "month": "09", "authKey": key},
-                      timeout=60).json()
-    st = st["response"]["body"]["items"]["item"][0]["stn_sfc"]["info"]
-    names = {s["stn_id"]: s["stn_ko"] for s in st}
+    names = station_names(con, key)
 
     # 1) 시군구 ↔ 관측소 짝 표
     sg = con.execute("SELECT DISTINCT sido, sigungu FROM moves WHERE category='시군구'").fetchall()

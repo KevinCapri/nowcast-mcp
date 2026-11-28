@@ -4,9 +4,9 @@
 - 축제 일정: 문체부 연도별 지역축제 개최 계획(2023–2026, 계획 일정)에서 같은 축제를 이어 붙인 표(festivals.csv)
 - 회차마다 '주된 주'(행사 일수·주말이 가장 많이 든 주)의 상승률
   · 평소 대비 = ln(그 주 관외 유입 / 직전 8주 중앙값)
-  · 비교군 대비 = 평소 대비 − 같은 주 '비슷하면서 100km 밖' 10곳의 평소 대비 중앙값
-- 예측 조건: 지난 회차 1번 이상, 지난 회차 평소 대비 평균이 평소 출렁임의 2배 초과
-- 예측 기준 = 지난 회차 비교군 대비 상승률의 평균(되돌림은 쓰지 않음)
+  · 100km 밖 비교 지역 몫 보정 = 평소 대비 − 같은 주 100km 밖 비교 지역(far, 10곳)의 평소 대비 중앙값
+- 예측 조건: 지난 회차 1번 이상, 지난 회차 평소 대비 평균이 평소 등락의 2배 초과
+- 예측 기준 = 지난 회차 100km 밖 비교 지역 몫 뺀 상승률의 평균(되돌림은 쓰지 않음)
 - 범위(같은 묶음 축제들의 다음 회차 변화, 68건 채점):
   · 2–3.5배 묶음: 둘 중 한 번 −4–+5%, 열 중 여덟 −12–+11%
   · 3.5배 초과: 둘 중 한 번 −8–+2%, 열 중 여덟 −11–+5%
@@ -124,8 +124,8 @@ def in_week(sido, sigungu, monday, holidays=()):
 
 
 def first_time(db, sido, sigungu):
-    """지난 회차가 없는 축제: 비슷한 지역 10곳에서 열린 축제들의 '주된 주' 평소 대비 상승률 분포(낮은 신뢰도 참고 범위).
-    모의시험(한 지역): 112건, −4–+30%, 중앙값 +7%, 평소 출렁임 2배 초과 14%. 개별 축제 오차 약 20%."""
+    """지난 회차가 없는 축제: 비교 지역에서 열린 축제들의 '주된 주' 평소 대비 상승률 분포(낮은 신뢰도 참고 범위).
+    모의시험(한 지역): 112건, −4–+30%, 중앙값 +7%, 평소 등락 2배 초과 14%. 개별 축제 오차 약 20%."""
     hol = A.holidays(db)
     vals, strong = [], 0
     for a, b in A.PEERS.get(A.canon(sido, sigungu), []):
@@ -144,10 +144,10 @@ def first_time(db, sido, sigungu):
         return None
     vals.sort()
     q = lambda p: vals[min(len(vals) - 1, int(p * len(vals)))]
-    return {"근거 축제 수": len(vals), "근거": "인구·주변 인구가 비슷한 지역 10곳에서 열린 축제(문체부 계획 2023–2026)의 주된 주",
+    return {"근거 축제 수": len(vals), "근거": "비교 지역에서 열린 축제(문체부 계획 2023–2026)의 주된 주. 비교 지역 고른 기준: " + A.PEER_BASIS,
             "평소 대비 상승률 중앙값(%)": A._pct(median(vals)),
             "열 번 중 여덟 번은 이 안(%)": [A._pct(q(0.1)), A._pct(q(0.9))],
-            "평소 출렁임 2배 넘게 크게 늘어난 비율(%)": round(strong / len(vals) * 100)}
+            "평소 등락 2배 넘게 크게 늘어난 비율(%)": round(strong / len(vals) * 100)}
 
 
 def _count_hint(use, me):
@@ -165,7 +165,7 @@ def _count_hint(use, me):
             "과거 둘 중 한 번은 이 범위 안": f(0.11), "과거 열 번 중 아홉 번은 이 범위 안": f(0.22),
             "설명": "지난 회차 평소 대비 평균 상승을 가장 최근 회차의 평소 값에 곱한 참고 값이다. 단위는 하루 평균 이동 건수이며 "
                   "사람 수(명)가 아니다. 올해 평소 값이 그때와 다르면 그만큼 달라진다(통신사 가입자 변화 등). "
-                  "평소 대비에는 그 주 전국 공통 흐름이 섞여 비교군 대비 예측보다 범위가 넓다."}
+                  "평소 대비에는 그 주 전국 공통 흐름이 섞여 100km 밖 비교 지역 몫을 뺀 예측보다 범위가 넓다."}
 
 
 def forecast(db, sido, sigungu, name="", start_date="", end_date=""):
@@ -181,14 +181,14 @@ def forecast(db, sido, sigungu, name="", start_date="", end_date=""):
         if ref:
             out["낮은 신뢰도 참고 범위"] = ref
             out["주의"] = [
-                "축제 하나를 예측한 값이 아니라 비슷한 지역 축제들의 분포다. 개별 축제에 대한 오차는 약 20%로 크다.",
-                f"이 분포에서 평소보다 크게 늘어난 축제는 {ref['평소 출렁임 2배 넘게 크게 늘어난 비율(%)']}%뿐이다. "
+                "축제 하나를 예측한 값이 아니라 비교 지역 축제들의 분포다. 개별 축제에 대한 오차는 약 20%로 크다.",
+                f"이 분포에서 평소보다 크게 늘어난 축제는 {ref['평소 등락 2배 넘게 크게 늘어난 비율(%)']}%뿐이다. "
                 "이 자료(시군구·주 단위)에서는 아예 안 나타날 가능성이 더 크다고 말할 것.",
                 "방문 인원(명)이 아니라 관외 유입 이동 건수의 상승률이다. 숫자를 '명'으로 바꾸지 말 것.",
                 "이름이 계획에 다르게 올랐을 수 있으니 '이 지역 축제' 목록에 비슷한 이름이 있는지 이용자에게 확인할 것.",
             ]
         else:
-            out["주의"] = ["비슷한 지역의 축제 기록도 모자라 참고 범위를 낼 수 없다. 숫자를 지어내지 말 것."]
+            out["주의"] = ["비교 지역의 축제 기록도 모자라 참고 범위를 낼 수 없다. 숫자를 지어내지 말 것."]
         return out
     fids = sorted({r["fid"] for r in found})
     if len(fids) > 1 and name:
@@ -213,7 +213,7 @@ def forecast(db, sido, sigungu, name="", start_date="", end_date=""):
                     "long_hol": A.is_long_holiday(hol.get(wo)), "sus": A.is_suspect(sido, sigungu, wo)})
     use = [x for x in rec if not x["long_hol"] and x["comp"] is not None]
     shown = [{"연도": x["y"], "주된 주": x["주차"], "기간(계획)": x["기간"],
-              "평소 대비(%)": A._pct(x["raw"]), "비교군 대비(%)": A._pct(x["comp"]),
+              "평소 유입 대비 증감률(%)": A._pct(x["raw"]), "(100km 밖 비교 지역 몫 뺀) 보정한 증감률(%)": A._pct(x["comp"]),
               "연휴 주": x["long_hol"], **({"원자료 확인 필요 구간": A.SUSPECT_FLAG} if x["sus"] else {})} for x in rec]
     sus_notes = []
     if any(x["sus"] for x in rec):
@@ -227,7 +227,21 @@ def forecast(db, sido, sigungu, name="", start_date="", end_date=""):
             sus_notes.append(f"지난 회차 중 {'·'.join(unused)}년 주된 주{'도' if used else '가'} 원자료 확인 필요 구간이다(연휴 주 등이라 계산에는 들어가지 않았다). "
                              "그해 값을 '작년엔 줄었다·늘었다'의 근거로 쓰지 말 것.")
     base = {"축제": past[-1]["name"], "지역": f"{sido} {sigungu}", "지난 회차": shown,
-            "평소 출렁임(%)": A._pct(s)}
+            "평소 등락(%)": A._pct(s), "평소 등락 읽는 법": A.DEUNGRAK_NOTE}
+    # 0.7.0 C4: 다음 회차 일정이 목록에 없으면 첫 줄에 밝힘(11-27 TEST: '올 겨울'에 이미 지난 1월 회차를 잡고 숫자만 말함)
+    if not start_date:
+        today = dt.date.today()
+        nxt = [r for r in past if dt.date.fromisoformat(r["s"]) >= today]
+        if nxt:
+            base = {"다음 회차(문체부 계획)": f"{nxt[0]['s']}–{nxt[0]['e']}", **base}
+        else:
+            ls = dt.date.fromisoformat(past[-1]["s"])
+            base = {"다음 회차": (f"다음 회차 일정은 아직 이 서비스에 없어요. 지난 회차({ls.year}년 {ls.month}월)를 바탕으로 한 참고 예측이에요. "
+                               "이용자가 올해 일정을 알려 주면 start_date·end_date에 넣어 다시 부를 것(이 문장을 먼저 전할 것)."), **base}
+    far_names = [" ".join(A.current_name(db, a, b)) for a, b in FAR.get(A.canon(sido, sigungu), [])]
+    if far_names:
+        base["100km 밖 " + A.PEER_NAMES] = far_names
+        base["100km 밖 비교 지역 고른 기준"] = A.FAR_BASIS
     common_notes = [
         "이 서비스가 계산한 비공식 참고 예측이다. 방문 인원(명)이 아니라 관외 유입 이동 건수 기준이다.",
         "범위는 '과거 둘 중 한 번'·'열 번 중 여덟 번은 이 안'이라고 말할 것. '신뢰구간·오차범위'라고 부르지 말 것.",
@@ -240,10 +254,10 @@ def forecast(db, sido, sigungu, name="", start_date="", end_date=""):
         base["주의"] = sus_notes + common_notes
         return base
     ratio = mean(x["raw"] for x in use) / s
-    base["지난 회차 평균의 평소 출렁임 대비 몇 배"] = round(ratio, 1)
+    base["지난 회차 평균의 평소 등락 대비 몇 배"] = round(ratio, 1)
     if ratio <= 2:
         base["예측"] = "하지 않음"
-        base["이유"] = ("지난 회차에도 시군구·주 단위에서 평소 출렁임의 2배를 넘지 않았다. "
+        base["이유"] = ("지난 회차에도 시군구·주 단위에서 평소 등락의 2배를 넘지 않았다. "
                       "이 자료로는 축제 효과가 잡히지 않아 예측할 것이 없다(전국 축제의 약 83%가 이렇다).")
         base["주의"] = sus_notes + common_notes
         return base
@@ -256,13 +270,13 @@ def forecast(db, sido, sigungu, name="", start_date="", end_date=""):
         own = [(math.exp(x["comp"]) - 1) * 100 for x in use]
         r2 = [round(min(r2[0], min(own))), round(max(r2[1], max(own)))]
     base.update({
-        "예측(비교군 대비 상승률, %)": round((lvl - 1) * 100),
+        "예측(100km 밖 비교 지역 몫 뺀 상승률, %)": round((lvl - 1) * 100),
         "과거 둘 중 한 번은 이 범위 안(%)": r1,
         "과거 열 번 중 여덟 번은 이 범위 안(%)": r2,
         "참고: 지난 회차 평소 대비 평균(%)": A._pct(mean(x["raw"] for x in use)),
         "참고: 예상 관외 유입(일평균 건수)": _count_hint(use, me),
         "묶음": f"지난 회차 효과 {group}",
-        "범위 근거": "같은 묶음 축제들의 다음 회차 변화(68건 채점, 비교군 대비 기준 오차 중앙값 약 4%)"
+        "범위 근거": "같은 묶음 축제들의 다음 회차 변화(68건 채점, 100km 밖 비교 지역 몫 뺀 기준 오차 중앙값 약 4%)"
                   + (" + 이 축제의 지난 회차 최소–최대" if len(use) >= 3 else ""),
     })
     notes = []
@@ -281,13 +295,13 @@ def forecast(db, sido, sigungu, name="", start_date="", end_date=""):
             notes.append("올해 날짜 형식은 YYYY-MM-DD.")
     gap = mean(x["raw"] for x in use) - mean(x["comp"] for x in use)
     if gap > 0.1:
-        notes.append(f"축제 주에는 비슷한 지역들도 함께 늘었다(평소 대비 평균 {A._pct(mean(x['raw'] for x in use))}% 중 "
-                     f"공통 흐름 몫이 큼, 휴가철·봄나들이·연휴 등). 축제만의 몫은 비교군 대비 값에 가깝다. "
+        notes.append(f"축제 주에는 비교 지역들도 함께 늘었다(평소 대비 평균 {A._pct(mean(x['raw'] for x in use))}% 중 "
+                     f"공통 흐름 몫이 큼, 휴가철·봄나들이·연휴 등). 축제만의 몫은 100km 밖 비교 지역 몫을 뺀 값에 가깝다. "
                      "'평소보다 몇 % 늘까'를 물으면 평소 대비 값도 함께 알려 줄 것.")
     if any(x["long_hol"] for x in rec):
         notes.append("지난 회차 중 연휴와 겹친 해는 예측 기준에서 뺐다.")
     if n_far < 5:
-        notes.append("비교군(100km 밖 비슷한 지역)이 모자라 비교군 대비 값이 불안정하다.")
+        notes.append("100km 밖 비교 지역이 모자라 그 몫을 뺀 값이 불안정하다.")
     base["주의"] = sus_notes + notes + [
         "과거 채점에서 예측 대상 축제도 셋 중 하나는 그해 크게 늘지 않았다.",
         "날씨·개화·프로그램 변화처럼 과거에 없던 사정은 반영되지 않는다.",

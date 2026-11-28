@@ -40,11 +40,19 @@ async def main():
          "top은 숫자로 넣을 것(받은 값: '많이')."),
         ("find_unusual_regions", {"top": 0},
          "입력값이 받을 수 있는 범위를 벗어났다. top은 1–30만 받는다(받은 값: 0). 고쳐서 다시 물을 것."),
+        # 0.7.0 새 입력
+        ("find_unusual_regions", {"order": "드문 일 순"}, None),
+        ("find_unusual_regions", {"rank_from": "많이"}, None),
+        ("get_movement", {"start_week": "2025.10.2주차", "direction": "유입", "category": "시군구", "order": "인구순"}, None),
     ]
     for name, args, want in cases:
         r = await S.mcp.call_tool(name, args)
         check(not r.is_error, f"{name}{args}: 오류로 나감")
         got = text(r).get("error")
+        if want is None:   # 새 입력: 한국어 범위 안내로 나오는지만
+            check(isinstance(got, str) and ("범위를 벗어났다" in got or "숫자로 넣을 것" in got), f"{name}{args}: 범위 안내 아님 → {got}")
+            print(" ", got)
+            continue
         check(got == want, f"{name}{args}:\n  기대 {want}\n  실제 {got}")
     # 없는 Tool은 원래대로 오류
     try:

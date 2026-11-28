@@ -12,6 +12,7 @@ import baseball
 import bigevents
 import festival
 import manual
+import movement
 import perf
 import safe
 import season
@@ -44,8 +45,8 @@ def _inflow(P, wo):
     j = A.judge_week(P, wo) if (P and wo in P["me"]) else None
     if not j:
         return None
-    out = {"판정": j["verdict"], "배수(이용자가 물을 때만 말함)": j["ratio"], "평소 대비 변화(%)": A._pct(j["dev"]),
-           "관외 유입(일평균 건수)": round(j["v"])}
+    out = {"판정": j["verdict"], "배수(이용자가 물을 때만 말함)": j["ratio"], "평소 유입 대비 증감률(%)": A._pct(j["dev"]),
+           "그 주 하루 평균 유입 건수": round(j["v"])}
     if j.get("baseball") is not None:
         out["프로야구 홈경기 몫 추정(%)"] = A._pct(j["baseball"])
     return out
@@ -139,9 +140,37 @@ def region_calendar(db, sido, sigungu, start, end=""):
         if wo in wline:
             wk["그 주 날씨"] = wline[wo]
         weeks.append(wk)
+    monthly = None
+    if len(mons) >= movement.MONTHLY_MIN_WEEKS:
+        # 0.7.0 A5·E4: 석 달 이상이면 달별로 먼저. 달 줄에 큰 일정 이름(축제·대형 행사·프로야구 등 큰 것부터 다섯 개쯤), 날씨는 주별로 볼 때
+        import math
+        items = []
+        for mon, wk in zip(mons, weeks):
+            inf = wk["그 주 유입"] if isinstance(wk["그 주 유입"], dict) else {}
+            pct = inf.get("평소 유입 대비 증감률(%)")
+            names = []
+            for e in wk["일정"]:
+                k = e["종류"]
+                if k == "날씨":
+                    continue
+                if k.startswith("프로야구"):
+                    names.append(f"프로야구 홈경기 {len(e.get('경기', []))}경기")
+                    continue
+                nm = e.get("이름") or e.get("공연명") or e.get("제목") or ""
+                when = e.get("기간") or e.get("날짜") or ""
+                names.append(f"{k}: {nm}" + (f"({when})" if when else ""))
+            items.append({"label": wk["주차"], "mon": mon, "val": inf.get("그 주 하루 평균 유입 건수"),
+                          "verdict": inf.get("판정"), "ratio": inf.get("배수(이용자가 물을 때만 말함)"),
+                          "dev": math.log(1 + pct / 100) if pct is not None else None, "events": names})
+        # 물어본 달 밖의 가장자리 주(주차 이름의 달이 앞·뒤 달인 주)는 달 요약에서 뺌 — 주별로 볼 때는 그대로 나옴
+        lo_ym, hi_ym = a.year * 100 + a.month, z.year * 100 + z.month
+        items = [it for it in items if lo_ym <= int(it["label"][:4]) * 100 + int(it["label"][5:7]) <= hi_ym] or items
+        monthly = movement.month_rows(items, "하루 평균 유입 건수(관외)")
     hist = safe.call("벚꽃·단풍 지난 기록(일정)", season.history, P, sido, sigungu,
                      skip_year=range(a.year, z.year + 1), default=[]) if season.spots(sido, sigungu) else []
-    out = {"지역": f"{sido} {sigungu}", "기간": f"{a}–{z}", "일정 있는 주": n_ev, "주별": weeks,
+    out = {"지역": f"{sido} {sigungu}", "기간": f"{a}–{z}", "일정 있는 주": n_ev,
+           **({"달별(주차 이름의 달)": monthly, "달별 읽는 법": movement.MONTH_NOTE + " 큰 일정은 달마다 큰 것부터 다섯 개쯤이고, 날씨는 주별로 볼 때 보여 줘요.",
+               "주마다 자세히": movement.MONTH_PROMPT} if monthly else {"주별": weeks}),
            "자료 기준": {"이동 자료": (P["me"][max(P["me"])][0] if P["me"] else None),
                      "손으로 넣는 자료": [{k: s[k] for k in ("자료", "자료 기준(가장 늦은 날짜)", "받아서 넣은 날")}
                                     for s in safe.call("손 자료 상태(일정)", manual.status, default=[])]},
@@ -149,7 +178,7 @@ def region_calendar(db, sido, sigungu, start, end=""):
                   "'이동 자료에 없는 주'는 유입을 추정하거나 앞뒤 주로 미루어 '많이 왔을 것'이라고 결론 내지 말 것. 자료가 없다고만 말할 것.",
                   "벚꽃·단풍 날짜는 기상청 관측일이다. 웹 기사의 예보·예상 날짜보다 이 날짜를 먼저 말하고, 웹 내용은 출처를 나눠 덧붙일 것.",
                   "지난 기록은 조회한 해를 빼고 계산한다(get_bloom_foliage와 같은 숫자).",
-                  "'그 주 유입'은 analyze_region_week와 같은 계산이다. 더 자세한 판정(비교군·평소 값)은 그 도구로 볼 것.",
+                  "'그 주 유입'은 analyze_region_week와 같은 계산이다. 더 자세한 판정(비교 지역·평소 값)은 그 도구로 볼 것.",
                   "축제 일정은 주로 문체부 연초 계획이라 실제와 다를 수 있다(일부는 언론 보도로 확인). 공연은 큰 공연장(3천 석 이상)만 있다. "
                   "날씨는 주마다 '그 주 날씨' 한 줄(관측소 값)이 있고, 큰 눈·비는 일정에도 넣었다.",
                   daily.WEATHER_RULE,

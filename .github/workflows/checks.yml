@@ -46,3 +46,5 @@ jobs:
         run: python tests/test_update_lock.py
       - name: KOPIS afterdate 받기 시험(가짜 KOPIS로 며칠 밤)
         run: python tests/test_kopis_afterdate.py
+      - name: 공연장 지역 연계
+        run: python tests/test_venue_link.py
