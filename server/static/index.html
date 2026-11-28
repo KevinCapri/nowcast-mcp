@@ -230,7 +230,7 @@ footer p{margin:0 0 6px}
     </div>
     <div class="warnbox suswarn" id="sus" hidden></div>
     <p class="note">가운데 선이 평소 수준입니다. 막대 높이는 많고 적은 정도를 단계로만 나타냅니다. 막대를 누르거나 마우스를 올리면 자세한 내용이 보입니다.</p>
-    <div class="adj"><button class="btn light" type="button" id="adjbtn" aria-pressed="false">이 지역만의 변화 보기</button><span class="note" id="adjnote" hidden>계절·날씨처럼 어디서나 생기는 변화는 비슷한 지역과 비교해 뺐습니다.</span></div>
+    <div class="adj"><button class="btn light" type="button" id="adjbtn" aria-pressed="false">이 지역만의 변화 보기</button><span class="note" id="adjnote" hidden>계절·날씨처럼 어디서나 생기는 변화는 비교 지역과 견줘 뺐습니다.</span></div>
     <div class="chart" id="chart"><div class="grid" id="bars"></div></div>
     <p class="note" id="evsrc"></p>
   </section>
@@ -303,7 +303,7 @@ footer p{margin:0 0 6px}
       <p class="note" style="flex-basis:100%">축제 날짜는 주로 문화체육관광부가 연초에 낸 개최 계획 기준이고, 일부는 언론 보도로 확인했습니다. 실제 날짜와 다르면 고쳐서 다시 보세요.</p>
     </div>
     <p class="note">날짜 아래 노란 표시가 붙은 주가 축제 기간입니다. 축제가 든 달과 앞뒤 2달(두 달에 걸친 축제는 앞뒤 1달, 휴대폰은 한 달씩 줄여서)을 보여 줍니다. 가운데 선이 평소 수준입니다. 막대 높이는 많고 적은 정도를 단계로만 나타냅니다. 막대를 누르거나 마우스를 올리면 자세한 내용이 보입니다.</p>
-    <div class="adj"><button class="btn light" type="button" id="fadjbtn" aria-pressed="false">축제 효과 가늠해 보기</button><span class="note" id="fadjnote" hidden>계절·날씨처럼 어디서나 생기는 변화는 비슷한 지역과 비교해 뺐습니다.</span></div>
+    <div class="adj"><button class="btn light" type="button" id="fadjbtn" aria-pressed="false">축제 효과 가늠해 보기</button><span class="note" id="fadjnote" hidden>계절·날씨처럼 어디서나 생기는 변화는 비교 지역과 견줘 뺐습니다.</span></div>
     <div class="chart" id="fchart"><div class="grid" id="fbars"></div></div>
     <p class="note" id="fevsrc"></p>
   </section>
@@ -398,16 +398,16 @@ footer p{margin:0 0 6px}
   <div class="tools">
     <div><b class="tn">서비스 안내</b> <code>get_metadata</code><ul><li>통신 모바일 인구이동량의 정의와 이용 주의사항 조회</li><li>값을 바르게 읽기 위한 기본 안내 (사람 수가 아닌 이동 건수 등)</li></ul></div>
     <div><b class="tn">지역 이름 찾기</b> <code>list_regions</code><ul><li>시도·시군구 이름 검색</li><li>다른 Tool에 넣을 정확한 지역 이름을 확인하기 위한 자료</li><li>같은 이름이 여러 곳에 있거나 행정구역이 바뀐 지역 구분 (예: 중구, 화성시의 구)</li></ul></div>
-    <div><b class="tn">한 주 분석</b> <code>analyze_region_week</code><ul><li>한 지역·한 주의 유입이 평소와 얼마나 달랐는지 계산</li><li>평소보다 많았는지 적었는지 확인하기 위한 핵심 Tool</li><li>계절·날씨처럼 어디서나 생기는 변화는 비슷한 지역과 비교해 빼고, 그 주의 공휴일·날씨·축제·대형 행사·공연·프로야구·벚꽃·단풍 일정을 함께 제공</li></ul></div>
-    <div><b class="tn">평소와 다른 지역 찾기</b> <code>find_unusual_regions</code><ul><li>한 주나 기간(2023년 6월부터)을 정해 전국 시군구 중 평소와 가장 크게 달랐던 지역 순위 조회</li><li>지역을 정하면 그 기간에 평소와 크게 달랐던 주와, 같은 시기에 있었던 축제·행사를 함께 제공</li><li>늘어난 지역과 줄어든 지역을 따로 제공(전국이 함께 줄어든 주에 덜 줄어든 지역처럼, 비교하면 많았지만 실제로 늘지는 않은 곳은 따로 표시)</li></ul></div>
+    <div><b class="tn">한 주 분석</b> <code>analyze_region_week</code><ul><li>한 지역·한 주의 유입이 평소와 얼마나 달랐는지 계산</li><li>평소보다 많았는지 적었는지 확인하기 위한 핵심 Tool</li><li>계절·날씨처럼 어디서나 생기는 변화는 비교 지역과 견줘 빼고, 그 주의 공휴일·날씨·축제·대형 행사·공연·프로야구·벚꽃·단풍 일정을 함께 제공</li></ul></div>
+    <div><b class="tn">평소와 다른 지역 찾기</b> <code>find_unusual_regions</code><ul><li>한 주나 기간(2023년 6월부터)을 정해 전국 시군구 중 평소와 가장 크게 달랐던 지역 순위 조회</li><li>지역을 정하면 그 기간에 평소와 크게 달랐던 주와, 같은 시기에 있었던 축제·행사를 함께 제공</li><li>늘어난 지역과 줄어든 지역을 10곳씩 따로 제공(전국이 함께 줄어든 주에 덜 줄어든 지역처럼, 비교하면 많았지만 실제로 늘지는 않은 곳은 따로 표시)</li><li>순위 방식을 골라 보기: 평소 등락 대비 변화 순(기본)·평소 유입 대비 증감률 순·증감 건수 순</li></ul></div>
     <div><b class="tn">같은 주 비교</b> <code>compare_same_week</code><ul><li>한 지역·한 주를 지난 몇 해의 같은 주와 비교</li><li>"작년보다 사람이 많이 왔나"를 해마다 평소와 비교한 결과끼리 보기 위한 자료</li><li>설·추석 주는 그 해 설·추석 주끼리 비교</li></ul></div>
-    <div><b class="tn">이동 조회</b> <code>get_movement</code><ul><li>유입·유출 주별 이동 건수를 기간으로 조회 (2019년 1월부터)</li><li>전국 이동을 성별·연령·입지유형·시도로 나눈 건수와 비중</li><li>외부에서 들어오는 이동이 많은 시군구 순위 (인구감소지역(관심지역 포함)·인구활력+지역만 골라 보기)</li></ul></div>
+    <div><b class="tn">이동 조회</b> <code>get_movement</code><ul><li>유입·유출 이동 건수를 기간으로 조회 (2019년 1월부터, 석 달 이상이면 달별로 먼저)</li><li>전국 이동을 성별·연령·입지유형·시도로 나눈 건수와 비중</li><li>외부에서 들어오는 이동이 많은 시군구 순위, 10곳씩 (주민 1명당 순으로도, 인구감소지역(관심지역 포함)·인구활력+지역만 골라 보기)</li></ul></div>
     <div><b class="tn">날짜별 방문자</b> <code>get_datalab_daily</code><ul><li>시군구의 날짜별 방문자 수와 평소 같은 요일 대비 조회 (한국관광공사 한국관광 데이터랩)</li><li>관광공사 값이 아직 없는 최근 약 한 달은 이동 자료로 미리 추정한 범위 (공식 통계 아님)</li><li>그날 날씨, 요일·장날별 방문 모습 함께 제공</li></ul></div>
     <div><b class="tn">생활인구 추정</b> <code>estimate_life_pop</code><ul><li>아직 공표되지 않은 달, 또는 공표하지 않는 지역의 생활인구 참고 추정</li><li>시군구 주민등록인구·등록외국인(공표 값)도 함께 보여 줌</li><li>공표를 기다리지 않고 대략의 규모를 가늠하기 위한 자료</li><li>공표 지역들의 생활인구와 유입의 관계로 계산 (공식 통계 아님)</li></ul></div>
-    <div><b class="tn">축제 참고 예측</b> <code>forecast_festival</code><ul><li>축제 주에 유입이 평소보다 얼마나 늘지 참고 예측</li><li>다가올 축제의 규모를 미리 가늠하기 위한 자료</li><li>지난 회차 기록으로 계산, 처음 여는 축제는 비슷한 지역의 축제로 추정 (방문객 수는 내지 않음)</li></ul></div>
+    <div><b class="tn">축제 참고 예측</b> <code>forecast_festival</code><ul><li>축제 주에 유입이 평소보다 얼마나 늘지 참고 예측</li><li>다가올 축제의 규모를 미리 가늠하기 위한 자료</li><li>지난 회차 기록으로 계산, 처음 여는 축제는 비교 지역의 축제로 추정 (방문객 수는 내지 않음)</li></ul></div>
     <div><b class="tn">지역 일정</b> <code>get_region_calendar</code><ul><li>한 지역·기간의 일정(공휴일·축제·대형 행사·공연·프로야구·벚꽃·단풍)과 그 주 유입을 함께 조회</li><li>"그때 무슨 일이 있었고, 사람이 얼마나 들어왔나"를 한 번에 보기 위한 자료</li></ul></div>
     <div><b class="tn">벚꽃·단풍</b> <code>get_bloom_foliage</code><ul><li>해마다 전국 벚꽃 개화·만발, 유명산 단풍 첫 단풍·절정 날짜(기상청 관측)</li><li>명소가 있는 시군구는 그 주 유입과 지난 기록을 함께 제공</li></ul></div>
-    <div><b class="tn">자료 현황</b> <code>get_data_status</code><ul><li>자료별 최신 시점과 받아 온 날 조회</li><li>지금 어느 주까지 분석할 수 있는지 확인하기 위한 자료</li></ul></div>
+    <div><b class="tn">자료 현황</b> <code>get_data_status</code><ul><li>자료별 최신 시점과 새 자료가 들어온 날 조회</li><li>지금 어느 주까지 분석할 수 있는지 확인하기 위한 자료</li></ul></div>
     <div><b class="tn">문제 신고</b> <code>report_issue</code><ul><li>이상한 값이나 틀린 설명을 운영자에게 신고</li></ul></div>
   </div>
   </details>
@@ -420,7 +420,7 @@ footer p{margin:0 0 6px}
     <li>여러 주를 더해 '한 달 이동량'을 만들지 않기(하루 평균 값)</li>
     <li>이 사이트의 계산 결과는 <b>비공식 참고값</b> → 공식 통계로 인용하지 않기</li>
     <li>생활인구 추정·축제 예측의 범위: 과거에 같은 방법으로 맞혀 봤을 때 실제 값이 들어간 폭(통계적 신뢰구간 아님)</li>
-    <li>원자료는 나중에 고쳐질 수 있음 → 인용할 때 자료 시점과 받아 온 날 함께 적기</li>
+    <li>원자료는 나중에 고쳐질 수 있음 → 인용할 때 자료 시점과 새 자료가 들어온 날 함께 적기</li>
     <li>행정구역이 바뀐 지역(부천·화성의 구, 인천 새 구, 군위, 전남광주통합특별시)은 바뀌기 전후 바로 비교 어려움</li>
     <li>AI 설명에 틀린 내용이 있을 수 있음 → 중요한 판단에는 출처·원자료 확인</li>
   </ul>
@@ -684,9 +684,9 @@ footer p{margin:0 0 6px}
     }
   }).catch(function () { $("hint").textContent = "목록을 불러오지 못했습니다. 잠시 뒤 새로 고침해 주세요."; });
 
-  function fmtTime(s) {
-    var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(s || "");
-    return m ? (+m[1]) + "년 " + (+m[2]) + "월 " + (+m[3]) + "일 " + m[4] + ":" + m[5] : (s || "");
+  function fmtDay(s) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || "");
+    return m ? (+m[2]) + "월 " + (+m[3]) + "일" : (s || "");
   }
   function fmtWeek(s) {
     var m = /^(\d{4})\.(\d{2})\.(\d)주차$/.exec(s || "");
@@ -700,7 +700,7 @@ footer p{margin:0 0 6px}
   }).catch(function () {});
   getJSON("/api/status").then(function (r) {
     var nc = (r.j || []).filter(function (x) { return x["자료"].indexOf("나우캐스트") >= 0; })[0];
-    if (nc) $("asof").textContent = "자료 기준: 나우캐스트 " + fmtWeek(nc["최신"]) + "까지 (받아 온 날 " + fmtTime(nc["받아 온 날"]) + ")" + (nc["최근 실패"] ? " · 최근 받기에 실패해 최신이 아닐 수 있음" : "");
+    if (nc) $("asof").textContent = "자료 기준: 나우캐스트 " + fmtWeek(nc["최신"]) + "까지 (" + fmtDay(nc["들어온 날"]) + " 들어옴)" + (nc["최근 실패"] ? " · 최근 받기에 실패해 최신이 아닐 수 있음" : "");
   }).catch(function () {});
 
   // ---------- 그리기 ----------
@@ -832,7 +832,7 @@ footer p{margin:0 0 6px}
     $("result").hidden = false; $("hint").hidden = true;
   }
 
-  // 기본은 평소 대비 그대로, 버튼을 누르면 비슷한 지역 변화를 뺀 결과
+  // 기본은 평소 대비 그대로, 버튼을 누르면 비교 지역 변화를 뺀 결과
   var LAST = null;
   function adjOn(id) { return $(id).getAttribute("aria-pressed") === "true"; }
   function setAdj(btn, note, on) { $(btn).setAttribute("aria-pressed", on ? "true" : "false"); $(note).hidden = !on; }

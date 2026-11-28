@@ -2,7 +2,7 @@
 
 원칙(2026-11-14 결정):
 - 숫자로 보여 주는 것은 정부가 공표한 값(주민등록인구·생활인구)뿐.
-- 나우캐스트 흐름은 '참고'로, 눈금 없는 막대와 문장 판정으로만. 이동 건수·퍼센트·출렁임 배수는 내보내지 않는다.
+- 나우캐스트 흐름은 '참고'로, 눈금 없는 막대와 문장 판정으로만. 이동 건수·퍼센트·등락 배수는 내보내지 않는다.
 - 원인은 단정하지 않는다. 그 주에 있었던 일(공휴일·날씨·축제 계획)은 판단 재료로만 붙인다.
 - 판정은 MCP 도구(analyze_region_week)와 같은 계산(analysis.prepare/judge_week)을 쓴다.
 """
@@ -329,7 +329,11 @@ async def api_status(request: Request):
         rows = _conn().execute("SELECT name, unit, latest, fetched_ok, last_failed FROM source_status").fetchall()
     except Exception:
         rows = []
-    return _json([{"자료": n, "단위": u, "최신": l, "받아 온 날": f, "최근 실패": bool(x)} for n, u, l, f, x in rows])
+    try:   # 0.7.0 A3: 새 자료가 들어온 날
+        arr = dict(_conn().execute("SELECT name, arrived FROM source_arrived").fetchall())
+    except Exception:
+        arr = {}
+    return _json([{"자료": n, "단위": u, "최신": l, "들어온 날": arr.get(n) or f, "최근 실패": bool(x)} for n, u, l, f, x in rows])
 
 
 async def api_version(request: Request):
@@ -674,7 +678,7 @@ def view(sido, sigungu, start_wo, end_wo):
         notes.append("시도 이름이 바뀐 지역이라 옛 이름 자료를 이어 붙였습니다.")
     notes_adj = []
     if opp:
-        notes_adj.append(f"{', '.join(opp)}에는 비슷한 지역들이 이 지역과 반대로 크게 늘거나 줄었습니다. 휴가철처럼 "
+        notes_adj.append(f"{', '.join(opp)}에는 비교 지역들이 이 지역과 반대로 크게 늘거나 줄었습니다. 휴가철처럼 "
                          "출퇴근 지역과 관광지가 반대로 움직이는 때에는 결과가 실제보다 크게 나올 수 있습니다.")
     srcs = ["공휴일(한국천문연구원 특일 정보)"]
     if stn:
@@ -686,8 +690,12 @@ def view(sido, sigungu, start_wo, end_wo):
     if any(w["games"] for w in weeks):
         srcs.append(BB.SOURCE)
     try:
-        r = db.execute("SELECT latest, fetched_ok FROM source_status WHERE name LIKE '나우캐스트%유입%'").fetchone()
-        as_of = {"최신 주차": r[0], "받아 온 날": r[1]} if r else None
+        r = db.execute("SELECT name, latest, fetched_ok FROM source_status WHERE name LIKE '나우캐스트%유입%'").fetchone()
+        try:
+            arr = db.execute("SELECT arrived FROM source_arrived WHERE name=?", (r[0],)).fetchone() if r else None
+        except Exception:
+            arr = None
+        as_of = {"최신 주차": r[1], "새 주차가 들어온 날": (arr[0] if arr else None) or r[2]} if r else None
     except Exception:
         as_of = None
     return {

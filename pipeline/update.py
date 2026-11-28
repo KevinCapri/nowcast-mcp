@@ -188,6 +188,16 @@ def write_source_status(st):
                 "tried TEXT, last_failed INT)")
     con.execute("DELETE FROM source_status")
     con.executemany("INSERT INTO source_status VALUES (?,?,?,?,?,?)", rows)
+    # 0.7.0 A3: '새 자료가 들어온 날' — 최신 시점(latest)이 바뀐 받기의 시각. source_status에 칸을 더하지 않고 따로 둠
+    # (옛 코드로 되돌려도 source_status INSERT가 깨지지 않게, E6). 처음엔 그때의 받기 성공 시각으로 채움.
+    con.execute("CREATE TABLE IF NOT EXISTS source_arrived(name TEXT PRIMARY KEY, latest TEXT, arrived TEXT)")
+    old = {n: (l, a) for n, l, a in con.execute("SELECT name, latest, arrived FROM source_arrived")}
+    for name, _unit, latest, ok, _try, _fail in rows:
+        if latest is None:
+            continue
+        prev = old.get(name)
+        if prev is None or prev[0] != latest:
+            con.execute("INSERT OR REPLACE INTO source_arrived VALUES (?,?,?)", (name, latest, ok or now().isoformat(timespec="seconds")))
     con.commit()
     con.close()
 

@@ -68,7 +68,7 @@ def list_regions_mem(keyword):
     return list_regions_db(keyword)
 
 
-pop = lambda sd, sg: 50000
+pop = lambda sd, sg, a=None, b=None: 50000
 M.depop = lambda: {}
 M.in_area = lambda k, area: True
 A._ALL = A._ALL_OUT = A._NAMES = None
