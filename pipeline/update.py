@@ -89,11 +89,17 @@ def save_status(st):
     tmp.replace(STATUS)
 
 
+# 정해진 시각보다 이만큼 일찍 받았어도 '그날 몫은 받음'으로 침(11-28). 2시간이던 것을 늘림 — 받는 시각을 05시에서
+# 02시로 당긴 첫날(직전 성공 21시간 전)과 배포로 낮에 받은 다음 날(06:51 → 02:00, 19시간)에 매일 단계가 건너뛰어졌음.
+# 12시간이면 밤 10시 배포 뒤 받기(22:15) 다음 새벽 02:00(3.75시간)은 건너뛰고(방금 받음), 그 밖엔 매일 돈다.
+EARLY = dt.timedelta(hours=12)
+
+
 def due(st, name, days):
     ok = (st.get(name) or {}).get("last_ok")
     if not ok:
         return True
-    return now() - dt.datetime.fromisoformat(ok) >= dt.timedelta(days=days) - dt.timedelta(hours=2)
+    return now() - dt.datetime.fromisoformat(ok) >= dt.timedelta(days=days) - EARLY
 
 
 def lifepop_waiting():
