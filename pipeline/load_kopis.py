@@ -34,6 +34,7 @@ import json
 import sys
 import time
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 from common import connect, get, key
 
@@ -220,6 +221,19 @@ def load_changes(con, k, today):
     return got, kept, miss
 
 
+def _warn_old_region(sido, sg, adres, name):
+    """큰 공연장의 지역 칸이 연계표의 옛 이름인데 주소의 동으로 지금 시군구에 못 이으면 로그에 경고(그때 연계표를 다시 만듦).
+    연계표·잇는 규칙은 server/perf.py(region_link.csv)와 같음."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "server"))
+        import perf
+    except Exception:
+        return
+    fwd, _ = perf._link()
+    if any(k[0] == sido and k[1] == sg for k in fwd) and perf.now_region(sido, sg, adres) is None:
+        print(f"  경고: 큰 공연장 {name}의 지역 '{sido} {sg}'이 행정구역 개편 전 이름인데 연계표로 못 이음 → region_link.csv 다시 만들 것", flush=True)
+
+
 def load_venues(con, k, today):
     """공연장 목록은 한 달에 한 번, 남은 호출로 며칠에 나눠 받는다. 새 곳만 상세를 받고, 새 큰 공연장은 공연을 한 번 따로 받음."""
     month = today.strftime("%Y-%m")
@@ -254,6 +268,7 @@ def load_venues(con, k, today):
                         (i, txt(d, "fcltynm"), sido, sg, adres, num(txt(d, "la")), num(txt(d, "lo")),
                          seats, txt(d, "opende"), stamp))
             if seats >= BIG_SEATS:
+                _warn_old_region(sido, sg, adres, txt(d, "fcltynm"))
                 big = json.loads(get_state(con, "venue_big", "[]"))
                 set_state(con, venue_big=json.dumps(big + [i]))
             print(f"  새 공연장 {txt(d, 'fcltynm')} ({sido} {sg}, {seats}석)", flush=True)
